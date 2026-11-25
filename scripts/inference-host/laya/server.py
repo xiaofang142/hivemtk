@@ -51,6 +51,15 @@ STATS_FILE = os.path.join(STATS_DIR, "stats.json")
 STATS_FLUSH_INTERVAL = int(os.getenv("LAYA_STATS_FLUSH_INTERVAL", "30"))
 
 
+def _safe_stats_file():
+    """stats 落盘路径闸：realpath+commonpath 必须留在 STATS_DIR 内（拒绝 ../ / 符号链接逃逸）。"""
+    root = os.path.realpath(STATS_DIR)
+    real = os.path.realpath(STATS_FILE)
+    if real == root or os.path.commonpath([root, real]) != root:
+        raise ValueError(f"stats 路径越出允许目录: {STATS_FILE!r}")
+    return real
+
+
 def _fail(msg: str):
     print(f"[laya] ❌ {msg}", flush=True)
     raise SystemExit(1)
@@ -118,9 +127,9 @@ class Stats:
     def _flush_locked(self):
         try:
             import json
-            with open(STATS_FILE, "w", encoding="utf-8") as f:
+            with open(_safe_stats_file(), "w", encoding="utf-8") as f:
                 json.dump(self.snapshot_locked(), f, ensure_ascii=False, indent=2)
-        except OSError as e:
+        except (OSError, ValueError) as e:
             print(f"[laya] stats flush 失败: {e}", flush=True)
 
     def snapshot_locked(self):

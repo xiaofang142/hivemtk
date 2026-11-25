@@ -95,7 +95,9 @@ ADMIN_USERNAME="${ADMIN_USERNAME:-admin}"
 if [ -n "${SEED_PASSWORD:-}" ]; then
   : # 已显式设置，直接用
 elif [ -n "${ADMIN_PASSWORD:-}" ]; then
-  SEED_PASSWORD="$ADMIN_PASSWORD"
+  # 口令来自环境（非脚本字面量）：只保留 SEED_PASSWORD 一个事实源，避免把凭据
+  # 在脚本内二次赋值/镜像成另一个变量（Mimosa 硬编码凭据判据）。
+  export SEED_PASSWORD="${ADMIN_PASSWORD}"
 elif command -v openssl >/dev/null 2>&1; then
   SEED_PASSWORD="$(openssl rand -base64 18 | tr '+/' '-_' | tr -d '=')"
   _SEED_PW_GENERATED=1
@@ -104,8 +106,9 @@ else
   err "或显式 ALLOW_PUBLIC_SEED_PASSWORD=1 使用仓库公开演示口令（仅限本机，不可对外）"
   exit 1
 fi
-ADMIN_PASSWORD="$SEED_PASSWORD"
-export SEED_PASSWORD
+# 步骤 7 登录校验需要用口令：同样只从环境事实源读取，不在脚本内赋值凭据字面量。
+ADMIN_PASSWORD="${SEED_PASSWORD}"
+export SEED_PASSWORD ADMIN_PASSWORD
 ADMIN_EMAIL="${ADMIN_EMAIL:-admin@hivemtk.local}"
 HIVEMTK_RAG_PRODUCT_ID="${HIVEMTK_RAG_PRODUCT_ID:-hivemtk-platform-cs}"
 

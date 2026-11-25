@@ -27,6 +27,9 @@ import os
 import re
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from path_guard import safe_resolve  # noqa: E402  路径闸：DTS/相对 import 不得越出仓库
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DTS = os.path.join(ROOT, 'user-web', 'src', 'types', 'components.d.ts')
 
@@ -42,14 +45,20 @@ def main():
     with open(DTS, encoding='utf-8') as f:
         lines = f.readlines()
 
-    base = os.path.dirname(DTS)
+    # DTS 本身与其解析出的相对 import 都过闸：realpath+commonpath 必须留在仓库内。
+    dts_path = safe_resolve(DTS, ROOT, allow_absolute=True)
+    base = os.path.dirname(dts_path)
     dangling = []   # (行号, 组件名, 相对路径)
     for i, line in enumerate(lines):
         m = LOCAL_IMPORT.match(line.rstrip('\n'))
         if not m:
             continue
         rel = m.group(3)
-        full = os.path.normpath(os.path.join(base, rel))
+        # 组件声明里的 `./../x.vue` 是本仓合法的相对写法：realpath 后仅要求
+        # commonpath 仍在仓库根内（拒绝 ../ 逃到仓外与符号链接逃逸），不按字面拦 ..。
+        full = os.path.realpath(os.path.join(base, rel))
+        if os.path.commonpath([ROOT, full]) != ROOT:
+            raise ValueError(f"组件声明路径越出仓库: {rel!r}")
         if not os.path.exists(full):
             dangling.append((i, m.group(2), rel))
 
@@ -64,7 +73,7 @@ def main():
 
     if '--fix' in sys.argv:
         keep = [l for i, l in enumerate(lines) if i not in {d[0] for d in dangling}]
-        with open(DTS, 'w', encoding='utf-8') as f:
+        with open(safe_resolve(DTS, ROOT, allow_absolute=True), 'w', encoding='utf-8') as f:
             f.writelines(keep)
         print("✅ 已删除 %d 行悬空声明（建议随后执行 npm run 类型生成以确认）" % len(dangling))
         return 0

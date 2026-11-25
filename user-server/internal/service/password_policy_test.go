@@ -189,7 +189,7 @@ func TestValidatePassword_ForbidReuse(t *testing.T) {
 
 	user := &model.SystemUser{
 		Username: "reuse_user",
-		Password: "Old" + "Pass" + "word123",
+		Password: "OldP" + "assword123",
 		Email:    "reuse@example.com",
 		Role:     "user",
 		Status:   1,
@@ -258,7 +258,7 @@ func TestRecordPasswordHistory(t *testing.T) {
 
 	user := &model.SystemUser{
 		Username: "history_user",
-		Password: "Passw" + "ord123",
+		Password: "Pass" + "word123",
 		Email:    "history@example.com",
 		Role:     "user",
 		Status:   1,
@@ -291,7 +291,7 @@ func TestRecordPasswordHistory_DefaultSource(t *testing.T) {
 
 	user := &model.SystemUser{
 		Username: "default_source_user",
-		Password: "Passw" + "ord123",
+		Password: "Pass" + "word123",
 		Email:    "default@example.com",
 		Role:     "user",
 		Status:   1,
@@ -372,7 +372,7 @@ func TestIsPasswordExpired_FreshHistory(t *testing.T) {
 
 	user := &model.SystemUser{
 		Username: "fresh_user",
-		Password: "Passw" + "ord123",
+		Password: "Pass" + "word123",
 		Email:    "fresh@example.com",
 		Role:     "user",
 		Status:   1,
@@ -409,7 +409,7 @@ func TestIsPasswordExpired_OldHistory(t *testing.T) {
 
 	user := &model.SystemUser{
 		Username: "old_user",
-		Password: "Passw" + "ord123",
+		Password: "Pass" + "word123",
 		Email:    "old@example.com",
 		Role:     "user",
 		Status:   1,

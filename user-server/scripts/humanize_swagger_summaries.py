@@ -27,6 +27,10 @@ import os
 import re
 import sys
 
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(os.path.dirname(_SCRIPT_DIR), "..", "scripts"))
+from path_guard import safe_resolve  # noqa: E402  路径闸：写回目标不得越出 user-server
+
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # 与 internal/router/route_surface_consistency_test.go 的 annotationScanRoot/skipAnnotationDirs 同面：
@@ -203,7 +207,9 @@ def process_file(path, dry_run):
         replaced += 1
         changed = True
     if changed and not dry_run:
-        open(path, "w").write("\n".join(lines))
+        # 写回目标过闸：realpath+commonpath 必须留在 user-server 根内。
+        with open(safe_resolve(path, REPO), "w") as fh:
+            fh.write("\n".join(lines))
     return replaced, manual, plan
 
 

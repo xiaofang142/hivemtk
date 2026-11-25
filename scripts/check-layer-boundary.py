@@ -199,8 +199,11 @@ SELFTEST_CASES = [
 def selftest():
     failures = []
     with tempfile.TemporaryDirectory() as tmp:
+        # 夹具相对路径过闸：拒绝 ../ 与符号链接逃逸，只允许写在临时目录内。
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from path_guard import safe_resolve
         for rel, src, expected in SELFTEST_CASES:
-            path = os.path.join(tmp, rel)
+            path = safe_resolve(rel, tmp)
             os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(path, "w", encoding="utf-8") as fh:
                 fh.write(src)

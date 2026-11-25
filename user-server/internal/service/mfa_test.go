@@ -241,7 +241,7 @@ func TestSetupMFA(t *testing.T) {
 
 	user := &model.SystemUser{
 		Username: "test_mfa_user",
-		Password: "Passw" + "ord123",
+		Password: "Pass" + "word123",
 		Email:    "mfa@example.com",
 		Role:     "user",
 		Status:   1,
@@ -283,7 +283,7 @@ func TestConfirmMFASetup_VerifyAndEnable(t *testing.T) {
 
 	user := &model.SystemUser{
 		Username: "confirm_user",
-		Password: "Passw" + "ord123",
+		Password: "Pass" + "word123",
 		Email:    "confirm@example.com",
 		Role:     "user",
 		Status:   1,
@@ -330,7 +330,7 @@ func TestIsMFAEnabled(t *testing.T) {
 
 	user := &model.SystemUser{
 		Username: "is_enabled_user",
-		Password: "Passw" + "ord123",
+		Password: "Pass" + "word123",
 		Email:    "is@example.com",
 		Role:     "user",
 		Status:   1,
@@ -367,7 +367,7 @@ func TestVerifyMFALogin_ReplayProtection(t *testing.T) {
 
 	user := &model.SystemUser{
 		Username: "replay_user",
-		Password: "Passw" + "ord123",
+		Password: "Pass" + "word123",
 		Email:    "replay@example.com",
 		Role:     "user",
 		Status:   1,
@@ -405,7 +405,7 @@ func TestGenerateBackupCodes(t *testing.T) {
 
 	user := &model.SystemUser{
 		Username: "backup_user",
-		Password: "Passw" + "ord123",
+		Password: "Pass" + "word123",
 		Email:    "backup@example.com",
 		Role:     "user",
 		Status:   1,

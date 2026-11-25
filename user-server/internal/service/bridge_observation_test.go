@@ -55,8 +55,12 @@ func TestBridgeObservation_ResultExitIsExplicit(t *testing.T) {
 func TestBridgeObservation_EnqueueStartsBeforePersistence(t *testing.T) {
 	ws, baseCtx := newBridgeSentTestService(t)
 	t.Cleanup(func() { ws.Stop(baseCtx) })
-	database := testutil.NewTestDB(t, &model.MessageTrace{})
-	hub := bridgeInboundHub("douyin", "observation-account", "observation-conversation", "observation-customer")
+	database := ws.eventRepo.GetDB()
+	if err := database.AutoMigrate(&model.MessageTrace{}); err != nil {
+		t.Fatal(err)
+	}
+	accountID := seedCanonicalBridgeOutboundAccount(t, database, c01TenantA, "douyin", "observation-account")
+	hub := bridgeInboundHub("douyin", accountID, "observation-conversation", "observation-customer")
 	hub.TenantID = c01TenantA
 	turnID := tracing.BusinessTurnID(c01TenantA, hub.Platform, hub.AccountID, hub.ConversationID, hub.MsgID)
 	ctx := tracing.WithCarrier(tenant.WithTenantID(baseCtx, c01TenantA), &tracing.Carrier{
@@ -71,7 +75,7 @@ func TestBridgeObservation_EnqueueStartsBeforePersistence(t *testing.T) {
 	}
 	eventID := "observation-enqueue"
 	useLegacyBridgeFixture(t)
-	ctx = localBridgeSubmitContext(t, ctx, hub.Platform, hub.AccountID, "text")
+	ctx = localBridgeSubmitContextCustomEdition(t, ctx, hub.Platform, hub.AccountID, "text")
 	releaseReplyClaimForTest(t, eventID)
 	sent, err := ws.sendOutbound(ctx, ChannelDouyin, hub.AccountID,
 		&ParsedPayload{EventID: eventID, ChatID: hub.ConversationID, Sender: hub.SenderID}, "合成完整答案", hub, nil)
@@ -170,8 +174,12 @@ func TestBridgeObservation_IngestPersistsAuthoritativeTurn(t *testing.T) {
 func TestBridgeObservation_RegenerationHasOwnAttempt(t *testing.T) {
 	ws, baseCtx := newBridgeSentTestService(t)
 	t.Cleanup(func() { ws.Stop(baseCtx) })
-	database := testutil.NewTestDB(t, &model.MessageTrace{})
-	hub := bridgeInboundHub("douyin", "observation-rerun-account", "observation-rerun-conv", "observation-customer")
+	database := ws.eventRepo.GetDB()
+	if err := database.AutoMigrate(&model.MessageTrace{}); err != nil {
+		t.Fatal(err)
+	}
+	accountID := seedCanonicalBridgeOutboundAccount(t, database, c01TenantA, "douyin", "observation-rerun")
+	hub := bridgeInboundHub("douyin", accountID, "observation-rerun-conv", "observation-customer")
 	hub.TenantID = c01TenantA
 	reply := "已经排队的合成答案"
 	if err := database.Create(&model.MessageHub{TenantID: c01TenantA, Platform: hub.Platform, AccountID: hub.AccountID,
@@ -186,7 +194,7 @@ func TestBridgeObservation_RegenerationHasOwnAttempt(t *testing.T) {
 	})
 	eventID := "observation-rerun"
 	useLegacyBridgeFixture(t)
-	ctx = localBridgeSubmitContext(t, ctx, hub.Platform, hub.AccountID, "text")
+	ctx = localBridgeSubmitContextCustomEdition(t, ctx, hub.Platform, hub.AccountID, "text")
 	releaseReplyClaimForTest(t, eventID)
 	ws.deliverAIResult(ctx, webhookReplyRequest{channel: ChannelDouyin, accountID: hub.AccountID, hub: hub,
 		payload:  &ParsedPayload{EventID: eventID, ChatID: hub.ConversationID, Sender: hub.SenderID},

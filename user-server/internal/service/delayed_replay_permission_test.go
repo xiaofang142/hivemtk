@@ -38,16 +38,17 @@ func TestDelayedReplayPermission_BothPathsRespectHumanAndNewReply(t *testing.T) 
 				defer svc.Stop(ctx)
 				database := svc.eventRepo.GetDB()
 				now := time.Now()
+				accountID := seedCanonicalBridgeOutboundAccount(t, database, tenant.DefaultTenantID, "douyin", fmt.Sprintf("permission-account-%d", now.UnixNano()))
 				until := now.Add(time.Minute)
 				rec := &model.DelayedOutboundReply{
 					TenantID: tenant.DefaultTenantID, Platform: "douyin",
-					AccountID: fmt.Sprintf("permission-account-%d", now.UnixNano()), ConversationID: "permission-conversation",
-					SenderID: "permission-customer", Content: "合成待投答案",
+					AccountID: accountID, ConversationID: "permission-conversation",
+					SenderID: fmt.Sprintf("permission-customer-%d", now.UnixNano()), Content: "合成待投答案",
 					Kind: model.DelayedKindQuietHours, Status: model.DelayedStatusSending,
 					SendAt: now.Add(-time.Minute), CreatedAt: now.Add(-time.Hour),
 					ClaimToken: "permission-token", ClaimedAt: &now, LeaseUntil: &until,
 				}
-				ctx = localBridgeSubmitContext(t, ctx, rec.Platform, rec.AccountID, "text")
+				ctx = localBridgeSubmitContextCustomEdition(t, ctx, rec.Platform, rec.AccountID, "text")
 				if path == "离线回扫" {
 					rec.Status, rec.ClaimToken, rec.ClaimedAt, rec.LeaseUntil = model.DelayedStatusPending, "", nil, nil
 				}
@@ -87,7 +88,8 @@ func TestDelayedReplayPermission_BothPathsRespectHumanAndNewReply(t *testing.T) 
 					svc.ingressSvc.outboundAuthorizer = capregistry.AuthorizeBridgeSubmission
 					SetGlobalInboxIngressService(svc.ingressSvc)
 					t.Cleanup(func() { SetGlobalInboxIngressService(previous) })
-					NewBridgeOfflineReplayService().WithDB(database).ReplayDelayedOutbound(ctx, rec.Platform, rec.AccountID, 10)
+					offline := NewBridgeOfflineReplayService().WithDB(database)
+					offline.ReplayDelayedOutbound(ctx, rec.Platform, rec.AccountID, 10)
 				}
 				var count int64
 				if err := database.WithContext(ctx).Model(&model.MessageHub{}).Where("direction = ?", "outbound").Count(&count).Error; err != nil {

@@ -75,6 +75,7 @@ func (c *SageXUploadController) Upload(ctx *gin.Context) {
 		sagexWriteError(ctx, http.StatusInternalServerError, "internal_error")
 		return
 	}
+	ctx.Header("X-Compat-Route", "sagex-upload; prefer /api/bridge/gateway")
 	response.Protocol(ctx, http.StatusOK, "application/json; charset=utf-8", body)
 }
 

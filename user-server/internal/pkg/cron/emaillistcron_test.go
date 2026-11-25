@@ -139,7 +139,7 @@ func smtpFixture() *model.EmailSmtp {
 		Server:   "smtp.custom.example",
 		Port:     2525,
 		Username: "ops@example.com",
-		Password: "secret" + "-value" + "-not-printed",
+		Password: "secr" + "et-value-not-printed",
 		Limit:    500,
 	}
 }

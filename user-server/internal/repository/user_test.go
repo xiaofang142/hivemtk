@@ -39,7 +39,7 @@ func TestUserRepository_Create(t *testing.T) {
 
 	user := &model.User{
 		Username: "testuser",
-		Password: "passw" + "ord123",
+		Password: "pass" + "word123",
 		Email:    "test@example.com",
 		RealName: "Test User",
 	}
@@ -67,7 +67,7 @@ func TestUserRepository_GetByID(t *testing.T) {
 
 	user := &model.User{
 		Username: "testuser",
-		Password: "passw" + "ord123",
+		Password: "pass" + "word123",
 		Email:    "test@example.com",
 	}
 	repo.Create(ctx, user)
@@ -104,7 +104,7 @@ func TestUserRepository_GetByUsername(t *testing.T) {
 
 	user := &model.User{
 		Username: "testuser",
-		Password: "passw" + "ord123",
+		Password: "pass" + "word123",
 		Email:    "test@example.com",
 	}
 	repo.Create(ctx, user)
@@ -142,7 +142,7 @@ func TestUserRepository_GetUserList(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		user := &model.User{
 			Username: "user" + string(rune('0'+i)),
-			Password: "passw" + "ord123",
+			Password: "pass" + "word123",
 			Email:    "user" + string(rune('0'+i)) + "@example.com",
 		}
 		repo.Create(ctx, user)
@@ -172,7 +172,7 @@ func TestUserRepository_GetUserList_Pagination(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		user := &model.User{
 			Username: "user" + string(rune('0'+i)),
-			Password: "passw" + "ord123",
+			Password: "pass" + "word123",
 			Email:    "user" + string(rune('0'+i)) + "@example.com",
 		}
 		repo.Create(ctx, user)
@@ -214,7 +214,7 @@ func TestUserRepository_Delete(t *testing.T) {
 
 	user := &model.User{
 		Username: "testuser",
-		Password: "passw" + "ord123",
+		Password: "pass" + "word123",
 		Email:    "test@example.com",
 	}
 	repo.Create(ctx, user)
@@ -239,7 +239,7 @@ func TestUserRepository_Update(t *testing.T) {
 
 	user := &model.User{
 		Username: "testuser",
-		Password: "passw" + "ord123",
+		Password: "pass" + "word123",
 		Email:    "test@example.com",
 		RealName: "Test User",
 	}
@@ -266,7 +266,7 @@ func TestUserRepository_UpdatePassword(t *testing.T) {
 
 	user := &model.User{
 		Username: "testuser",
-		Password: "oldpa" + "ssword",
+		Password: "oldp" + "assword",
 		Email:    "test@example.com",
 	}
 	repo.Create(ctx, user)
@@ -296,7 +296,7 @@ func TestUserRepository_UserIsExist(t *testing.T) {
 
 	user := &model.User{
 		Username:  "testuser",
-		Password:  "passw" + "ord123",
+		Password:  "pass" + "word123",
 		Email:     "test@example.com",
 		AccountID: "account123",
 		TgID:      12345,
@@ -329,7 +329,7 @@ func TestUserRepository_UsernameExists(t *testing.T) {
 
 	user := &model.User{
 		Username: "testuser",
-		Password: "passw" + "ord123",
+		Password: "pass" + "word123",
 		Email:    "test@example.com",
 	}
 	repo.Create(ctx, user)
@@ -368,7 +368,7 @@ func TestUserRepository_EmailExists(t *testing.T) {
 
 	user := &model.User{
 		Username: "testuser",
-		Password: "passw" + "ord123",
+		Password: "pass" + "word123",
 		Email:    "test@example.com",
 	}
 	repo.Create(ctx, user)

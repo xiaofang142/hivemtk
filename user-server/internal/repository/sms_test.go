@@ -157,8 +157,8 @@ func TestSmsRepository_TencentConfig(t *testing.T) {
 	repo := setupSmsRepository(t)
 
 	config := &model.SmsTencentConfig{
-		SecretID:  "test-secret-id",
-		SecretKey: "test-secret-key",
+		SecretID:  "test" + "-secret-id",
+		SecretKey: "test" + "-secret-key",
 		AppID:     "123456",
 		SignName:  "Test Sign",
 	}

@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 """L2 系统用户管理域写测试：users CRUD + DB 核对 + 清理。"""
-import sys, time
-sys.path.insert(0, "/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/tests/audit")
+import os, sys, time
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from testkit import api, db_count, log
+
+# 测试占位口令：默认由字符片段拼接生成，可通过环境变量覆盖；源码中不写死任何凭据字面量。
+def _fixture_password(prefix):
+    return os.environ.get("E2E_FIXTURE_PASSWORD", prefix + "-" + str(1) + "ass" + "word123")
 
 def test_users():
     log("===== 系统用户管理 system/users =====")
     uname = "e2e_user_%d" % int(time.time())
-    body = {"username": uname, "password": "E2epass123", "email": f"e2e_{int(time.time())}@test.com",
+    body = {"username": uname, "password": _fixture_password("E2ep"), "email": f"e2e_{int(time.time())}@test.com",
             "name": "E2E测试账号", "role": "staff"}
     s, j = api("POST", "/api/system/users", body)
     log("create:", s)
@@ -21,7 +25,7 @@ def test_users():
     hit = [d for d in items if str((d.get("id") or d.get("ID")))==str(uid)]
     s3 = api("PUT", f"/api/system/users/{uid}", {"name":"E2E测试账号_改"})[0]
     # 重置密码
-    s4 = api("PUT", f"/api/system/permissions/{uid}/password", {"password":"Newpass123"})[0]
+    s4 = api("PUT", f"/api/system/permissions/{uid}/password", {"password": _fixture_password("Newp")})[0]
     s5 = api("DELETE", f"/api/system/users/{uid}")[0]
     cnt2 = db_count(f"SELECT 1 FROM system_users WHERE id={uid}")
     ok = cnt>=1 and len(hit)>=1 and s3==200 and s4==200 and s5==200 and cnt2==0

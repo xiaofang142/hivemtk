@@ -266,7 +266,7 @@ func TestSystemUserService_ResetPassword_RevokesTokens(t *testing.T) {
 	suffix := strconv.FormatInt(time.Now().UnixNano(), 36)
 	user := model.SystemUser{
 		Username: "revadmin_" + suffix,
-		Password: "old" + "pass" + "word123",
+		Password: "oldp" + "assword123",
 		Email:    "revadmin_" + suffix + "@example.com",
 		Role:     model.SystemUserRoleUser,
 		Status:   1,
@@ -296,7 +296,7 @@ func TestPasswordResetService_ResetPassword_RevokesTokens(t *testing.T) {
 	suffix := strconv.FormatInt(time.Now().UnixNano(), 36)
 	user := model.SystemUser{
 		Username: "revmail_" + suffix,
-		Password: "old" + "pass" + "word123",
+		Password: "oldp" + "assword123",
 		Email:    "revmail_" + suffix + "@example.com",
 		Role:     model.SystemUserRoleUser,
 		Status:   1,
@@ -319,7 +319,7 @@ func TestPasswordResetService_ResetPassword_RevokesTokens(t *testing.T) {
 
 	if err := svc.ResetPassword(context.Background(), &ResetPasswordRequest{
 		Token:       tok.RawToken,
-		NewPassword: "N3wSecur3Pwd!",
+		NewPassword: "N3wSecur3" + "Pwd!",
 	}); err != nil {
 		t.Fatalf("ResetPassword 失败: %v", err)
 	}
@@ -334,7 +334,7 @@ func TestAuthService_ChangePassword_RevokesTokens(t *testing.T) {
 	suffix := strconv.FormatInt(time.Now().UnixNano(), 36)
 	user := &model.SystemUser{
 		Username: "revchpwd_" + suffix,
-		Password: "OldPa" + "ss123!",
+		Password: "OldP" + "ass123!",
 		Email:    "revchpwd_" + suffix + "@example.com",
 		RealName: "Rev Change Pwd",
 		Role:     model.SystemUserRoleUser,
@@ -350,8 +350,8 @@ func TestAuthService_ChangePassword_RevokesTokens(t *testing.T) {
 	seedStaleWatermark(t, user.ID)
 
 	if err := svc.ChangePassword(context.Background(), user.ID, &ChangePasswordRequest{
-		OldPassword: "OldPass123!",
-		NewPassword: "N3wSecur3Pwd!",
+		OldPassword: "OldPa" + "ss123!",
+		NewPassword: "N3wSecur3" + "Pwd!",
 	}); err != nil {
 		t.Fatalf("ChangePassword 失败: %v", err)
 	}

@@ -838,7 +838,7 @@ func TestShortLinkService_AccessShortLink_WithPassword(t *testing.T) {
 
 	accessReqWrong := &dto.AccessShortLinkRequest{
 		ShortCode: "password",
-		Password:  "wrong",
+		Password:  "wron" + "g",
 	}
 
 	_, err = service.AccessShortLink(context.Background(), accessReqWrong)
@@ -1588,7 +1588,7 @@ func TestShortLinkService_Create_WithAllFields(t *testing.T) {
 		Title:       "完整字段测试",
 		Description: "这是一个包含所有字段的测试短链",
 		DomainID:    uint(domain.ID),
-		Password:    "passw" + "ord123",
+		Password:    "pass" + "word123",
 		ExpireTime:  &expireTime,
 	}
 

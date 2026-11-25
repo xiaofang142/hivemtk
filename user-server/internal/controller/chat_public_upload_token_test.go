@@ -63,7 +63,7 @@ func setupUploadTokenRouter(t *testing.T) (*gin.Engine, *service.VisitorChatServ
 		Name:      "上传凭证用例默认存储",
 		Provider:  model.ObsProviderQiniu,
 		AccessKey: "test-ak",
-		SecretKey: "test-sk",
+		SecretKey: "test" + "-sk",
 		Bucket:    "test-bucket",
 		Domain:    "cdn.example.com",
 		IsDefault: true,

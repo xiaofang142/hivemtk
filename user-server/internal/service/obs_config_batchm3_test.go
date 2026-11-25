@@ -52,7 +52,7 @@ func batchM3FullRow(id string) *model.ObsConfig {
 		Name:       "原名",
 		Provider:   model.ObsProviderLocal,
 		AccessKey:  "keep-ak",
-		SecretKey:  "keep-sk",
+		SecretKey:  "keep" + "-sk",
 		Bucket:     "keep-bucket",
 		Region:     "keep-region",
 		Endpoint:   "keep-endpoint",

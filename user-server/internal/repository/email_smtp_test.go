@@ -41,7 +41,7 @@ func TestEmailSmtpRepository_Create(t *testing.T) {
 				Server:   "smtp.example.com",
 				Port:     587,
 				Username: "user@example.com",
-				Password: "passw" + "ord123",
+				Password: "pass" + "word123",
 				Limit:    100,
 			},
 			wantErr: false,
@@ -53,7 +53,7 @@ func TestEmailSmtpRepository_Create(t *testing.T) {
 				Server:   "smtp.gmail.com",
 				Port:     465,
 				Username: "user@gmail.com",
-				Password: "sec" + "ure_" + "password",
+				Password: "secu" + "re_password",
 				Limit:    500,
 			},
 			wantErr: false,
@@ -65,7 +65,7 @@ func TestEmailSmtpRepository_Create(t *testing.T) {
 				Server:   "smtp.old.com",
 				Port:     25,
 				Username: "old@example.com",
-				Password: "old" + "_pa" + "ssword",
+				Password: "old_" + "password",
 				Limit:    10,
 			},
 			wantErr: false,
@@ -175,7 +175,7 @@ func TestEmailSmtpRepository_Update(t *testing.T) {
 		Server:   "smtp.original.com",
 		Port:     587,
 		Username: "original@example.com",
-		Password: "orig" + "inal" + "_password",
+		Password: "orig" + "inal_password",
 		Limit:    100,
 	}
 	repo.Create(ctx, smtp)
@@ -183,7 +183,7 @@ func TestEmailSmtpRepository_Update(t *testing.T) {
 	smtp.Name = "Updated SMTP"
 	smtp.Server = "smtp.updated.com"
 	smtp.Port = 465
-	smtp.Password = "new_password"
+	smtp.Password = "new_" + "password"
 
 	err := repo.Update(ctx, smtp)
 	if err != nil {

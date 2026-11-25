@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/service"
@@ -24,7 +25,7 @@ func InitWebhookDeliveryRuntime(database *gorm.DB) *WebhookDeliveryRuntime {
 		return nil
 	}
 	svc := service.NewWebhookSubService()
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(tenant.WithSystemScope(context.Background()))
 	r := &WebhookDeliveryRuntime{cancel: cancel, done: make(chan struct{})}
 	utils.SafeGo(ctx, "webhook-delivery-replay", func(ctx context.Context) {
 		defer close(r.done)

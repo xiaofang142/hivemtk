@@ -26,9 +26,9 @@
 package service
 
 import (
-	"hivemtk-user/internal/capregistry"
 	"context"
 	"encoding/json"
+	"hivemtk-user/internal/capregistry"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -40,6 +40,7 @@ import (
 	"hivemtk-user/internal/aiagent/llm"
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/edition"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/testutil"
 
@@ -122,8 +123,8 @@ const (
 	c01MsgType   = "text"
 	c01TenantA   = uint(501)
 	c01TenantB   = uint(502)
-	c01AccountA1 = "cs01-acc-a1" // 租户 A 的抖音授权账号
-	c01AccountB1 = "cs01-acc-b1" // 租户 B 的对照账号（同内容不串）
+	c01AccountA1 = "1" // 租户 A 的 canonical 抖音账号 ID
+	c01AccountB1 = "2" // 租户 B 的对照入站账号 ID（同内容不串）
 	c01ConvA     = "cs01-conv-a1-001"
 	c01ConvB     = "cs01-conv-b1-001"
 	c01CustA     = "cs01-openid-a-001" // douyin open_id（客户身份来源）
@@ -214,12 +215,19 @@ func c01SetupAI(t *testing.T, rag *fakeRAGSearcher, intent interface {
 }) (*WebhookService, *SmartCSOrchestrator, *gorm.DB) {
 	t.Helper()
 	t.Cleanup(DisableAIQuietHoursForTest(true)) // 024 B1 收口勘误：装配 helper 内 defer 会提前复位，挂到测试级 cleanup // DISABLE_AI_QUIET_HOURS env 已退役（B8），测试装配口顶掉勿扰窗
+	previousEdition := edition.Current()
+	edition.ResetForTest(edition.TypeCustom)
+	t.Cleanup(func() { edition.ResetForTest(previousEdition) })
 	database := testutil.NewTestDB(t,
 		&model.MessageHub{}, &model.InboxConversation{}, &model.UnifiedMessage{},
 		&model.WebhookEvent{}, &model.IntegrationAccount{}, &DelayedOutboundReply{},
 		&model.CustomerSession{}, &model.SessionMessage{}, &model.AISuggestion{},
-		&model.AgentStatus{}, &model.Customer{},
+		&model.AgentStatus{}, &model.Customer{}, &model.FeedbackRecordORM{},
+		&model.Channel{}, &model.ChannelAccount{},
 	)
+	if accountID := seedCanonicalBridgeOutboundAccount(t, database, c01TenantA, c01Channel, "cs01-a1"); accountID != c01AccountA1 {
+		t.Fatalf("CS01 canonical 账号 ID=%q，期望 %q", accountID, c01AccountA1)
+	}
 
 	engine := NewSalesEngine(
 		newC01LLMDispatcher(t),
@@ -468,12 +476,19 @@ func TestSmartCS01_SampleB_LowConfidence_TransferToHuman_NoAIOutbound(t *testing
 // handler_type=ai——应答质量指标把降级轮当成正常 AI 回答计数。
 func TestSmartCS01_ModelEmptyReply_FallbackNotMasqueradingAsKnowledgeHit(t *testing.T) {
 	t.Cleanup(DisableAIQuietHoursForTest(true)) // 024 B1 收口勘误：装配 helper 内 defer 会提前复位，挂到测试级 cleanup // DISABLE_AI_QUIET_HOURS env 已退役（B8），测试装配口顶掉勿扰窗
+	previousEdition := edition.Current()
+	edition.ResetForTest(edition.TypeCustom)
+	t.Cleanup(func() { edition.ResetForTest(previousEdition) })
 	database := testutil.NewTestDB(t,
 		&model.MessageHub{}, &model.InboxConversation{}, &model.UnifiedMessage{},
 		&model.WebhookEvent{}, &model.IntegrationAccount{}, &DelayedOutboundReply{},
 		&model.CustomerSession{}, &model.SessionMessage{}, &model.AISuggestion{},
-		&model.AgentStatus{}, &model.Customer{},
+		&model.AgentStatus{}, &model.Customer{}, &model.FeedbackRecordORM{},
+		&model.Channel{}, &model.ChannelAccount{},
 	)
+	if accountID := seedCanonicalBridgeOutboundAccount(t, database, c01TenantA, c01Channel, "cs01-empty"); accountID != c01AccountA1 {
+		t.Fatalf("CS01 empty canonical 账号 ID=%q，期望 %q", accountID, c01AccountA1)
+	}
 
 	rag := &fakeRAGSearcher{} // 有检索无命中：空输出不得被算作知识命中
 	engine := NewSalesEngine(newC01EmptyReplyDispatcher(t), fakeIntentRecognizer{}, fakeMemory{}, fakeSOP{}, rag, fakeScript{}, fakeCustomerLookup{})

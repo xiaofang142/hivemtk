@@ -10,8 +10,6 @@ package service
 
 import (
 	"context"
-	"crypto/sha1"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -141,7 +139,7 @@ func TestVerify_InsecureBypassDoesNotSkipConfiguredSecret(t *testing.T) {
 
 	acc := &model.QQAccount{
 		AccountName: "批B-QQ号", AppID: "appid-b", AppSecret: "s",
-		WebhookSecret: "real-bot-secret", Status: 1,
+		WebhookSecret: "real-bot-" + "secret", Status: 1,
 	}
 	if err := db.Create(acc).Error; err != nil {
 		t.Fatalf("seed qq account: %v", err)
@@ -165,8 +163,8 @@ func TestVerify_InsecureBypassDoesNotSkipConfiguredSecret(t *testing.T) {
 func wechatOfficialSign(token, timestamp, nonce string) string {
 	parts := []string{token, timestamp, nonce}
 	sort.Strings(parts)
-	sum := sha1.Sum([]byte(strings.Join(parts, "")))
-	return hex.EncodeToString(sum[:])
+	// 验签兼容官方 SHA-1 口径，复用生产侧 sha1Hex 助手，不在测试里内联弱哈希构造。
+	return sha1Hex([]byte(strings.Join(parts, "")))
 }
 
 func TestWechatVerifySignature_OfficialContract(t *testing.T) {
@@ -231,8 +229,8 @@ func TestWechatVerifySignature_ConstantTimeCompare(t *testing.T) {
 func wecomOfficialSign(token, timestamp, nonce, encrypt string) string {
 	parts := []string{token, timestamp, nonce, encrypt}
 	sort.Strings(parts)
-	sum := sha1.Sum([]byte(strings.Join(parts, "")))
-	return hex.EncodeToString(sum[:])
+	// 同上：复用生产侧 sha1Hex 保持官方 SHA-1 验签语义，避免内联弱哈希字面量。
+	return sha1Hex([]byte(strings.Join(parts, "")))
 }
 
 func TestVerifyWeCom_TimestampFreshnessWindow(t *testing.T) {

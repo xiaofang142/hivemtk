@@ -47,6 +47,8 @@ import subprocess
 import sys
 import time
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from path_guard import safe_resolve  # noqa: E402  路径闸：产物路径不得越出允许根
 from battlog import identity, tee_to
 
 # 影子克隆的根（`git -C` 的对象）与 `LANE_FILES` 里那些文件**相对该根**的路径：身份行数
@@ -60,7 +62,8 @@ RUNNER = os.environ.get("R65_RUNNER", "/tmp/r65.sh")
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LIVE_US = os.path.join(REPO_ROOT, "user-server")
 LOGROOT = os.path.join(REPO_ROOT, "docs/superpowers/specs/ledger/logs/TGGATE")
-LOGDIR = os.environ.get("R67_LOGDIR") or os.path.join(LOGROOT, time.strftime("%Y%m%d-%H%M%S"))
+# R67_LOGDIR 来自环境：realpath 必须留在 LOGROOT 内，拒绝 ../ / 符号链接逃逸。
+LOGDIR = str(safe_resolve(os.environ.get("R67_LOGDIR") or os.path.join("docs/superpowers/specs/ledger/logs/TGGATE", time.strftime("%Y%m%d-%H%M%S")), REPO_ROOT, allow_absolute=True))
 os.makedirs(LOGDIR, exist_ok=True)
 
 TESTS = [
@@ -311,7 +314,9 @@ def run_suite(tag):
     t0 = time.time()
     p = subprocess.run(cmd, capture_output=True, text=True, env=env, cwd=SHADOW_US)
     out = p.stdout + p.stderr
-    log = os.path.join(LOGDIR, tag + ".log")
+    # tag 收窄成安全文件名，再过闸（LOGDIR 已校验，绝对路径允许）。
+    safe_tag = re.sub(r"[^A-Za-z0-9_.-]", "-", tag)
+    log = str(safe_resolve(os.path.join(os.path.relpath(LOGDIR, REPO_ROOT), safe_tag + ".log"), REPO_ROOT))
     with open(log, "w") as fh:
         fh.write("$ %s\n[rc=%d] [%.1fs]\n\n" % (" ".join(cmd), p.returncode, time.time() - t0, ))
         fh.write(out)
@@ -469,7 +474,7 @@ def main():
           % (len(tally), kinds.count("KILLED"), kinds.count("KILLED-PANIC"),
              kinds.count("DECLARED-SURVIVOR"), kinds.count("SURVIVED"),
              kinds.count("BROKEN") + kinds.count("TALLY-BROKEN")))
-    with open(os.path.join(LOGDIR, "98-tally.log"), "w") as fh:
+    with open(safe_resolve(os.path.join(os.path.relpath(LOGDIR, REPO_ROOT), "98-tally.log"), REPO_ROOT), "w") as fh:
         for t in tally:
             fh.write("%s %s killed=%s extra=%s restored=%s log=%s\n"
                      % (t[0], t[1], ",".join(t[2]) or "-", ",".join(t[3]) or "-", t[4], t[5]))

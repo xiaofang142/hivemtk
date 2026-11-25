@@ -13,8 +13,12 @@
 import argparse
 import os
 import re
+import sys
 from collections import OrderedDict
 from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from path_guard import safe_resolve  # noqa: E402  路径闸：--out 不得越出仓库
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ROUTER_DIR = os.path.join(ROOT, "user-web", "src", "router")
@@ -391,8 +395,10 @@ def main(argv=None):
     )
     args = parser.parse_args(argv)
 
-    lines, n_rows, done, partial, todo, bug = generate_router_list(args.out)
-    with open(args.out, "w", encoding="utf-8") as fh:
+    # --out 是外部输入：realpath+commonpath 必须留在仓库根内，拒绝对路径/../符号链接逃逸。
+    safe_out = safe_resolve(args.out, ROOT)
+    lines, n_rows, done, partial, todo, bug = generate_router_list(safe_out)
+    with open(safe_out, "w", encoding="utf-8") as fh:
         fh.write("\n".join(lines))
     print(
         f"写入 {args.out}：{n_rows} 条页面路由 "

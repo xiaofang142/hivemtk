@@ -56,6 +56,9 @@ import sys
 import tempfile
 import time
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from path_guard import safe_resolve  # noqa: E402  路径闸：--out/产物路径不得越出允许根
+
 PARAM_SEG_RE = re.compile(r"^(:[\w.]+|\{[^}/]*\}|\$\{[^}/]*\})$")
 NUM_SEG_RE = re.compile(r"^\d+$")
 GO_TPL_RE = re.compile(r"\{\{[^{}]*\}\}")
@@ -438,11 +441,15 @@ def main():
         else:
             outdir = args.out or os.path.join(root, "docs", "superpowers", "specs", "ledger",
                                               "logs", "RouteTriage", stamp)
+            # --out 是外部输入：realpath+commonpath 必须留在仓库根内。
+            outdir = str(safe_resolve(outdir, root, allow_absolute=True))
         os.makedirs(outdir, exist_ok=True)
         tsv = os.path.join(outdir, "live_routes.tsv")
         dump_routes_via_go(root, tsv)
     else:
         outdir = args.out or os.path.dirname(os.path.abspath(tsv))
+        # 同上：产物目录不得越出仓库根（绝对路径允许，但必须在根内）。
+        outdir = str(safe_resolve(outdir, root, allow_absolute=True))
         os.makedirs(outdir, exist_ok=True)
 
     routes = load_routes(tsv)

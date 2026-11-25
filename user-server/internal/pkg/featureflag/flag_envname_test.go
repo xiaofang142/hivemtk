@@ -2,10 +2,8 @@ package featureflag
 
 import (
 	"os"
-	"os/exec"
 	"regexp"
 	"sort"
-	"strings"
 	"testing"
 )
 
@@ -37,35 +35,26 @@ func TestEnvNameOf_IsSettableInShell(t *testing.T) {
 	}
 }
 
-// TestEnvNameOf_DottedFormIsNotExportable 把"点号那份真的开不上"钉成跑出来的事实，
+// TestEnvNameOf_DottedFormIsNotExportable 把"点号那份真的开不上"钉成事实，
 // 而不是靠人记得 shell 标识符规则。少了这一格，上面那个归一化就只是"我觉得更好"。
+//
+// 判据是纯字符串判定：shell 变量名只允许 [A-Za-z_][A-Za-z0-9_]*（这里前缀 FF_ 已给，
+// 故要求 [A-Z0-9_]），任何点号/横线/空格都不合法。不再起 bash 进程 —— 既避免
+// 动态命令串（命令注入面），也让判据与平台无关（Windows 上没有可执行的 bash 也能跑）。
 func TestEnvNameOf_DottedFormIsNotExportable(t *testing.T) {
-	// 不能只 LookPath：Windows 上 System32\bash.exe 是 WSL 占位 stub，路径存在但
-	// 执行必失败（未装发行版）。探针要求 bash 真的能跑出 "ok"。
-	if out, err := exec.Command("bash", "-c", "echo probe-ok").Output(); err != nil || string(out) != "probe-ok\n" {
-		t.Skipf("本机 bash 不可用（可能是 WSL 占位 stub）: %v %q", err, out)
+	dotted := legacyEnvName(approvalFlagKeyShape)
+	if shellIdentRe.MatchString(dotted) {
+		t.Errorf("点号旧名 %q 不该是合法的 shell 变量名 —— 那归一化就没必要，本用例的前提要重新审", dotted)
 	}
-	dotted := "FF_" + strings.ToUpper(approvalFlagKeyShape)
-	// 新名字必须能被 bash 接受（正向对照）：只测坏的会因 PATH/别名问题两头都红。
-	if out, err := exec.Command("bash", "-c", "export "+shellSafeName(dotted)+"=1 && echo ok").Output(); err != nil || !strings.Contains(string(out), "ok") {
-		// 归一化后的那份才是要验的正控制
-		norm := EnvNameOf(approvalFlagKeyShape)
-		out2, err2 := exec.Command("bash", "-c", "export "+norm+"=1 && echo ok").CombinedOutput()
-		t.Fatalf("归一化名 %q 也应被 bash 接受 = (%q,%v)；点号名 (%q,%v)", norm, string(out2), err2, string(dotted), err)
+	if got := EnvNameOf(approvalFlagKeyShape); !shellIdentRe.MatchString(got) {
+		t.Errorf("归一化名 %q 仍不是合法的 shell 变量名", got)
 	}
-	cmd := exec.Command("bash", "-c", "export "+dotted+"=1 && echo ok")
-	out, err := cmd.CombinedOutput()
-	if err == nil {
-		t.Errorf("点号变量名 %q 竟然 export 成功了（%s）—— 那归一化就没必要，本用例的前提要重新审", dotted, out)
+	// 任意非法字符都应被归一化成下划线：点号、横线、空格三种都覆盖到。
+	for _, name := range []string{"a.b", "with-dash", "with space"} {
+		if got := EnvNameOf(name); !shellIdentRe.MatchString(got) {
+			t.Errorf("EnvNameOf(%q) = %q，非法字符未被归一化", name, got)
+		}
 	}
-	if !strings.Contains(strings.ToLower(string(out)), "not a valid identifier") {
-		t.Errorf("期望 bash 报 \"not a valid identifier\"，实际输出 %q", out)
-	}
-}
-
-// shellSafeName 去掉点号，用于把"归一化那份"喂给 bash 做正控制。
-func shellSafeName(s string) string {
-	return strings.NewReplacer(".", "_", "-", "_", " ", "_").Replace(s)
 }
 
 // TestFlag_ReadsNormalizedEnvName 判据落在真读数上，而不是只落在字符串拼接上：

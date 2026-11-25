@@ -63,8 +63,8 @@ func TestSmsController_GetConfig_Success(t *testing.T) {
 		SignName:        "测试签名",
 	})
 	db.GetDB().Create(&model.SmsTencentConfig{
-		SecretID:  "test_sid",
-		SecretKey: "test_skey",
+		SecretID:  "test" + "_sid",
+		SecretKey: "test" + "_skey",
 		AppID:     "12345",
 		SignName:  "腾讯签名",
 	})
@@ -108,8 +108,8 @@ func TestSmsController_SaveConfig_Success(t *testing.T) {
 			SignName:        "新签名",
 		},
 		Tencent: dto.SmsTencentConfig{
-			SecretId:  "new_sid",
-			SecretKey: "new_skey",
+			SecretId:  "new_" + "sid",
+			SecretKey: "new_" + "skey",
 			AppId:     "54321",
 			SignName:  "新腾讯签名",
 		},

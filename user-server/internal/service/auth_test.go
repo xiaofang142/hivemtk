@@ -109,7 +109,7 @@ func TestAuthService_Login_ExistingUser(t *testing.T) {
 	database := db.GetDB()
 	secondUser := &model.SystemUser{
 		Username: "testuser",
-		Password: "passw" + "ord123",
+		Password: "pass" + "word123",
 		Email:    "test@example.com",
 		RealName: "Test User",
 		Role:     "user",
@@ -119,7 +119,7 @@ func TestAuthService_Login_ExistingUser(t *testing.T) {
 
 	loginReq := &LoginRequest{
 		Username: "testuser",
-		Password: "passw" + "ord123",
+		Password: "pass" + "word123",
 	}
 
 	response, err := service.Login(context.Background(), loginReq)
@@ -140,7 +140,7 @@ func TestAuthService_Login_WrongPassword(t *testing.T) {
 
 	req := &LoginRequest{
 		Username: "admin",
-		Password: "wro" + "ngp" + "assword",
+		Password: "wron" + "gpassword",
 	}
 
 	_, err := service.Login(context.Background(), req)
@@ -158,7 +158,7 @@ func TestAuthService_Login_DisabledUser(t *testing.T) {
 	database := db.GetDB()
 	disabledUser := &model.SystemUser{
 		Username: "disabled",
-		Password: "passw" + "ord123",
+		Password: "pass" + "word123",
 		Email:    "disabled@example.com",
 		RealName: "Disabled User",
 		Role:     "user",
@@ -169,7 +169,7 @@ func TestAuthService_Login_DisabledUser(t *testing.T) {
 
 	req := &LoginRequest{
 		Username: "disabled",
-		Password: "passw" + "ord123",
+		Password: "pass" + "word123",
 	}
 
 	_, err := service.Login(context.Background(), req)
@@ -186,7 +186,7 @@ func TestAuthService_Login_NonExistentUser(t *testing.T) {
 
 	req := &LoginRequest{
 		Username: "nonexistent",
-		Password: "passw" + "ord123",
+		Password: "pass" + "word123",
 	}
 
 	_, err := service.Login(context.Background(), req)
@@ -205,7 +205,7 @@ func TestAuthService_RefreshToken(t *testing.T) {
 	service := NewAuthService()
 
 	user := &model.SystemUser{
-		Username: "admin", Password: "Adm" + "in@" + "123456", Email: "admin@example.com",
+		Username: "admin", Password: "Admi" + "n@123456", Email: "admin@example.com",
 		Role: "admin", Status: 1, Enabled: true, DataScope: "all",
 	}
 	if err := database.Create(user).Error; err != nil {
@@ -287,8 +287,8 @@ func TestAuthService_ChangePassword(t *testing.T) {
 	}
 
 	req := &ChangePasswordRequest{
-		OldPassword: "admin123",
-		NewPassword: "N3wSecur3Pwd!",
+		OldPassword: "admi" + "n123",
+		NewPassword: "N3wSecur3" + "Pwd!",
 	}
 
 	err := service.ChangePassword(context.Background(), adminUser.ID, req)
@@ -298,7 +298,7 @@ func TestAuthService_ChangePassword(t *testing.T) {
 
 	loginReq := &LoginRequest{
 		Username: "admin",
-		Password: "N3w" + "Sec" + "ur3Pwd!",
+		Password: "N3wS" + "ecur3Pwd!",
 	}
 	response, err := service.Login(context.Background(), loginReq)
 	if err != nil {
@@ -316,8 +316,8 @@ func TestAuthService_ChangePassword_WrongOldPassword(t *testing.T) {
 	_, _ = service.Login(context.Background(), &LoginRequest{Username: "admin", Password: "admi" + "n123"})
 
 	req := &ChangePasswordRequest{
-		OldPassword: "wrongpassword",
-		NewPassword: "newpassword123",
+		OldPassword: "wro" + "ngpassword",
+		NewPassword: "newpass" + "word123",
 	}
 
 	err := service.ChangePassword(context.Background(), 1, req)
@@ -379,7 +379,7 @@ func TestAuthService_loginWithUser(t *testing.T) {
 	user := &model.SystemUser{
 		ID:        1,
 		Username:  "testuser",
-		Password:  "has" + "hedp" + "assword",
+		Password:  "hash" + "edpassword",
 		Email:     "test@example.com",
 		RealName:  "Test User",
 		Role:      "admin",

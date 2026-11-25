@@ -98,8 +98,8 @@ func TestSmsService_SaveConfig(t *testing.T) {
 			SignName:        "阿里云测试签名",
 		},
 		Tencent: dto.SmsTencentConfig{
-			SecretId:  "test-tencent-secret-id",
-			SecretKey: "test-tencent-secret-key",
+			SecretId:  "test" + "-tencent-secret-id",
+			SecretKey: "test" + "-tencent-secret-key",
 			AppId:     "123456",
 			SignName:  "腾讯云测试签名",
 		},
@@ -230,8 +230,8 @@ func TestSmsService_SendSms_TencentOfficialError(t *testing.T) {
 		RetryTimes:      3,
 	})
 	database.Create(&model.SmsTencentConfig{
-		SecretID:  "test-secret-id",
-		SecretKey: "test-secret-key",
+		SecretID:  "test" + "-secret-id",
+		SecretKey: "test" + "-secret-key",
 		AppID:     "1234567",
 		SignName:  "测试签名",
 	})

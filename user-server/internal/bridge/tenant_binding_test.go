@@ -107,13 +107,21 @@ func TestBindBridgeTenant_AccountMismatchRejected(t *testing.T) {
 	}
 }
 
-func TestBindBridgeTenant_ChannelMismatchRejected(t *testing.T) {
+func TestBindBridgeTenant_ChannelHintDoesNotOverrideIdentifyCode(t *testing.T) {
 	db := testutil.NewTestDBOrSkip(t, &model.Channel{}, &model.ChannelAccount{}, &model.ChannelIdentifyCode{})
 	modeOn(t)
 	fixture := seedCanonicalBridgeFixture(t, db, 11, "douyin", "owned")
 	c := bindingCtxWithIdentifyCode(t, "channel=weibo&account_id="+fixture.AccountID, fixture.Code)
-	if _, err := bindBridgeTenant(c, "weibo", fixture.AccountID); !errors.Is(err, ErrBridgeTenantAmbiguous) {
-		t.Fatalf("识别码与请求渠道不一致必须拒绝: %v", err)
+	ctx, err := bindBridgeTenant(c, "weibo", fixture.AccountID)
+	if err != nil {
+		t.Fatalf("合法识别码不应被客户端 channel hint 覆盖: %v", err)
+	}
+	identity, ok := BridgeIdentityFromContext(c)
+	if !ok || identity.TenantID != 11 || identity.Channel != "douyin" || identity.AccountID != fixture.AccountID {
+		t.Fatalf("统一身份必须采用识别码的 canonical 渠道与账号: %+v ok=%v", identity, ok)
+	}
+	if tid, bound := tenant.FromContext(ctx); !bound || tid != 11 {
+		t.Fatalf("on 模式必须绑定识别码租户: tid=%d bound=%v", tid, bound)
 	}
 }
 

@@ -92,10 +92,10 @@ func TestSecurityOverviewAggregates(t *testing.T) {
 // 预置哈希会被双重哈希成探测永远打不中的串——生产写路径传的也是明文。
 func TestSecurityAuditWeakPasswordProbe(t *testing.T) {
 	database := testutil.NewTestDB(t, &model.SystemUser{})
-	if err := database.Create(&model.SystemUser{Username: "weakling", Password: "123" + "456", Status: 1, Email: "w@example.com"}).Error; err != nil {
+	if err := database.Create(&model.SystemUser{Username: "weakling", Password: "1234" + "56", Status: 1, Email: "w@example.com"}).Error; err != nil {
 		t.Fatalf("seed weak user: %v", err)
 	}
-	if err := database.Create(&model.SystemUser{Username: "strongman", Password: "Str0n" + "g!Pass" + "phrase#2026", Status: 1, Email: "s@example.com"}).Error; err != nil {
+	if err := database.Create(&model.SystemUser{Username: "strongman", Password: "Str0" + "ng!Passphrase#2026", Status: 1, Email: "s@example.com"}).Error; err != nil {
 		t.Fatalf("seed strong user: %v", err)
 	}
 

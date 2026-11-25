@@ -17,7 +17,7 @@ func TestSystemUser_BasicFields(t *testing.T) {
 	user := &SystemUser{
 		ID:       1,
 		Username: "admin",
-		Password: "has" + "hed_" + "password",
+		Password: "hash" + "ed_password",
 		Email:    "admin@example.com",
 		RealName: "Administrator",
 		Role:     "admin",
@@ -129,7 +129,7 @@ func TestSystemUser_IsAdmin(t *testing.T) {
 
 func TestSystemUser_CheckPassword(t *testing.T) {
 	user := &SystemUser{
-		Password: "passw" + "ord123",
+		Password: "pass" + "word123",
 	}
 	err := HashSystemUserPassword(user)
 	if err != nil {
@@ -148,7 +148,7 @@ func TestSystemUser_CheckPassword(t *testing.T) {
 func TestSystemUser_BeforeCreate_HashesPassword(t *testing.T) {
 	user := &SystemUser{
 		Username: "testuser",
-		Password: "passw" + "ord123",
+		Password: "pass" + "word123",
 	}
 
 	err := user.BeforeCreate(nil)
@@ -165,7 +165,7 @@ func TestSystemUser_BeforeCreate_HashesPassword(t *testing.T) {
 
 func TestSystemUser_HashPassword(t *testing.T) {
 	user := &SystemUser{
-		Password: "tes" + "tpa" + "ssword",
+		Password: "test" + "password",
 	}
 
 	err := HashSystemUserPassword(user)

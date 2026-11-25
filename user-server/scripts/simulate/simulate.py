@@ -67,24 +67,37 @@ def _host_in_allowlist(hostname, allowed):
     return False
 
 
-def _safe_progress_path(name):
-    """把进度文件名约束在脚本目录内：realpath 解析后必须仍位于 HERE 内。
+def _safe_script_path(name):
+    """把任意用户提供的文件名约束在脚本目录内：realpath 解析后必须仍位于 HERE 内。
 
-    拒绝绝对路径、.. 段与符号链接逃逸（用户输入的 --seq-progress 不得越出根目录）。
+    拒绝绝对路径、.. 段与符号链接逃逸（--seq-progress / --log-file / --questions /
+    --names 等均经此函数校验，禁止任何未校验的 open() 路径）。
     """
     if not name or os.path.isabs(name) or ".." in name.split("/") or ".." in name.split("\\"):
-        raise ValueError("seq-progress 必须是脚本目录下的文件名，禁止路径穿越")
+        raise ValueError("文件名必须是脚本目录下的相对路径，禁止路径穿越")
     path = os.path.realpath(os.path.join(_PROGRESS_ROOT, name))
     if path == _PROGRESS_ROOT or os.path.commonpath([_PROGRESS_ROOT, path]) != _PROGRESS_ROOT:
-        raise ValueError("seq-progress 越出脚本目录")
+        raise ValueError("路径越出脚本目录: %r" % name)
     return path
+
+
+def _verify_resolved_path(path):
+    """对已解析路径再校验一次 realpath 边界，供所有 open() 前调用。"""
+    real = os.path.realpath(path)
+    if real == _PROGRESS_ROOT or os.path.commonpath([_PROGRESS_ROOT, real]) != _PROGRESS_ROOT:
+        raise ValueError("路径越出脚本目录: %r" % path)
+    return real
+
+
+# 文件写入/读取白名单根：全部固定为脚本目录内的常量文件，不接收用户路径。
+INTERACTIONS_FILE = _verify_resolved_path(os.path.join(_PROGRESS_ROOT, "interactions.jsonl"))
+DEFAULT_LOG_FILE = _verify_resolved_path(os.path.join(_PROGRESS_ROOT, "simulate.log"))
 
 
 def _write_progress(path, value):
     """写入断点前再校验一次 realpath 边界，杜绝写文件侧的路径穿越。"""
-    if os.path.commonpath([_PROGRESS_ROOT, os.path.realpath(path)]) != _PROGRESS_ROOT:
-        raise ValueError("seq-progress 越出脚本目录")
-    with open(path, "w", encoding="utf-8") as pf:
+    safe = _verify_resolved_path(path)
+    with open(safe, "w", encoding="utf-8") as pf:
         pf.write(str(value))
 
 
@@ -109,7 +122,6 @@ def _check_target_url(url):
                                 or addr.is_multicast or addr.is_unspecified):
         raise ValueError(f"禁止请求内网/保留地址: {hostname!r}")
     return url
-INTERACTIONS_FILE = os.path.join(HERE, "interactions.jsonl")
 
 # 降级判据只有一份：ai_quality.DEGRADED_MARKERS（与本文件同目录，靠 sys.path[0] 解析）。
 # 这里原先另写了一条内联副本（只认 "AI 服务暂时不可用"/"请稍后再试"），
@@ -133,15 +145,16 @@ def append_interaction(rec):
     rec 字段：ts/round/idx/question/cat/app_key/visitor/session_id/latency/
               ai_text/ai_len/degraded/empty/error
     """
+    safe = _verify_resolved_path(INTERACTIONS_FILE)
     try:
-        with open(INTERACTIONS_FILE, "a", encoding="utf-8") as f:
+        with open(safe, "a", encoding="utf-8") as f:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
     except Exception:
         pass
 
 
 def load_json(name):
-    path = os.path.join(HERE, name)
+    path = _safe_script_path(name)
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
@@ -149,15 +162,19 @@ def load_json(name):
 # ---------------------------------------------------------------------------
 # 昵称生成（真实感）
 # ---------------------------------------------------------------------------
+# 模拟数据随机源改用 CSPRNG（SystemRandom）：消除 insecure-randomness，且无需维护 seed。
+_sys_rand = random.SystemRandom()
+
+
 def gen_visitor_name(names):
-    sur = random.choice(names["surnames"])
-    giv = random.choice(names["given_names"])
-    suf = random.choice(names["suffixes"])
+    sur = _sys_rand.choice(names["surnames"])
+    giv = _sys_rand.choice(names["given_names"])
+    suf = _sys_rand.choice(names["suffixes"])
     return sur + giv + suf
 
 
 def gen_visitor_id():
-    return "sim_" + "".join(random.choices(string.ascii_lowercase + string.digits, k=12))
+    return "sim_" + "".join(_sys_rand.choices(string.ascii_lowercase + string.digits, k=12))
 
 
 # ---------------------------------------------------------------------------
@@ -316,7 +333,7 @@ def run_round(round_idx, args, questions, names, app_keys, print_lock, logf):
         futures = []
         for i in idxs:
             if i > 0:
-                time.sleep(random.uniform(args.min_gap, args.max_gap))
+                time.sleep(_sys_rand.uniform(args.min_gap, args.max_gap))
             futures.append(ex.submit(worker, i))
         for f in as_completed(futures):
             pass
@@ -399,7 +416,8 @@ def main():
     print_lock = threading.Lock()
 
     if args.daemon:
-        logf = open(args.log_file, "a", encoding="utf-8")
+        log_path = _safe_script_path(args.log_file)
+        logf = open(log_path, "a", encoding="utf-8")
         print("=" * 64)
         print("守护进程模式 启动")
         print("  目标服务 : %s" % args.base_url)
@@ -409,7 +427,7 @@ def main():
             args.round_size, args.round_gap, "无限" if args.max_rounds == 0 else str(args.max_rounds)))
         print("  并发/间隔: %d / %.1f~%.1f s  超时: %d s" % (
             args.concurrency, args.min_gap, args.max_gap, args.timeout))
-        print("  日志文件 : %s" % os.path.abspath(args.log_file))
+        print("  日志文件 : %s" % log_path)
         print("  按 Ctrl+C 停止" % ())
         print("=" * 64)
         logf.write("=== daemon start %s base=%s keys=%d round_size=%d ===\n" % (
@@ -440,11 +458,11 @@ def main():
     # 非守护：一次性跑 args.count 条
     # 顺序遍历模式：覆盖整个题库（按 idx 顺序逐条，不随机循环）+ 断点续跑
     if args.sequential:
-        prog_path = _safe_progress_path(args.seq_progress)
+        prog_path = _safe_script_path(args.seq_progress)
         start = 0
         if os.path.exists(prog_path):
             try:
-                with open(prog_path, "r", encoding="utf-8") as pf:
+                with open(_verify_resolved_path(prog_path), "r", encoding="utf-8") as pf:
                     start = int(pf.read().strip() or "0")
             except Exception:
                 start = 0
@@ -478,7 +496,7 @@ def main():
     print("  超时     : %d s" % args.timeout)
     print("=" * 64)
 
-    logf = open(os.path.join(HERE, "simulate.log"), "a", encoding="utf-8")
+    logf = open(_verify_resolved_path(DEFAULT_LOG_FILE), "a", encoding="utf-8")
     logf.write("=== single run %s base=%s mode=%s start=%d end=%d ===\n" % (
         time.strftime("%Y-%m-%d %H:%M:%S"), args.base_url,
         "sequential" if args.sequential else "random", start, start + len(run_slice)))
@@ -490,7 +508,7 @@ def main():
         new_start = start + len(run_slice)
         if new_start >= len(questions):
             new_start = 0  # 全量覆盖完成，下一轮从头
-        _write_progress(_safe_progress_path(args.seq_progress), new_start)
+        _write_progress(_safe_script_path(args.seq_progress), new_start)
     # 单次模式补充完整汇总
     print("\n" + "=" * 64)
     print("汇总报告")

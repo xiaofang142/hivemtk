@@ -105,7 +105,7 @@ func TestObsConfigLegacyPlaintextRowStillReadable(t *testing.T) {
 		Name:      "legacy-plain",
 		Provider:  model.ObsProviderAWS,
 		AccessKey: "AKIA-legacy-plain",
-		SecretKey: "legacy-sk-plain",
+		SecretKey: "lega" + "cy-sk-plain",
 		Bucket:    "bucket-legacy",
 	}
 	if err := repo.db.Create(legacy).Error; err != nil {

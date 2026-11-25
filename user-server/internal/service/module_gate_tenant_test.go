@@ -191,7 +191,7 @@ func TestModuleSyncExemptsGiftRowsFromStaleDisable(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	withPlatformEndpointCfg(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "test-" + "secret"})
+	withPlatformEndpointCfg(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "test" + "-secret"})
 
 	database := testutil.NewTestDB(t, &model.TenantModule{}, &model.ModuleSyncLog{}, &model.ModuleOrder{})
 	clearModuleTablesOnMode(t, database)
@@ -279,7 +279,7 @@ func TestModuleSyncActivatesPaidModuleOnOrderingTenant(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	withPlatformEndpointCfg(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "test-" + "secret"})
+	withPlatformEndpointCfg(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "test" + "-secret"})
 
 	database := testutil.NewTestDB(t, &model.TenantModule{}, &model.ModuleSyncLog{}, &model.ModuleOrder{})
 	clearModuleTablesOnMode(t, database)
@@ -464,7 +464,7 @@ func TestModuleSyncProvisionsFreeModulesForRequestingTenant(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	withPlatformEndpointCfg(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "test-" + "secret"})
+	withPlatformEndpointCfg(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "test" + "-secret"})
 
 	database := testutil.NewTestDB(t, &model.TenantModule{}, &model.ModuleSyncLog{}, &model.ModuleOrder{})
 	clearModuleTablesOnMode(t, database)

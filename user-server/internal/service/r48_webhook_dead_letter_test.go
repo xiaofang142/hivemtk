@@ -20,7 +20,7 @@ import (
 func seedWebhookDeadLetter(t *testing.T, url string, attempts int) (*WebhookSubService, model.WebhookDelivery) {
 	t.Helper()
 	db := testutil.NewTestDB(t, &model.WebhookSubscription{}, &model.WebhookDelivery{})
-	sub := &model.WebhookSubscription{TenantID: 1, URL: url, Events: "all", Secret: "test-" + "secret", Enabled: true}
+	sub := &model.WebhookSubscription{TenantID: 1, URL: url, Events: "all", Secret: "test" + "-secret", Enabled: true}
 	if err := db.Create(sub).Error; err != nil {
 		t.Fatalf("seed subscription: %v", err)
 	}
@@ -37,7 +37,7 @@ func seedWebhookDeadLetter(t *testing.T, url string, attempts int) (*WebhookSubS
 
 func TestWebhookDeadLetter_PersistenceAndList(t *testing.T) {
 	db := testutil.NewTestDB(t, &model.WebhookSubscription{}, &model.WebhookDelivery{})
-	sub := &model.WebhookSubscription{TenantID: 1, URL: "http://127.0.0.1/unused", Events: "all", Secret: "test-" + "secret", Enabled: true}
+	sub := &model.WebhookSubscription{TenantID: 1, URL: "http://127.0.0.1/unused", Events: "all", Secret: "test" + "-secret", Enabled: true}
 	if err := db.Create(sub).Error; err != nil {
 		t.Fatalf("seed subscription: %v", err)
 	}
@@ -138,7 +138,7 @@ func TestDeliverWebhookOnce_StableDeliveryIDHeader(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
-	sub := model.WebhookSubscription{TenantID: 1, URL: srv.URL, Secret: "test-" + "secret"}
+	sub := model.WebhookSubscription{TenantID: 1, URL: srv.URL, Secret: "test" + "-secret"}
 	body := []byte(`{"event":"hook.test","data":{"id":1}}`)
 	for i := 0; i < 2; i++ {
 		status, _, _, err := deliverWebhookOnce(sub, "hook.test", body)
@@ -222,7 +222,7 @@ func TestReplayDeadWebhookDeliveries_TenantScoped(t *testing.T) {
 	defer two.Close()
 	svc, _ := seedWebhookDeadLetter(t, one.URL, 3)
 	database := dbstate.Get()
-	subTwo := &model.WebhookSubscription{TenantID: 2, URL: two.URL, Events: "all", Secret: "tes" + "t-s" + "ecret-2", Enabled: true}
+	subTwo := &model.WebhookSubscription{TenantID: 2, URL: two.URL, Events: "all", Secret: "test" + "-secret-2", Enabled: true}
 	if err := database.Create(subTwo).Error; err != nil {
 		t.Fatalf("seed tenant 2 subscription: %v", err)
 	}

@@ -41,6 +41,11 @@ import time
 import urllib.error
 import urllib.request
 
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__)))), "scripts"))
+from url_guard import allowed_target_hosts, check_target_url  # noqa: E402  URL 闸：防 SSRF
+
 UA = "cs01-post-upgrade-recheck/1.0"
 TIMEOUT = 15
 
@@ -49,6 +54,12 @@ TIMEOUT = 15
 class Transport:
     def request(self, method, url, headers=None, body=None):
         """返回 (status:int|None, body_text:str|None, error:str|None)。网络异常时 status=None。"""
+        # 真实传输的 URL 过 host 白名单闸（--base-url 为外部输入）；自测用 CannedTransport
+        # 覆写本方法，不经过闸，离线自检不受影响。越界按 UNDETERMINED 登记，不冒充 0。
+        try:
+            check_target_url(url, allowed_hosts=allowed_target_hosts())
+        except ValueError as e:
+            return None, None, "SSRF-GUARD: %s" % e
         req = urllib.request.Request(url, data=(body.encode() if body else None), method=method)
         for k, v in (headers or {}).items():
             req.add_header(k, v)

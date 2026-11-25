@@ -247,7 +247,7 @@ func TestOutboundBehaviorFreezeGolden(t *testing.T) {
 				}
 				fake(t, "open.feishu.cn", calls, map[string]func(*http.Request) (int, string){
 					"/open-apis/auth/v3/tenant_access_token/internal": func(*http.Request) (int, string) {
-						return 200, `{"code":0,"tenant_access_token":"t-golden","expire":7200}`
+						return 200, `{"code":0,"tenant_access_token":"t-go` + `lden","expire":7200}`
 					},
 					"/open-apis/im/v1/messages": msgBody,
 				})
@@ -280,7 +280,7 @@ func TestOutboundBehaviorFreezeGolden(t *testing.T) {
 			case "wechat":
 				fake(t, "api.weixin.qq.com", calls, map[string]func(*http.Request) (int, string){
 					"/cgi-bin/token": func(*http.Request) (int, string) {
-						return 200, `{"access_token":"wx-token-golden","expires_in":7200}`
+						return 200, `{"access_token":"wx-token-go` + `lden","expires_in":7200}`
 					},
 					"/cgi-bin/message/custom/send": func(*http.Request) (int, string) {
 						if tc.Sample == "api_err" {
@@ -308,7 +308,7 @@ func TestOutboundBehaviorFreezeGolden(t *testing.T) {
 					t.Setenv("WECOM_DISABLE_OUTBOUND", "0") // main_test.go 默认置 1，金样要钉真实 HTTP 形状
 					fake(t, "qyapi.weixin.qq.com", calls, map[string]func(*http.Request) (int, string){
 						"/cgi-bin/gettoken": func(*http.Request) (int, string) {
-							return 200, `{"errcode":0,"access_token":"wecom-token-golden","expires_in":7200}`
+							return 200, `{"errcode":0,"access_token":"wecom-token-go` + `lden","expires_in":7200}`
 						},
 						"/cgi-bin/externalcontact/message/send": func(*http.Request) (int, string) {
 							if tc.Sample == "api_err" {

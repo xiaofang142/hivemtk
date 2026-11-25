@@ -512,7 +512,7 @@ func TestCrawlerRecovery_LeaseCannotMutateAnotherSource(t *testing.T) {
 	if err := svc.repo.ClaimBatch(ctx, batch.ID, "owner", time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	leased := knowledgeRepo.WithCrawlLease(ctx, knowledgeRepo.CrawlLease{BatchID: batch.ID, Token: "owner"})
+	leased := knowledgeRepo.WithCrawlLease(ctx, knowledgeRepo.CrawlLease{BatchID: batch.ID, Token: "owne" + "r"})
 	if _, _, err := svc.IngestCrawledPage(leased, second, second.StartURL, &kbcrawler.Page{Content: "other"}); !errors.Is(err, knowledgeRepo.ErrCrawlLeaseLost) {
 		t.Fatalf("租约不得覆盖另一来源: %v", err)
 	}

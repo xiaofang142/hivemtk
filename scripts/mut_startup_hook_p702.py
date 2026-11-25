@@ -26,6 +26,9 @@ import sys
 import time
 from pathlib import Path
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from path_guard import safe_resolve  # noqa: E402  路径闸：产物/注码目标不得越出允许根
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SERVER = os.path.join(ROOT, "user-server")
 SRC = os.path.join(SERVER, "internal/pkg/db/migrate.go")
@@ -45,7 +48,10 @@ ENV_SIGNS = ("failed SASL auth", "password authentication failed",
 from redact import scrub  # 落盘前脱敏：常驻产物要过 gitleaks（见 scripts/redact.py 的 why）
 def dump(tag, out):
     LOGDIR.mkdir(parents=True, exist_ok=True)
-    with open(LOGDIR / (re.sub(r"[^A-Za-z0-9_.-]", "-", tag) + ".log"), "w", encoding="utf-8") as fh:
+    # tag 已收窄成安全文件名，再过 realpath/commonpath 闸（拒绝 .. / 符号链接逃逸）。
+    log_path = safe_resolve(os.path.join(os.path.relpath(LOGDIR, ROOT),
+                                         re.sub(r"[^A-Za-z0-9_.-]", "-", tag) + ".log"), ROOT)
+    with open(log_path, "w", encoding="utf-8") as fh:
         fh.write(scrub(out))
 
 
@@ -173,7 +179,7 @@ def main() -> int:
             print(f"[{label}] ANCHOR-MISS（补丁没落地）")
             broken += 1
             continue
-        with open(SRC, "w", encoding="utf-8") as fh:
+        with open(safe_resolve(SRC, ROOT), "w", encoding="utf-8") as fh:
             fh.write(mutated)
         proc = subprocess.run(
             ["go", "test", "./internal/pkg/db/", "-run", f"^{TEST}$", "-count=1"],
@@ -198,7 +204,7 @@ def main() -> int:
                 print("      " + ln.strip())
             killed += 1
 
-        with open(SRC, "w", encoding="utf-8") as fh:
+        with open(safe_resolve(SRC, ROOT), "w", encoding="utf-8") as fh:
             fh.write(original)   # 每刀用完立刻还原
         if md5(SRC) != orig_md5:
             print(f"[{label}] RESTORE-MISMATCH：这一格还原后的字节与基线不同，立刻停手")

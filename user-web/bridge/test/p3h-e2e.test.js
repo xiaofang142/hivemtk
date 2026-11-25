@@ -2,6 +2,42 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { processAckDetailedResult } from '../src/core/downlink.js';
 
 const BASE_URL = process.env.HIVEMTK_E2E_BASE_URL || 'http://localhost:8080';
+
+// ---- SSRF 防护 ----
+// 本 e2e 默认打本机 bridge 服务；换受控目标时经 HIVEMTK_E2E_ALLOWED_HOSTS 显式追加。
+// 所有 fetch 目标必须先过 host 白名单：拒绝非 http(s)、userinfo、非白名单 host，
+// 以及非回环的私网/保留地址（云元数据、内网服务），避免 BASE_URL 被当成 SSRF 出口。
+const DEFAULT_E2E_HOSTS = ['localhost', '127.0.0.1', '::1'];
+const EXTRA_E2E_HOSTS = (process.env.HIVEMTK_E2E_ALLOWED_HOSTS || '')
+  .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+const E2E_HOST_ALLOWLIST = new Set([...DEFAULT_E2E_HOSTS, ...EXTRA_E2E_HOSTS]);
+
+function assertSafeE2eUrl(rawUrl) {
+  const u = new URL(rawUrl);
+  if (!['http:', 'https:'].includes(u.protocol)) throw new Error(`E2E 目标协议非法: ${u.protocol}`);
+  if (u.username || u.password) throw new Error('E2E 目标禁止携带 userinfo');
+  const host = u.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  const listed = E2E_HOST_ALLOWLIST.has(host) || E2E_HOST_ALLOWLIST.has(u.hostname.toLowerCase());
+  if (!listed) throw new Error(`E2E 目标 host 不在白名单: ${host}`);
+  // 白名单里即便显式写了一个 IP，非回环的私网/保留地址仍然拒绝。
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) {
+    const [a, b] = host.split('.').map(Number);
+    const isLoopback = a === 127;
+    const isInternal = a === 0 || a === 10 || a === 169 && b === 254 ||
+      a === 172 && b >= 16 && b <= 31 || a === 192 && b === 168;
+    if (!isLoopback && isInternal) throw new Error(`E2E 目标禁止内网/保留地址: ${host}`);
+  }
+  return rawUrl;
+}
+
+// 所有外部请求统一走这里：fetch 前强制过白名单校验。
+async function fetchAllowlisted(rawUrl, options) {
+  return fetch(assertSafeE2eUrl(rawUrl), options);
+}
+
+// 模块加载即校验基址，配置写错时尽早失败而不是等到第一次请求。
+assertSafeE2eUrl(BASE_URL);
+
 const CHANNEL = 'douyin';
 const ACCOUNT = 'e2e_p3h_' + Date.now();
 
@@ -10,7 +46,7 @@ let aiSeedId = null;
 
 beforeAll(async () => {
   try {
-    const r = await fetch(`${BASE_URL}/healthz`, { method: 'GET' });
+    const r = await fetchAllowlisted(`${BASE_URL}/healthz`, { method: 'GET' });
     serverAvailable = r.ok;
   } catch (_) {
     serverAvailable = false;
@@ -21,7 +57,7 @@ beforeAll(async () => {
 });
 
 async function postJSON(path, body, headers = {}) {
-  const r = await fetch(`${BASE_URL}${path}`, {
+  const r = await fetchAllowlisted(`${BASE_URL}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(body),
@@ -33,7 +69,7 @@ async function postJSON(path, body, headers = {}) {
 }
 
 async function getJSON(path, headers = {}) {
-  const r = await fetch(`${BASE_URL}${path}`, {
+  const r = await fetchAllowlisted(`${BASE_URL}${path}`, {
     method: 'GET',
     headers,
   });

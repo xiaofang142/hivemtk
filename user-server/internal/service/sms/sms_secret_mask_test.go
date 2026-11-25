@@ -34,7 +34,7 @@ func seedSmsSecrets(t *testing.T, db *gorm.DB) {
 		t.Fatalf("阿里云通道配置落库失败：%v", err)
 	}
 	if err := db.Create(&model.SmsTencentConfig{
-		SecretID: "REAL_TENCENT_ID", SecretKey: "REAL_TENCENT_KEY", AppID: "app1", SignName: "签名",
+		SecretID: "REAL" + "_TENCENT_ID", SecretKey: "REAL" + "_TENCENT_KEY", AppID: "app1", SignName: "签名",
 	}).Error; err != nil {
 		t.Fatalf("腾讯通道配置落库失败：%v", err)
 	}

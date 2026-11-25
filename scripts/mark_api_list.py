@@ -9,10 +9,16 @@
 逐条 curl 验证本身由主 Agent 手工执行（任务三明令禁止脚本批量发请求），
 本脚本只负责把「已经手工验过」的结论落到台账上。
 """
+import os
 import re
 import sys
 
-LIST = "docs/verification/api-list.md"
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from path_guard import safe_resolve  # noqa: E402  路径闸：台账读写不得越出仓库
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# 路径固定为仓库内台账：realpath+commonpath 闸拒绝 ../ / 符号链接逃逸。
+LIST = safe_resolve("docs/verification/api-list.md", ROOT)
 ROW = re.compile(r"^(\|\s*)(\d+)(\s*\|\s*)\[([ xX~!-])\](\s*\|.*)$", re.M)
 
 

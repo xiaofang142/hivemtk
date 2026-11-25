@@ -32,6 +32,10 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from path_guard import safe_resolve  # noqa: E402  路径闸：.env 写入不得越出项目根
+from url_guard import check_target_url  # noqa: E402  URL 闸：health 探测防 SSRF
+
 # ---------------------------------------------------------------------------
 # 基线常量（单一源：user-server/internal/config/ports.go / .env-example）
 # ---------------------------------------------------------------------------
@@ -124,10 +128,12 @@ def update_dotenv(path: str, updates: dict[str, str]) -> None:
     for key in updated_keys:  # 剩余：原文件里没有的键，追加
         out_lines.append(f"{key}={updates[key]}")
 
-    tmp = path + ".tmp"
+    # .env 路径过闸：写回目标必须 realpath 留在项目根内，拒绝 ../ / 符号链接逃逸。
+    safe_path = safe_resolve(path, PROJECT_ROOT, allow_absolute=True)
+    tmp = str(safe_path) + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         f.write("\n".join(out_lines) + ("\n" if out_lines else ""))
-    os.replace(tmp, path)
+    os.replace(tmp, safe_path)
 
 
 def strong_secret() -> str:
@@ -273,6 +279,11 @@ def _http_health(base_url: str) -> bool:
     if u.scheme not in ("http", "https") or not u.netloc:
         return False
     health = f"{u.scheme}://{u.netloc}/health"
+    try:
+        # health URL 过白名单闸：默认仅回环，禁 userinfo/私网/保留/链路本地。
+        check_target_url(health)
+    except ValueError:
+        return False
     try:
         with urllib.request.urlopen(health, timeout=HTTP_TIMEOUT) as resp:
             return 200 <= resp.status < 300

@@ -32,6 +32,9 @@ import subprocess
 import sys
 import time
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from path_guard import safe_resolve  # noqa: E402  路径闸：产物/注码目标不得越出允许根
+
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ROOT = os.environ.get("MUT_ROOT") or os.path.join(REPO, "user-server")
 # 逐格 `go test` 原始输出落进仓库树（只随 stdout 走 ⇒ 调用方重定向到 /tmp，重启即蒸发，
@@ -44,7 +47,9 @@ from redact import scrub  # 落盘前脱敏：常驻产物要过 gitleaks（见 
 def dump(tag, out):
     os.makedirs(LOGDIR, exist_ok=True)
     safe = re.sub(r"[^A-Za-z0-9_.-]", "-", tag)
-    with open(os.path.join(LOGDIR, safe + ".log"), "w", encoding="utf-8") as f:
+    # tag 已收窄成安全文件名，再过 realpath/commonpath 闸（拒绝 .. / 符号链接逃逸）。
+    log_path = safe_resolve(os.path.join(os.path.relpath(LOGDIR, REPO), safe + ".log"), REPO)
+    with open(log_path, "w", encoding="utf-8") as f:
         f.write(scrub(out))
 
 SVC = os.path.join(ROOT, "internal/browser_automation/service")
@@ -289,7 +294,8 @@ def main():
         all_ok = False
 
     for name, fname, old, new, must in MUTS:
-        p = os.path.join(SVC, fname)
+        # fname 来自本脚本固定 MUTS 名单：仍过闸确保 realpath 留在 ROOT 内。
+        p = safe_resolve(os.path.join(os.path.relpath(SVC, ROOT), fname), ROOT)
         s = open(p, encoding="utf-8").read()
         n = s.count(old)
         if n != 1:

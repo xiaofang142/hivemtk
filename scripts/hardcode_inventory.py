@@ -31,6 +31,9 @@ import re
 import sys
 from collections import Counter, defaultdict
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from path_guard import safe_resolve  # noqa: E402  路径闸：CSV 输出不得越出仓库
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT_DIR = os.path.join(ROOT, "hardcode-sweep")
 SERVER = "user-server/"
@@ -431,7 +434,8 @@ def main() -> int:
     if args.summary:
         return 0
 
-    csv_path = os.path.join(OUT_DIR, "INVENTORY.csv")
+    # CSV 路径过闸：realpath+commonpath 必须留在仓库根内。
+    csv_path = safe_resolve("hardcode-sweep/INVENTORY.csv", ROOT)
     fields = [
         "side", "kind", "bucket", "priority", "file", "line",
         "name", "value", "suggest_group", "suggest_key", "note",

@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
-	"hivemtk-user/internal/pkg/dbstate"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/timeutil"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
@@ -33,6 +33,12 @@ type WebhookSubscription = model.WebhookSubscription
 
 var webhookOutClient = &http.Client{Timeout: 5 * time.Second}
 
+const (
+	webhookReplayMaxAttempts = 8
+	// HTTP 有效超时为 5s；lease 必须更长，避免旧 worker 仍在投递时被恢复。
+	webhookReplayLease = 2 * utils.ShortTimeout
+)
+
 // PublishWebhookEvent 事件发布（fire-and-forget，失败仅日志，绝不阻塞主链路）
 // 便捷入口：使用全局单例 WebhookSubService
 func PublishWebhookEvent(ctx context.Context, event string, payload map[string]any) {
@@ -41,12 +47,16 @@ func PublishWebhookEvent(ctx context.Context, event string, payload map[string]a
 
 // WebhookSubService CRUD 服务
 type WebhookSubService struct {
-	repo *repository.WebhookSubscriptionRepository
+	repo       *repository.WebhookSubscriptionRepository
+	deliveries repository.WebhookDeliveryRepository
 }
 
 // NewWebhookSubService 构造（无参仓储工厂）
 func NewWebhookSubService() *WebhookSubService {
-	return &WebhookSubService{repo: repository.NewWebhookSubscriptionRepository()}
+	return &WebhookSubService{
+		repo:       repository.NewWebhookSubscriptionRepository(),
+		deliveries: repository.NewWebhookDeliveryRepository(),
+	}
 }
 
 // NewWebhookSubServiceFromGlobal 历史别名（装配语义已并入无参构造）
@@ -120,7 +130,9 @@ func deliverWebhookWithRetry(sub model.WebhookSubscription, event string, body [
 		lastStatus = code
 		lastErr = err
 		if status == "success" {
-			recordWebhookDelivery(sub, event, body, "success", attempts, lastStatus, nil)
+			if err := recordWebhookDelivery(sub, event, body, "success", attempts, lastStatus, nil); err != nil {
+				slog.Error("[WebhookOut] 成功投递落库失败", "url", sub.URL, "event", event, "err", err)
+			}
 			return
 		}
 		if code >= 400 && code < 500 && code != 429 {
@@ -128,7 +140,17 @@ func deliverWebhookWithRetry(sub model.WebhookSubscription, event string, body [
 		}
 	}
 	slog.Error("[WebhookOut] 死信", "url", sub.URL, "event", event, "status", lastStatus, "err", lastErr)
-	recordWebhookDelivery(sub, event, body, "dead_letter", attempts, lastStatus, lastErr)
+	if err := recordWebhookDelivery(sub, event, body, "dead_letter", attempts, lastStatus, lastErr); err != nil {
+		slog.Error("[WebhookOut] 死信落库失败", "url", sub.URL, "event", event, "err", err)
+	}
+}
+
+// webhookDeliveryID 是同一逻辑投递在首次重试与死信 replay 间的稳定幂等键。
+func webhookDeliveryID(sub model.WebhookSubscription, event string, body []byte) string {
+	h := sha256.New()
+	_, _ = fmt.Fprintf(h, "%d\x00%d\x00%s\x00", sub.TenantID, sub.ID, event)
+	_, _ = h.Write(body)
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 func deliverWebhookOnce(sub model.WebhookSubscription, event string, body []byte) (status string, attempts int, responseCode int, err error) {
@@ -140,6 +162,7 @@ func deliverWebhookOnce(sub model.WebhookSubscription, event string, body []byte
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Hivemtk-Event", event)
+	req.Header.Set("X-Hivemtk-Delivery-ID", webhookDeliveryID(sub, event, body))
 	mac := hmac.New(sha256.New, []byte(sub.Secret))
 	mac.Write(body)
 	req.Header.Set("X-Hivemtk-Signature", "sha256="+hex.EncodeToString(mac.Sum(nil)))
@@ -157,11 +180,7 @@ func deliverWebhookOnce(sub model.WebhookSubscription, event string, body []byte
 	return "dead_letter", 1, resp.StatusCode, fmt.Errorf("status %d", resp.StatusCode)
 }
 
-func recordWebhookDelivery(sub model.WebhookSubscription, event string, body []byte, status string, attempts, responseCode int, err error) {
-	db := dbstate.Get()
-	if db == nil {
-		return
-	}
+func recordWebhookDelivery(sub model.WebhookSubscription, event string, body []byte, status string, attempts, responseCode int, err error) error {
 	rec := &model.WebhookDelivery{
 		TenantID:       sub.TenantID,
 		SubscriptionID: sub.ID,
@@ -178,50 +197,78 @@ func recordWebhookDelivery(sub model.WebhookSubscription, event string, body []b
 		now := time.Now()
 		rec.DeliveredAt = &now
 	}
-	_ = db.Create(rec).Error
+	ctx := tenant.ContextWithDefault(context.Background())
+	if sub.TenantID > 0 {
+		ctx = tenant.WithTenantID(ctx, sub.TenantID)
+	}
+	return repository.NewWebhookDeliveryRepository().Create(ctx, rec)
 }
 
-func updateWebhookDelivery(id uint, status string, attempts, responseCode int, err error) {
-	db := dbstate.Get()
-	if db == nil || id == 0 {
-		return
+func webhookDeliveryScope(ctx context.Context) (context.Context, uint, error) {
+	if ctx == nil {
+		ctx = context.Background()
 	}
-	updates := map[string]any{"status": status, "attempts": attempts, "response_code": responseCode}
-	if err != nil {
-		updates["last_error"] = err.Error()
-	} else {
-		updates["last_error"] = ""
+	if tenant.IsSystemScope(ctx) {
+		return ctx, 0, nil
 	}
-	if status == "success" {
-		now := time.Now()
-		updates["delivered_at"] = &now
+	if id, ok := tenant.FromContext(ctx); ok {
+		if id == 0 {
+			return ctx, 0, fmt.Errorf("webhook delivery tenant context id must be positive")
+		}
+		return ctx, id, nil
 	}
-	_ = db.Model(&model.WebhookDelivery{}).Where("id = ?", id).Updates(updates).Error
+	if tenant.IsMultiTenant() {
+		return ctx, 0, fmt.Errorf("webhook delivery tenant context required")
+	}
+	ctx = tenant.ContextWithDefault(ctx)
+	return ctx, tenant.DefaultTenantID, nil
 }
 
-// ReplayDeadWebhookDeliveries 重投死信（Route 3）：最多 attempts<8 且 status=dead_letter 的记录。
+// ReplayDeadWebhookDeliveries 重投死信（Route 3）：CAS claim + 行版本条件完成。
 func (s *WebhookSubService) ReplayDeadWebhookDeliveries(ctx context.Context, limit int) (int, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	db := dbstate.Get()
-	if db == nil {
-		return 0, nil
+	if s == nil || s.deliveries == nil || s.repo == nil {
+		return 0, fmt.Errorf("webhook replay repository unavailable")
 	}
-	var rows []model.WebhookDelivery
-	if err := db.WithContext(ctx).Where("status = ? AND attempts < ?", "dead_letter", 8).
-		Order("updated_at ASC").Limit(limit).Find(&rows).Error; err != nil {
+	scopedCtx, tenantID, err := webhookDeliveryScope(ctx)
+	if err != nil {
+		return 0, err
+	}
+	rows, err := s.deliveries.ListReplayCandidates(scopedCtx, tenantID, webhookReplayMaxAttempts, time.Now().Add(-webhookReplayLease), limit)
+	if err != nil {
 		return 0, err
 	}
 	replayed := 0
 	for i := range rows {
 		row := rows[i]
-		var sub model.WebhookSubscription
-		if err := db.WithContext(ctx).Where("id = ? AND enabled = ?", row.SubscriptionID, true).First(&sub).Error; err != nil {
+		now := time.Now()
+		claim, err := s.deliveries.ClaimReplay(scopedCtx, row.ID, tenantID, webhookReplayMaxAttempts, now, webhookReplayLease)
+		if err != nil {
+			return replayed, err
+		}
+		if claim == nil {
 			continue
 		}
-		status, attempts, code, derr := deliverWebhookOnce(sub, row.Event, []byte(row.Payload))
-		updateWebhookDelivery(row.ID, status, row.Attempts+attempts, code, derr)
+		sub, err := s.repo.FindEnabledByID(scopedCtx, row.SubscriptionID)
+		if err != nil {
+			return replayed, err
+		}
+		status, code := "dead_letter", 0
+		var deliveryErr error
+		if sub == nil {
+			deliveryErr = fmt.Errorf("webhook subscription %d disabled or not found", row.SubscriptionID)
+		} else {
+			status, _, code, deliveryErr = deliverWebhookOnce(*sub, row.Event, []byte(row.Payload))
+		}
+		completed, err := s.deliveries.CompleteReplay(scopedCtx, *claim, status, code, deliveryErr, time.Now())
+		if err != nil {
+			return replayed, err
+		}
+		if !completed {
+			return replayed, fmt.Errorf("webhook delivery %d claim lost before completion", row.ID)
+		}
 		replayed++
 	}
 	return replayed, nil
@@ -229,22 +276,14 @@ func (s *WebhookSubService) ReplayDeadWebhookDeliveries(ctx context.Context, lim
 
 // ListWebhookDeliveries 列表（管理端观测 hook 投递/死信）。
 func (s *WebhookSubService) ListWebhookDeliveries(ctx context.Context, status string, limit int) ([]model.WebhookDelivery, error) {
-	if limit <= 0 || limit > 200 {
-		limit = 50
+	if s == nil || s.deliveries == nil {
+		return nil, fmt.Errorf("webhook delivery repository unavailable")
 	}
-	db := dbstate.Get()
-	if db == nil {
-		return []model.WebhookDelivery{}, nil
-	}
-	q := db.WithContext(ctx).Model(&model.WebhookDelivery{}).Order("id DESC").Limit(limit)
-	if status != "" {
-		q = q.Where("status = ?", status)
-	}
-	var rows []model.WebhookDelivery
-	if err := q.Find(&rows).Error; err != nil {
+	scopedCtx, _, err := webhookDeliveryScope(ctx)
+	if err != nil {
 		return nil, err
 	}
-	return rows, nil
+	return s.deliveries.List(scopedCtx, status, limit)
 }
 
 // SetCustomAttributes 更新客户自定义属性（JSONB merge）

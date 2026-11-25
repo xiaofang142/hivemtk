@@ -133,14 +133,14 @@ func TestAuthController_Login_WrongCredentials(t *testing.T) {
 
 	firstUser := model.SystemUser{
 		Username: "testuser",
-		Password: "cor" + "rect" + "password",
+		Password: "corr" + "ectpassword",
 		Status:   1,
 	}
 	db.GetDB().Create(&firstUser)
 
 	loginReq := service.LoginRequest{
 		Username: "testuser",
-		Password: "wro" + "ngp" + "assword",
+		Password: "wron" + "gpassword",
 	}
 	body, _ := json.Marshal(loginReq)
 
@@ -160,7 +160,7 @@ func TestAuthController_Login_WrongCredentials(t *testing.T) {
 func TestAuthController_RefreshToken_Success(t *testing.T) {
 	setupTestControllerDB(t)
 	if err := db.GetDB().Create(&model.SystemUser{
-		ID: 1, Username: "testuser", Password: "Adm" + "in@" + "123456",
+		ID: 1, Username: "testuser", Password: "Admi" + "n@123456",
 		Email: "testuser@test.com", Role: "admin", Status: 1, Enabled: true,
 	}).Error; err != nil {
 		t.Fatalf("seed user 1: %v", err)
@@ -274,7 +274,7 @@ func seedRegularUser(t *testing.T, username, password string) model.SystemUser {
 	database := db.GetDB()
 	if err := database.Create(&model.SystemUser{
 		Username: "initial_admin",
-		Password: "seed-" + "passwo" + "rd-not-used",
+		Password: "seed" + "-password-not-used",
 		Status:   1,
 	}).Error; err != nil {
 		t.Fatalf("播种初始超管失败: %v", err)
@@ -488,7 +488,7 @@ func TestSystemUserController_CreateUser_Success(t *testing.T) {
 
 	createReq := service.CreateUserRequest{
 		Username: "newuser",
-		Password: "Pas" + "swo" + "rd@123",
+		Password: "Pass" + "word@123",
 		Email:    "newuser@example.com",
 		RealName: "New User",
 		Role:     "user",

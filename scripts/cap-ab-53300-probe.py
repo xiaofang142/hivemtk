@@ -46,6 +46,7 @@ import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from battlog import identity  # noqa: E402  同一枚助手：产物里必须写明这轮读的是哪一笔
+from path_guard import safe_resolve  # noqa: E402  路径闸：tag/outfile 不得越出仓库
 from redact import scrub  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -118,11 +119,13 @@ def sample_conn(port: str, outfile: pathlib.Path):
     """单条采样连接、0.2s 一问。多开连接采样会自己挤占名额，读数就不干净了。"""
     user = os.environ.get("POSTGRES_TEST_USER", "admin")
     env = {**os.environ, "PGPASSWORD": os.environ["POSTGRES_TEST_PASSWORD"]}
+    # 采样产物路径过闸：拒绝 ../../ 与符号链接逃逸，只允许写在仓库内。
+    safe_out = safe_resolve(outfile, ROOT, allow_absolute=True)
     proc = subprocess.Popen(
         # -d postgres：两相容器都有这个库。第一版拿用户名顶库名（-d admin），在 8232 上
         # 直接 FATAL: database "admin" does not exist ⇒ 采样器静默零读数。
         ["psql", "-h", "127.0.0.1", "-p", port, "-U", user, "-d", SAMPLE_DB, "-tA", "-q", "-f", "-"],
-        stdin=subprocess.PIPE, stdout=open(outfile, "w"), stderr=subprocess.STDOUT,
+        stdin=subprocess.PIPE, stdout=open(safe_out, "w"), stderr=subprocess.STDOUT,
         text=True, env=env)
     # 计数含 idle：本用例的失效形状就是"连接开着不还、攒在池里"，只数 active 会把
     # 真正的用量（几十条 idle）读成 1，那是采样器自己的错，不是被测方的。
@@ -196,7 +199,11 @@ def main() -> int:
     ports = {"narrow": [os.environ.get("CAPAB_PORT", "8234")],
              "control-a": [os.environ.get("CAPAB_DEV_PORT", "8232")],
              "full": [os.environ.get("CAPAB_PORT", "8234")]}[args.mode]
-    logdir = ROOT / "docs/superpowers/specs/ledger/logs/CapAB" / args.tag
+    # tag 来自命令行：先收窄成安全文件名，再过 realpath/commonpath 闸，杜绝路径穿越。
+    safe_tag = re.sub(r"[^A-Za-z0-9_.-]", "-", args.tag)
+    if ".." in safe_tag.split("."):
+        raise SystemExit("非法 tag：含 .. 路径穿越段")
+    logdir = safe_resolve(safe_tag, ROOT / "docs/superpowers/specs/ledger/logs/CapAB")
     logdir.mkdir(parents=True, exist_ok=True)
     summary = logdir / "00-summary.log"
     lines = [f"趟次 tag={args.tag} mode={args.mode}"]

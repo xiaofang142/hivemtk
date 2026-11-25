@@ -129,6 +129,9 @@ import sys
 import tempfile
 import time
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from path_guard import safe_resolve  # noqa: E402  路径闸：产物/夹具/go 生成件不得越出允许根
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ADMIN = "admin"
 CUSTOMER_SERVICE = "customer_service"
@@ -1535,9 +1538,11 @@ function legacyFetch() {
     # 少了这一枚反向，dead 档可以永远是空集而门照样绿。
     fake = os.path.join(tempfile.mkdtemp(prefix="rR-blockdead-"), "repo")
     try:
+        # 夹具路径过闸：realpath 必须留在临时根内，拒绝 ../ / 符号链接逃逸。
+        fake_root = os.path.realpath(os.path.dirname(fake))
         os.makedirs(os.path.join(fake, "user-web", "src", "views"), exist_ok=True)
         os.makedirs(os.path.join(fake, "user-web", "src", "api"), exist_ok=True)
-        with open(os.path.join(fake, "user-web", "src", "api", "foo.js"),
+        with open(safe_resolve("repo/user-web/src/api/foo.js", fake_root),
                   "w", encoding="utf-8") as f:
             # 抄真仓库的写法（user-web/src/api/clue.js 就是 `delete: (id) => {` + 下一行 return）：
             # 宿主判定只认「以花括号收尾的定义行」与「属性函数行」两种形状，把方法体塞进同一行会让
@@ -1558,7 +1563,7 @@ function legacyFetch() {
                            ("InlineMount.vue", "const url = '/api/foo/remove/9'"),
                            ("InlineClick.vue",
                             "function onDel() {\n  const url = '/api/foo/remove/9'\n  return url\n}")):
-            with open(os.path.join(fake, "user-web", "src", "views", name),
+            with open(safe_resolve(os.path.join("repo/user-web/src/views", name), fake_root),
                       "w", encoding="utf-8") as f:
                 f.write("<template><div /></template>\n<script setup>\n"
                         "import { fooApi } from '@/api/foo'\n"
@@ -1665,7 +1670,8 @@ def unrouted_api_controls():
     fake = os.path.join(tempfile.mkdtemp(prefix="rR-unrouted-"), "repo")
     try:
         os.makedirs(os.path.join(fake, *UNROUTED_API_DIR_REL.split(os.sep)))
-        api_file = os.path.join(fake, *UNROUTED_API_DIR_REL.split(os.sep), "x.js")
+        api_file = safe_resolve(os.path.join("repo", UNROUTED_API_DIR_REL, "x.js"),
+                                os.path.realpath(os.path.dirname(fake)))
         with open(api_file, "w", encoding="utf-8") as f:
             f.write(UNROUTED_FIXTURE_JS)
 
@@ -1795,7 +1801,8 @@ def render_go_table(rules, go_rel):
 
 def emit_or_check_go(root, rules, go_rel, check_only):
     """写出生成件；--check-go 模式下只比对，不一致就退非零（生成件漂移必须出声）。"""
-    go_path = os.path.join(root, go_rel)
+    # go_rel 来自命令行：realpath+commonpath 必须留在仓库根内，拒绝 ../ / 符号链接逃逸。
+    go_path = safe_resolve(go_rel, root)
     want = render_go_table(rules, go_rel)
     have = None
     if os.path.exists(go_path):
@@ -1862,9 +1869,12 @@ def main():
     root = os.path.abspath(args.repo or RCT.repo_root())
     root_marker = root
 
-    outdir = args.out or os.path.join(root, "docs", "superpowers", "specs", "ledger",
-                                      "logs", "MenuRouteAudit",
-                                      time.strftime("%Y%m%d-%H%M%S"))
+    # --out 是外部输入：产物根目录 realpath+commonpath 必须留在仓库根内。
+    # 后续所有 os.path.join(outdir, ...) 写入都建立在这个已校验的根之上。
+    _outdir_raw = args.out or os.path.join(root, "docs", "superpowers", "specs", "ledger",
+                                           "logs", "MenuRouteAudit",
+                                           time.strftime("%Y%m%d-%H%M%S"))
+    outdir = str(safe_resolve(_outdir_raw, root, allow_absolute=True))
     os.makedirs(outdir, exist_ok=True)
     tsv = args.guards
     if not tsv:

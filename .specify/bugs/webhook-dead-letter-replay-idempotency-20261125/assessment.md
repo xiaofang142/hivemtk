@@ -5,7 +5,7 @@
 - **Source**: E4 hook dead-letter 持久化/列表/幂等 replay 验收
 - **Verdict**: valid
 - **Severity**: high
-- **Mode**: approved for minimal implementation（assessment 已细化；未改生产前等待本记录落盘）
+- **Mode**: implemented（生产修复已落地；主智能体最终独立复验 pending）
 
 ## Report
 
@@ -65,7 +65,7 @@ claim 成功后返回行版本 token：`(ID, TenantID, Attempts, UpdatedAt)`。
 
 - Controller replay：沿用请求租户 ctx，只认领/完成该租户行；
 - Cron replay：`internal/app/webhook_delivery_wiring.go` 显式使用 `tenant.WithSystemScope`，可跨租户处理，但每行完成仍匹配行自身 `tenant_id`；
-- on 模式无租户且无 system scope：fail-closed 报错；off 模式显式补默认租户。
+- on 模式无租户且无 system scope：fail-closed 报错；显式 tenant 0 同样 fail-closed；off 模式显式补默认租户。
 
 ### 5. 稳定 delivery-id
 
@@ -81,22 +81,30 @@ worker 在 receiver 已成功响应后、DB 完成前崩溃时，无法区分“
 
 ## Exact Files
 
-1. 新增 `user-server/internal/repository/webhook_delivery.go`
-   - `WebhookDeliveryRepository` seam：Create / List / ListReplayCandidates / ClaimReplay / CompleteReplay；
-   - 所有 SQL/GORM 数据访问收口此处，Service 不直接接触 DB。
-2. 修改 `user-server/internal/repository/growth_repo.go`
-   - 增加 `FindEnabledByID(ctx, id)`，订阅不存在/禁用返回 nil，DB 错误可见。
-3. 修改 `user-server/internal/service/r48_growth.go`
-   - `WebhookSubService` 注入 delivery repository interface；
-   - replay 编排改为 candidate→CAS claim→订阅查询→HTTP→条件完成；
+当前 HEAD `d264d3104177587a87dd3c88e33fbe898536e688` 已包含 repository seam 与基础死信测试；本轮实际生产 diff 仅两文件：
+
+1. `user-server/internal/service/r48_growth.go`
+   - 注入 `repository.WebhookDeliveryRepository`；
+   - candidate→CAS claim→订阅查询→HTTP→条件完成；
    - 移除 replay/list/record/update 的 direct `dbstate`/GORM；
-   - 增加稳定 delivery-id header。
-4. 修改 `user-server/internal/app/webhook_delivery_wiring.go`
-   - cron 显式 system scope。
-5. 修改 `user-server/internal/service/r48_webhook_dead_letter_test.go`
-   - 并发单投、stale claim 不能覆盖新 claim、lease 内不恢复/过期恢复、attempts cap、租户隔离、DB 错误可见、稳定 delivery-id。
-6. 新增 `user-server/internal/repository/webhook_delivery_test.go`
-   - CAS claim/complete 的仓储级边界与 stale token 回归。
+   - tenant 0 fail-closed；
+   - 稳定 delivery-id header；
+   - 成功/死信持久化错误结构化日志。
+2. `user-server/internal/app/webhook_delivery_wiring.go`
+   - cron 显式 `tenant.WithSystemScope`。
+
+本轮新增测试：
+
+3. `user-server/internal/service/r48_webhook_replay_error_test.go`
+   - candidate/completion DB 错误可见。
+4. `user-server/internal/service/r48_webhook_scope_persistence_test.go`
+   - tenant 0 replay/list、system scope、持久化失败日志。
+
+HEAD 已有且未覆盖的依赖：
+
+- `repository/webhook_delivery.go` / `repository/webhook_delivery_test.go`：CAS seam 与 3/3 仓储回归；
+- `repository/growth_repo.go`：`FindEnabledByID`；
+- `service/r48_webhook_dead_letter_test.go`：基础并发/lease/crash/header 回归；其当前 string-concat diff 是外部 scanner 工作，未修改、不计入本 lane。
 
 ## Boundary
 

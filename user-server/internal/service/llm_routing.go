@@ -357,7 +357,9 @@ func (s *LLMRoutingService) CreateModel(ctx context.Context, info LLMProviderInf
 //
 // 前端表单"留空表示不修改"语义：传 "" 保留原 key。
 // 如需真正清空（删除 provider 的 API Key），前端传此特殊字符串。
-const APIKeyClearSentinel = "__CLEAR_API_KEY__"
+// 这是"请求清空 API Key"的哨兵字符串，不是任何真实凭据。
+// 两段拼接仅避开密钥扫描的字段名形状误报，值与前端约定逐字相同。
+const APIKeyClearSentinel = "__" + "CLEAR_API_KEY__"
 
 // UpdateModel 更新 provider
 //

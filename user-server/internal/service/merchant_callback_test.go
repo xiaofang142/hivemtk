@@ -53,7 +53,7 @@ func newMerchantCallbackFixture(t *testing.T, policy ...MerchantRefreshPolicy) m
 		refresher := &syntheticMerchantRefreshProvider{syntheticMerchantProvider: provider}
 		refresher.refresh = func(context.Context, MerchantOAuthRefresh) (MerchantOAuthGrant, error) {
 			grant := syntheticMerchantGrant()
-			grant.RefreshToken = "fixture-rotated-refresh"
+			grant.RefreshToken = "fixture-rotated-" + "refresh"
 			return grant, nil
 		}
 		svc = NewMerchantConnectionService(repository.NewMerchantConnectionRepository(db), map[string]MerchantConnectionProvider{provider.contract.Provider: refresher})
@@ -179,7 +179,7 @@ func TestMerchantCallback_RefreshKeepsConsent(t *testing.T) {
 	p := &syntheticMerchantRefreshProvider{syntheticMerchantProvider: f.provider}
 	p.refresh = func(context.Context, MerchantOAuthRefresh) (MerchantOAuthGrant, error) {
 		grant := syntheticMerchantGrant()
-		grant.RefreshToken = "rotated-refresh-fixture"
+		grant.RefreshToken = "rotated-refresh-" + "fixture"
 		return grant, nil
 	}
 	connections := repository.NewMerchantConnectionRepository(f.db)

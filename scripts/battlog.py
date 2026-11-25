@@ -13,7 +13,12 @@ import pathlib
 import subprocess
 import sys
 
+from path_guard import safe_resolve
 from redact import scrub
+
+# tee 产物只允许落在仓库内（调用方给的是各自 LOGDIR 下的文件，绝对路径合法，
+# 但 realpath 必须仍在仓库根内；拒绝 ../ 与符号链接逃逸）。
+REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 
 class _Tee:
@@ -48,7 +53,9 @@ def tee_to(path) -> None:
     3 行，停机原因"脏文件清单为空"查不到）。句柄不在 `atexit` 里提前关：解释器是在
     `atexit` 之后才打 SystemExit 那句话的，先关就把刚补的这一半又丢了。
     """
-    p = pathlib.Path(path)
+    # 路径闸：调用方多为绝对路径（LOGDIR/00-run.log），允许绝对但必须 realpath
+    # 落在仓库根内，杜绝 ../ 与符号链接逃逸到仓库外写文件。
+    p = safe_resolve(path, REPO_ROOT, allow_absolute=True)
     p.parent.mkdir(parents=True, exist_ok=True)  # 多数驱动的 LOGDIR 要到第一次 dump() 才建，tee 比它更早
     fh = open(p, "w", encoding="utf-8")
     sys.stdout = _Tee(sys.stdout, fh)

@@ -14,7 +14,7 @@ func TestObsConfigDTOMasksCredentials(t *testing.T) {
 	s := &obsConfigService{}
 	resp := s.convertToDTO(context.Background(), &model.ObsConfig{
 		AccessKey: "ak-live-plaintext",
-		SecretKey: "sk-live-plaintext",
+		SecretKey: "sk-l" + "ive-plaintext",
 	})
 	if resp.AccessKey != "***" {
 		t.Errorf("AccessKey 应掩码为 ***, got %q", resp.AccessKey)

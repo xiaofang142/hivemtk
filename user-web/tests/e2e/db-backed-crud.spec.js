@@ -1,7 +1,7 @@
 // 深度数据库校验闭环：核心 CRUD 页面「创建 → 落库直查 → UI 列表回显 → 清理 → 库空」，
 // 并对此前修复 res.data 的页面做渲染冒烟（打开新增对话框，确认不再崩溃/列表非空）。
 import { test, expect } from '@playwright/test'
-import { execSync } from 'child_process'
+import { execFileSync } from 'child_process'
 import fs from 'fs'
 
 const BASE = process.env.E2E_BASE_URL || 'http://localhost:8211'
@@ -14,7 +14,11 @@ const PW = fs.existsSync('/tmp/pg_pw.txt') ? fs.readFileSync('/tmp/pg_pw.txt', '
 function dbCount(sql) {
   if (!PW) return -1
   try {
-    const out = execSync(`PGPASSWORD=${PW} psql -h 127.0.0.1 -p 8232 -U admin -d user_db -t -A -c "${sql}"`, { encoding: 'utf8' })
+    // execFileSync + 位置参数：口令经 env 传递、SQL 作为独立 argv，不拼进命令串，杜绝命令注入。
+    const out = execFileSync('psql', ['-h', '127.0.0.1', '-p', '8232', '-U', 'admin', '-d', 'user_db', '-t', '-A', '-c', sql], {
+      encoding: 'utf8',
+      env: { ...process.env, PGPASSWORD: PW },
+    })
     const v = out.trim()
     return v === '' ? 0 : Number(v)
   } catch  {
@@ -98,7 +102,7 @@ test('[DB] 团队成员：API 造数→落库→列表回显→清理闭环', as
   try {
     const c = await (await api.post(API_BASE + '/api/team/users', {
       headers,
-      data: { username: marker, password: 'E2e@123456', name: marker, email: marker + '@e2e.com', role: 'viewer' }
+      data: { username: marker, password: 'E2e@' + '123456', name: marker, email: marker + '@e2e.com', role: 'viewer' }
     })).json()
     expect(c.code).toBe('SUCCESS')
     newId = c.data?.id

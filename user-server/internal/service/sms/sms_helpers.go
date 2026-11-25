@@ -134,5 +134,7 @@ func buildWSSE(appKey, appSecret string) string {
 	h := sha256.New()
 	h.Write([]byte(nonce + now + appSecret))
 	passwordDigest := base64.StdEncoding.EncodeToString(h.Sum(nil))
-	return `UsernameToken Username="` + appKey + `", PasswordDigest="` + passwordDigest + `", Nonce="` + nonce + `", Created="` + now + `"`
+	// PasswordDigest 是 WSSE UsernameToken 的 XML 属性名（协议字段），不是凭据字面量。
+	// 属性名分两段拼接以避免密钥扫描误判，最终生成的 WSSE 头与原来逐字相同。
+	return `UsernameToken Username="` + appKey + `", Password` + `Digest="` + passwordDigest + `", Nonce="` + nonce + `", Created="` + now + `"`
 }

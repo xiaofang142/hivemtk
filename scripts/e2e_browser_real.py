@@ -43,6 +43,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from url_guard import check_target_url  # noqa: E402  URL 闸：--base-url / CDP 探测防 SSRF
+
 from datetime import datetime
 
 DEFAULT_BASE = "http://127.0.0.1:8204"
@@ -58,6 +61,9 @@ class API:
 
     def call(self, method, path, body=None, timeout=60):
         url = self.base + path
+        # base 来自 --base-url / BASE_URL（外部输入）：过白名单闸，默认仅回环，
+        # 拒 userinfo/非 http(s)/私网/保留/链路本地，防 urlopen 成为 SSRF 出口。
+        check_target_url(url)
         data = json.dumps(body).encode() if body is not None else None
         req = urllib.request.Request(url, data=data, method=method)
         req.add_header("Content-Type", "application/json")
@@ -400,7 +406,9 @@ F10_DRAIN_BUDGET_SEC = 12
 
 
 def cdp_fixture_tabs(cdp_port, fixture_url):
-    with urllib.request.urlopen("http://127.0.0.1:%d/json/list" % cdp_port, timeout=10) as r:
+    cdp_url = "http://127.0.0.1:%d/json/list" % cdp_port
+    check_target_url(cdp_url)  # CDP 探测仍过闸：回环 IP 字面量，防端口/URL 被外部数据改写
+    with urllib.request.urlopen(cdp_url, timeout=10) as r:
         targets = json.loads(r.read().decode())
     return [t["id"] for t in targets
             if t.get("type") == "page" and str(t.get("url", "")).startswith(fixture_url) and t.get("id")]
@@ -425,8 +433,9 @@ def cdp_close_fixture_tabs(rep, name, cdp_port, fixture_url):
         time.sleep(1)
     for tid in left:  # 判红也兜底回收，不把泄漏留给下一腿
         try:
-            urllib.request.urlopen("http://127.0.0.1:%d/json/close/%s" % (cdp_port, tid),
-                                   timeout=10).read()
+            close_url = "http://127.0.0.1:%d/json/close/%s" % (cdp_port, tid)
+            check_target_url(close_url)
+            urllib.request.urlopen(close_url, timeout=10).read()
         except Exception:
             pass
     rep.add("PASS" if not left else "FAIL", name + " :: 夹具 tab 零泄漏",

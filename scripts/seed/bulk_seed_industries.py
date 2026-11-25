@@ -89,8 +89,13 @@ print(f"Agent IDs: {AG}")
 # 写歪一处就成了重跑必重复灌——曾经 FAQ/SOP 的写法被一次无关提交剥成 `q + ''`，
 # 而下面这四条 DELETE 仍按 `%[ind-seed]%` 匹配 ⇒ 永不命中自己产的行，每跑一轮翻一倍。
 SEED_TAG = "[ind-seed]"
-cur.execute(f"DELETE FROM faq_entries WHERE question LIKE '%{SEED_TAG}%' OR question LIKE '%[seed-035]%'")
-cur.execute(f"DELETE FROM sop_templates WHERE name LIKE '%{SEED_TAG}%' OR name LIKE '%[seed-035]%'")
+# SQL 参数化：清理侧的 LIKE 模式用占位符绑定，不再把常量拼进查询文本（消除 SQL 注入形态）。
+_SEED_LIKE = "%" + SEED_TAG + "%"
+_OLD_LIKE = "%[seed-035]%"
+cur.execute("DELETE FROM faq_entries WHERE question LIKE %s OR question LIKE %s",
+            (_SEED_LIKE, _OLD_LIKE))
+cur.execute("DELETE FROM sop_templates WHERE name LIKE %s OR name LIKE %s",
+            (_SEED_LIKE, _OLD_LIKE))
 cur.execute("DELETE FROM knowledge_chunks WHERE product_id LIKE 'ind-seed-%' OR product_id LIKE 'seed-035-%'")
 cur.execute("DELETE FROM knowledge_documents WHERE product_id LIKE 'ind-seed-%' OR product_id LIKE 'seed-035-%'")
 cur.execute("DELETE FROM rag_products WHERE id LIKE 'ind-seed-%'")

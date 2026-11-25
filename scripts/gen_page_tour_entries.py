@@ -13,7 +13,13 @@
 退化成「显示原始 key」——这类错误肉眼很难发现。
 """
 import json
+import os
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from path_guard import safe_resolve  # noqa: E402  路径闸：src/dst 不得越出仓库
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # route -> (pageKey, step1 选择器, step2 选择器)
 GEO = {
@@ -78,7 +84,9 @@ def main():
         return
     if mode == 'strip-titles':
         # 把批次 JSON 里的 step2.title 去掉（第 2 步标题改用共享的 common.action）
-        src, dst = sys.argv[2], sys.argv[3]
+        # src/dst 来自命令行：realpath+commonpath 必须留在仓库根内。
+        src = safe_resolve(sys.argv[2], ROOT)
+        dst = safe_resolve(sys.argv[3], ROOT)
         d = json.load(open(src, encoding='utf-8'))
         for lang, pages in d.items():
             for pk, entry in pages.items():

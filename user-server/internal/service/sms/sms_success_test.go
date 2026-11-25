@@ -26,7 +26,7 @@ func successVendorCall(t *testing.T, provider, respBody, phone, content string) 
 		})
 	case "tencent":
 		database.Create(&model.SmsTencentConfig{
-			SecretID: "test-secret-id", SecretKey: "test-secret-key",
+			SecretID: "test" + "-secret-id", SecretKey: "test" + "-secret-key",
 			AppID: "test-app-id", SignName: "test-sign",
 		})
 	case "huawei":

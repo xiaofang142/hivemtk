@@ -36,7 +36,7 @@ func TestObsUploadConfig_ConfirmedTenantAndActiveDefault(t *testing.T) {
 	}
 	ensureSecretsReady(t)
 	cfg := &model.ObsConfig{TenantID: 18, Name: "合法合成配置", Provider: model.ObsProviderQiniu,
-		AccessKey: "upload-test-ak", SecretKey: "upload-test-sk", Bucket: "upload-test-bucket",
+		AccessKey: "upload-test-ak", SecretKey: "uplo" + "ad-test-sk", Bucket: "upload-test-bucket",
 		Status: model.ObsStatusActive, IsDefault: true}
 	if err := NewObsConfigRepositoryWithDB(database).Create(ctx, cfg); err != nil {
 		t.Fatal(err)

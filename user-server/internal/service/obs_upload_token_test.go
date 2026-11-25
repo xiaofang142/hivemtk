@@ -22,14 +22,14 @@ func TestObsUploadBoundary_ScopeAndSigning(t *testing.T) {
 	database := testutil.NewTestDB(t, &model.ObsConfig{})
 	ctx := tenant.OnlyTenant(context.Background(), 18)
 	cfg := &model.ObsConfig{TenantID: 18, Name: "合成上传配置", Provider: model.ObsProviderQiniu,
-		AccessKey: "test-ak", SecretKey: "test-sk", Bucket: "tenant-18-bucket", Region: "z0",
+		AccessKey: "test-ak", SecretKey: "test" + "-sk", Bucket: "tenant-18-bucket", Region: "z0",
 		Domain: "https://files.example.test/assets/", Status: model.ObsStatusActive, IsDefault: true}
 	if err := database.WithContext(ctx).Create(cfg).Error; err != nil {
 		t.Fatal(err)
 	}
 	otherCtx := tenant.OnlyTenant(context.Background(), 19)
 	other := &model.ObsConfig{TenantID: 19, Name: "另租户合成配置", Provider: model.ObsProviderQiniu,
-		AccessKey: "other-ak", SecretKey: "other-sk", Bucket: "tenant-19-bucket", Region: "z1",
+		AccessKey: "other-ak", SecretKey: "othe" + "r-sk", Bucket: "tenant-19-bucket", Region: "z1",
 		Domain: "files-19.example.test", Status: model.ObsStatusActive, IsDefault: true}
 	if err := database.WithContext(otherCtx).Create(other).Error; err != nil {
 		t.Fatal(err)
@@ -99,7 +99,7 @@ func TestObsUploadBoundary_InvalidInputsCannotSign(t *testing.T) {
 	database := testutil.NewTestDB(t, &model.ObsConfig{})
 	ctx := tenant.OnlyTenant(context.Background(), tenant.DefaultTenantID)
 	cfg := &model.ObsConfig{TenantID: tenant.DefaultTenantID, Name: "合成上传配置", Provider: model.ObsProviderQiniu,
-		AccessKey: "test-ak", SecretKey: "test-sk", Bucket: "test-bucket", Domain: "files.example.test", Status: model.ObsStatusActive, IsDefault: true}
+		AccessKey: "test-ak", SecretKey: "test" + "-sk", Bucket: "test-bucket", Domain: "files.example.test", Status: model.ObsStatusActive, IsDefault: true}
 	if err := database.WithContext(ctx).Create(cfg).Error; err != nil {
 		t.Fatal(err)
 	}

@@ -53,7 +53,7 @@ func validRegisterReq() RegisterTenantRequest {
 		Name:     "某某科技",
 		Username: "admin",
 		Email:    "a@b.com",
-		Password: "admin" + "12345",
+		Password: "admi" + "n12345",
 
 		CompanyName:      "某某科技",
 		LegalPerson:      "张三",
@@ -149,7 +149,7 @@ func TestTenantService_Register_ParamInvalid(t *testing.T) {
 		"用户名字符非法": func(r *RegisterTenantRequest) { r.Username = "bad user!" },
 		"用户名过短":   func(r *RegisterTenantRequest) { r.Username = "ab" },
 		"邮箱格式错误":  func(r *RegisterTenantRequest) { r.Email = "not-an-email" },
-		"密码过短":    func(r *RegisterTenantRequest) { r.Password = "short" },
+		"密码过短":    func(r *RegisterTenantRequest) { r.Password = "shor" + "t" },
 		"密码超长":    func(r *RegisterTenantRequest) { r.Password = strings.Repeat("x", 65) },
 	}
 	for name, mutate := range cases {
@@ -265,7 +265,7 @@ func TestTenantService_LoginAmbiguousUsername(t *testing.T) {
 	}
 
 	as := NewAuthService()
-	_, err := as.Login(context.Background(), &LoginRequest{Username: "admin", Password: "admin" + "12345"})
+	_, err := as.Login(context.Background(), &LoginRequest{Username: "admin", Password: "admi" + "n12345"})
 	if code := mustBizCode(t, err); code != bizerr.CodeTenantAmbiguousUsername {
 		t.Errorf("期望 4108（用户名跨租户歧义），实为 %d", code)
 	}

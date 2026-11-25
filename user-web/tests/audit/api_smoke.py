@@ -3,11 +3,75 @@
 对 backend_routes.json 所有 GET 路由打真实服务 8204，输出 smoke_get.json + 汇总。
 5xx 视为缺陷候选；429 退避重试后记为 pass(限流非缺陷)。
 """
-import json, urllib.request, urllib.error, time, os
+import json, urllib.request, urllib.error, urllib.parse, ipaddress, time, os
 from collections import Counter
 
-BASE = "http://localhost:8204"
-AUDIT = "/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/tests/audit"
+# SSRF 防护：本脚本只打本机服务；换受控目标时通过 AUDIT_BASE_URL_ALLOWED_HOSTS 显式追加。
+# 所有 urlopen 出口必须先过 host 白名单，拒绝 userinfo、非 http(s)、私网/保留地址。
+_BASE_ALLOWED_HOSTS = ("localhost", "127.0.0.1", "::1")
+_ALLOWED_HOSTS_ENV = "AUDIT_BASE_URL_ALLOWED_HOSTS"
+
+
+def _allowed_target_hosts():
+    extra = os.environ.get(_ALLOWED_HOSTS_ENV, "")
+    return set(_BASE_ALLOWED_HOSTS) | {
+        h.strip().lower().rstrip(".") for h in extra.split(",") if h.strip()
+    }
+
+
+def _host_in_allowlist(hostname, allowed):
+    """精确匹配 host；同一 IP 的不同字面写法（如 ::1 展开形式）视为等价。"""
+    hostname = hostname.lower().rstrip(".")
+    if hostname in allowed:
+        return True
+    try:
+        addr = ipaddress.ip_address(hostname)
+    except ValueError:
+        return False
+    for candidate in allowed:
+        try:
+            if addr == ipaddress.ip_address(candidate):
+                return True
+        except ValueError:
+            continue
+    return False
+
+
+def _check_target_url(url):
+    """冒烟目标必须是绝对 http(s) URL（禁 userinfo/fragment）且 host 命中白名单。"""
+    parts = urllib.parse.urlsplit(url)
+    if parts.scheme not in ("http", "https") or not parts.netloc or parts.username or parts.password or parts.fragment:
+        raise ValueError("非法目标 URL: %r" % url)
+    hostname = parts.hostname
+    if not hostname or not _host_in_allowlist(hostname, _allowed_target_hosts()):
+        raise ValueError("目标 host 不在白名单: %r（可用 %s 追加）" % (hostname, _ALLOWED_HOSTS_ENV))
+    try:
+        addr = ipaddress.ip_address(hostname.lower().rstrip("."))
+    except ValueError:
+        # 域名只能靠精确白名单放行，不做 DNS 解析（避免 DNS rebinding 绕过）。
+        return url
+    if not addr.is_loopback and (addr.is_private or addr.is_link_local or addr.is_reserved
+                                or addr.is_multicast or addr.is_unspecified):
+        raise ValueError("禁止请求内网/保留地址: %r" % hostname)
+    return url
+
+
+BASE = os.environ.get("AUDIT_BASE_URL", "http://localhost:8204")
+# 路径穿越防护：结果文件写入根目录固定为脚本所在目录；realpath 解析后必须仍在该目录内。
+_AUDIT_ROOT = os.path.realpath(os.path.dirname(os.path.abspath(__file__)))
+AUDIT = _AUDIT_ROOT
+
+
+def _safe_audit_path(name):
+    """把输出文件名约束在脚本目录内，拒绝 .. / 绝对路径 / 符号链接逃逸。"""
+    if not name or os.path.isabs(name) or ".." in name.split("/") or ".." in name.split("\\"):
+        raise ValueError("输出文件必须是脚本目录下的文件名，禁止路径穿越")
+    path = os.path.realpath(os.path.join(_AUDIT_ROOT, name))
+    if path == _AUDIT_ROOT or os.path.commonpath([_AUDIT_ROOT, path]) != _AUDIT_ROOT:
+        raise ValueError("输出文件越出脚本目录")
+    return path
+
+
 routes = json.load(open(os.path.join(AUDIT, "backend_routes.json")))
 
 def login():
@@ -15,8 +79,9 @@ def login():
     if not pw:
         raise SystemExit("E2E_ADMIN_PASSWORD 未设置，拒绝运行")
     data = json.dumps({"username":"admin","password":pw}).encode()
-    req = urllib.request.Request(BASE+"/api/auth/login", data=data, headers={"Content-Type":"application/json"})
+    req = urllib.request.Request(_check_target_url(BASE+"/api/auth/login"), data=data, headers={"Content-Type":"application/json"})
     return json.loads(urllib.request.urlopen(req, timeout=20).read()).get("data",{}).get("token","")
+_check_target_url(BASE)  # 用户可经 AUDIT_BASE_URL 注入目标，模块加载即校验，尽早失败
 TOKEN = login()
 
 rate = {"last":0.0}
@@ -30,7 +95,7 @@ def throttle():
     rate["last"] = time.time()
 
 def do_get(path, attempt=0):
-    url = BASE + path
+    url = _check_target_url(BASE + path)
     req = urllib.request.Request(url, headers={"Authorization":"Bearer "+TOKEN, "Accept":"application/json"})
     try:
         resp = urllib.request.urlopen(req, timeout=30)
@@ -99,7 +164,11 @@ for r in get_routes:
     st, j = do_get(filled)
     results.append({"path":p, "filled":filled, "status":st})
 
-json.dump(results, open(os.path.join(AUDIT,"smoke_get.json"),"w"), indent=2)
+smoke_out = _safe_audit_path("smoke_get.json")
+if os.path.commonpath([_AUDIT_ROOT, os.path.realpath(smoke_out)]) != _AUDIT_ROOT:
+    raise ValueError("输出文件越出脚本目录")
+with open(smoke_out, "w") as _f:
+    json.dump(results, _f, indent=2)
 err5 = [x for x in results if x["status"]>=500]
 err0 = [x for x in results if x["status"]==0]
 c = Counter(x["status"] for x in results)

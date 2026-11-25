@@ -173,7 +173,11 @@ def main():
     if args.cdp_port:
         print("\n[R4] 夹具 tab 零泄漏：真开一个不回收的夹具 tab，必须判红")
         fx = E.Fixture()
-        node = "/tmp/hivemtk_reverse_open.mjs"
+        # 探针脚本落在脚本目录的固定文件内（realpath 过闸，拒绝 ../ / 符号链接逃逸），
+        # 不再写死 /tmp 全局可写路径。
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from path_guard import safe_resolve
+        node = safe_resolve("hivemtk_reverse_open.mjs", os.path.dirname(os.path.abspath(__file__)))
         with open(node, "w") as f:
             f.write(OPEN_PROBE_JS)
         try:

@@ -48,7 +48,7 @@ func TestModuleSyncRefreshesOrderStatus(t *testing.T) {
 	// 直接报错 → Sync 退回离线兜底 —— 本用例测不到订单状态刷新这条链路。
 	// 夹具同时保证 PLATFORM_ENABLED 开启：平台地址的解析入口 config.PlatformURL()
 	// 在关态恒返回空串，只设 APIURL 会拼出无协议的相对路径。
-	withPlatformEndpointCfg(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "test-" + "secret"})
+	withPlatformEndpointCfg(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "test" + "-secret"})
 
 	database := testutil.NewTestDB(t, &model.ModuleOrder{}, &model.TenantModule{}, &model.ModuleSyncLog{})
 	db.SetTestDB(database)

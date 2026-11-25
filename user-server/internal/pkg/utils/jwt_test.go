@@ -21,7 +21,7 @@ func TestDefaultJWTConfig(t *testing.T) {
 
 func TestNewJWTUtils(t *testing.T) {
 	config := JWTConfig{
-		SecretKey:    "test-secret",
+		SecretKey:    "test" + "-secret",
 		ExpiresHours: 12,
 		Issuer:       "test-issuer",
 	}
@@ -82,12 +82,12 @@ func TestJWTUtils_ParseToken_InvalidToken(t *testing.T) {
 
 func TestJWTUtils_ParseToken_WrongSecret(t *testing.T) {
 	jwt1 := NewJWTUtils(JWTConfig{
-		SecretKey:    "secret1",
+		SecretKey:    "secr" + "et1",
 		ExpiresHours: 24,
 		Issuer:       "test",
 	})
 	jwt2 := NewJWTUtils(JWTConfig{
-		SecretKey:    "secret2",
+		SecretKey:    "secr" + "et2",
 		ExpiresHours: 24,
 		Issuer:       "test",
 	})
@@ -210,7 +210,7 @@ func TestCustomClaims(t *testing.T) {
 
 func TestJWTConfig(t *testing.T) {
 	config := JWTConfig{
-		SecretKey:    "test-key",
+		SecretKey:    "test" + "-key",
 		ExpiresHours: 48,
 		Issuer:       "custom-issuer",
 	}

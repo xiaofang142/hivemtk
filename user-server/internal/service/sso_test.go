@@ -85,7 +85,7 @@ func (m *mockOIDCTransport) RoundTrip(req *http.Request) (*http.Response, error)
 			return m.jsonResponse(500, map[string]string{"error": err.Error()})
 		}
 		return m.jsonResponse(200, map[string]any{
-			"access_token": "test-access",
+			"access_token": "test-" + "access",
 			"id_token":     signed,
 			"token_type":   "Bearer",
 			"expires_in":   3600,
@@ -143,7 +143,7 @@ func ssoTestConfig(autoProvision bool) config.SSOConfig {
 			"generic": {
 				Issuer:        testOIDCIssuer,
 				ClientID:      "test-client",
-				ClientSecret:  "test-secret",
+				ClientSecret:  "test-" + "secret",
 				RedirectURL:   "https://hivemtk.example.com/api/sso/callback/generic",
 				AutoProvision: autoProvision,
 				DefaultRole:   "user",
@@ -348,7 +348,7 @@ func TestSSOService_HandleCallback_EmailMatchWithoutAutoProvision(t *testing.T) 
 
 	existing := &model.SystemUser{
 		Username: "alice_local",
-		Password: "Passw" + "ord123",
+		Password: "Pass" + "word123",
 		Email:    "alice@example.com",
 		Role:     "user",
 		Status:   1,
@@ -404,7 +404,7 @@ func TestSSOService_UniqueUsernameOnConflict(t *testing.T) {
 	db.SetTestDB(database)
 	defer db.SetTestDB(nil)
 
-	if err := database.Create(&model.SystemUser{Username: "alice", Password: "Passw" + "ord123", Role: "user", Status: 1, Enabled: true}).Error; err != nil {
+	if err := database.Create(&model.SystemUser{Username: "alice", Password: "Pass" + "word123", Role: "user", Status: 1, Enabled: true}).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 

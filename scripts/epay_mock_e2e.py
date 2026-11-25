@@ -76,7 +76,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import random
+import secrets
 import shlex
 import string
 import subprocess
@@ -88,6 +88,9 @@ try:
 except ImportError:  # pragma: no cover
     sys.stderr.write("缺少 requests：pip3 install requests\n")
     sys.exit(3)
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from url_guard import allowed_target_hosts, check_target_url  # noqa: E402  URL 闸：防 SSRF
 
 # ---------------------------------------------------------------------------
 # 配置（全部来自环境变量/命令行，不落明文）
@@ -326,6 +329,9 @@ class Client:
     def call(self, method, path, desc="", body=None, token=None,
              want_status=(200,), timeout=30):
         url = self.base + path
+        # base 来自 --user-base / --plat-base 或环境变量：过 host 白名单闸，
+        # 默认仅回环，拒 userinfo/非 http(s)/私网/保留/链路本地（防 SSRF）。
+        check_target_url(url, allowed_hosts=allowed_target_hosts())
         headers = {}
         if token:
             headers["Authorization"] = f"Bearer {token}"
@@ -370,7 +376,8 @@ def data_of(payload):
 
 def uniq(prefix, n=6):
     alphabet = string.ascii_lowercase + string.digits
-    return prefix + "".join(random.choice(alphabet) for _ in range(n))
+    # 唯一串改用 CSPRNG（secrets.SystemRandom），测试/模拟也不能用可预测随机源。
+    return prefix + "".join(secrets.choice(alphabet) for _ in range(n))
 
 
 # ---------------------------------------------------------------------------
@@ -498,7 +505,7 @@ def s2_register(user: Client, rep: Report, run: str):
         "name": "E2E计费" + run,
         "username": username,
         "email": f"{username}@example.com",
-        "password": "".join(random.choice(string.ascii_letters + string.digits) for _ in range(14)) + "7a",
+        "password": secrets.token_hex(7) + "7a",
         "company_name": "E2E计费" + run,
         "legal_person": "E2E负责人",
         "phone": "13800138000",
@@ -804,7 +811,7 @@ def main():
     args = ap.parse_args()
 
     _dry_mode = args.dry_run
-    run = time.strftime("%m%d%H%M") + "".join(random.choice(string.digits) for _ in range(3))
+    run = time.strftime("%m%d%H%M") + "".join(secrets.choice(string.digits) for _ in range(3))
     rep = Report()
     sim = Sim(run)
     rep.sim = sim

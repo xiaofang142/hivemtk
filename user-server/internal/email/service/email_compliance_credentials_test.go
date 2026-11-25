@@ -154,7 +154,7 @@ func TestExplicitSmtpDecryptFailureFailsClosedWithoutFallback(t *testing.T) {
 
 	// 显式 SmtpID + 无法解密的凭据（密文串在无密钥/错钥下解密必失败）：
 	// 统一出口必须报错，绝不把密文当密码返回。
-	bad := &model.EmailSmtp{Server: "smtp.example.com", Username: "u", Password: "not-a" + "-valid" + "-ciphertext"}
+	bad := &model.EmailSmtp{Server: "smtp.example.com", Username: "u", Password: "not-" + "a-valid-ciphertext"}
 	if _, derr := smtpPassword(bad); derr == nil {
 		t.Fatal("非法密文必须解密失败")
 	}

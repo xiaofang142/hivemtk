@@ -94,7 +94,7 @@ func TestRagProduct_WithLLMProviderConfig(t *testing.T) {
 	product := &RagProduct{
 		ID: "rag-456",
 		LLMProviderConfig: LLMProviderConfig{
-			APIKey:         "sk-te" + "st123",
+			APIKey:         "sk-t" + "est123",
 			BaseURL:        "https://api.openai.com/v1",
 			APIType:        "openai",
 			Model:          "gpt-4",

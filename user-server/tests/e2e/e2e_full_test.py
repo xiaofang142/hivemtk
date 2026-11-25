@@ -8,25 +8,80 @@ import requests
 import json
 import sys
 import os
+import ipaddress
 from datetime import datetime
 from urllib.parse import urlsplit
+
+# SSRF 防护：E2E 默认只打本机服务；换受控目标时通过 E2E_BASE_URL_ALLOWED_HOSTS 显式追加。
+# 所有 HTTP 出口必须先过 host 白名单，拒绝 userinfo、非 http(s)、私网/保留地址。
+_BASE_ALLOWED_HOSTS = ("localhost", "127.0.0.1", "::1")
+_ALLOWED_HOSTS_ENV = "E2E_BASE_URL_ALLOWED_HOSTS"
+
+
+def _allowed_target_hosts():
+    extra = os.environ.get(_ALLOWED_HOSTS_ENV, "")
+    return set(_BASE_ALLOWED_HOSTS) | {
+        h.strip().lower().rstrip(".") for h in extra.split(",") if h.strip()
+    }
+
+
+def _host_in_allowlist(hostname, allowed):
+    """精确匹配 host；同一 IP 的不同字面写法（如 ::1 展开形式）视为等价。"""
+    hostname = hostname.lower().rstrip(".")
+    if hostname in allowed:
+        return True
+    try:
+        addr = ipaddress.ip_address(hostname)
+    except ValueError:
+        return False
+    for candidate in allowed:
+        try:
+            if addr == ipaddress.ip_address(candidate):
+                return True
+        except ValueError:
+            continue
+    return False
+
 
 BASE_URL = os.environ.get("BASE_URL", "http://127.0.0.1:8204")
 # E2E 报告固定落点（非用户可控路径；用常量避免动态拼接被判路径穿越）。
 REPORT_FILE = "/tmp/e2e_full_test_report.json"
+_REPORT_ROOT = os.path.realpath(os.path.dirname(REPORT_FILE))
+
+
+def _safe_report_path():
+    """realpath + commonpath 双重校验：报告文件必须位于允许的落点目录内。"""
+    real = os.path.realpath(REPORT_FILE)
+    if real == _REPORT_ROOT or os.path.commonpath([_REPORT_ROOT, real]) != _REPORT_ROOT:
+        raise ValueError("E2E 报告落点越出允许目录: %r" % REPORT_FILE)
+    return real
+
+
+def _check_target_url(url):
+    """E2E 目标必须是绝对 http(s) URL（禁 userinfo/fragment）且 host 命中白名单。"""
+    parts = urlsplit(url)
+    if parts.scheme not in ("http", "https") or not parts.netloc or parts.username or parts.password or parts.fragment:
+        raise ValueError(f"非法 E2E 目标 URL: {url!r}")
+    hostname = parts.hostname
+    if not hostname or not _host_in_allowlist(hostname, _allowed_target_hosts()):
+        raise ValueError("E2E 目标 host 不在白名单: %r（可用 %s 追加）" % (hostname, _ALLOWED_HOSTS_ENV))
+    try:
+        addr = ipaddress.ip_address(hostname.lower().rstrip("."))
+    except ValueError:
+        # 域名只能靠精确白名单放行，不做 DNS 解析（避免 DNS rebinding 绕过）。
+        return url
+    if not addr.is_loopback and (addr.is_private or addr.is_link_local or addr.is_reserved
+                                or addr.is_multicast or addr.is_unspecified):
+        raise ValueError("禁止请求内网/保留地址: %r" % hostname)
+    return url
+
+
+_check_target_url(BASE_URL)  # BASE_URL 来自 env，模块加载即校验，尽早失败
 
 
 def safe_request(method, url, **kwargs):
-    """E2E 统一 HTTP 出口：只接受绝对 http(s) 目标，禁跟随重定向。
-
-    BASE_URL 来自 env（本机默认 127.0.0.1:8204），这里做的是配置面防护，
-    避免 endpoint 拼接意外打到非预期目标。
-    """
-    parts = urlsplit(url)
-    if parts.scheme not in ("http", "https") or not parts.netloc:
-        raise ValueError(f"非法 E2E 目标 URL: {url!r}")
-    if parts.username or parts.password or parts.fragment:
-        raise ValueError(f"E2E 目标禁止 userinfo/fragment: {url!r}")
+    """E2E 统一 HTTP 出口：绝对 http(s) + host 白名单 + 私网/保留地址拒绝，禁跟随重定向。"""
+    url = _check_target_url(url)
     kwargs.setdefault("allow_redirects", False)
     return requests.request(method, url, **kwargs)
 USERNAME = os.environ.get("USERNAME", "admin")
@@ -527,8 +582,8 @@ def print_report(result):
         status_icon = "✅" if stats["fail"] == 0 else "❌"
         print(f"   {status_icon} {module}: {stats['pass']}通过/{stats['fail']}失败/{stats['warn']}警告/{stats['skip']}跳过")
     
-    # 保存详细结果到文件
-    report_file = REPORT_FILE
+    # 保存详细结果到文件：realpath + commonpath 校验落点在允许目录内。
+    report_file = _safe_report_path()
     with open(report_file, "w") as f:
         json.dump({
             "timestamp": datetime.now().isoformat(),

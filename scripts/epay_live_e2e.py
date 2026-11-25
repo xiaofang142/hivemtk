@@ -33,7 +33,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import os
-import random
+import secrets
 import shlex
 import string
 import subprocess
@@ -49,6 +49,17 @@ except ImportError:  # pragma: no cover
 # 复用同仓 mock 脚本的四段式取证与 HTTP 客户端（模块级无副作用，main 有 __main__ 护栏）
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from epay_mock_e2e import Client, Report, code_of, data_of  # noqa: E402
+from url_guard import allowed_target_hosts, check_target_url  # noqa: E402  URL 闸：防 SSRF
+
+
+def safe_post(url, **kwargs):
+    """requests.post 的唯一入口：URL 必过 host 白名单闸（防 SSRF）。
+
+    默认仅放行回环；真网关验收时由 HIVEMTK_SCRIPT_ALLOWED_HOSTS 显式追加
+    网关/用户/平台域名（私网/保留/链路本地 IP 与 userinfo/非 http(s) 一律拒绝）。
+    """
+    check_target_url(url, allowed_hosts=allowed_target_hosts())
+    return requests.post(url, **kwargs)
 
 USER_BASE = os.environ.get("EPAY_E2E_USER_BASE", "http://127.0.0.1:8204").rstrip("/")
 PLAT_BASE = os.environ.get("EPAY_E2E_PLAT_BASE", "http://127.0.0.1:8205").rstrip("/")
@@ -163,7 +174,7 @@ def send_notify(plat: Client, rep: Report, key: str, params: dict, desc: str):
     url = plat.base + "/public/payments/notify/epay"
     rep.request("POST", url + "  (form)", body, extra=f"({desc})")
     try:
-        r = requests.post(url, data=body, timeout=30)
+        r = safe_post(url, data=body, timeout=30)
     except requests.RequestException as e:
         rep.response(0, None, f"请求异常: {e}")
         return 0, ""
@@ -262,8 +273,8 @@ def s1_register(user: Client, rep: Report, run: str, sql_ok: bool = True) -> str
         "name": "真网关验收" + run,
         "username": username,
         "email": f"{username}@example.com",
-        "password": "".join(random.choice(string.ascii_letters + string.digits)
-                            for _ in range(14)) + "7a",
+        # 测试用随机口令改为 CSPRNG（secrets），满足密码复杂度并消除不安全随机性。
+        "password": secrets.token_hex(7) + "7a",
         "company_name": "真网关验收" + run,
         "legal_person": "验收负责人",
         "phone": "13800138000",
@@ -359,7 +370,7 @@ def s2_module(user: Client, plat: Client, rep: Report, token: str, run: str,
     base = {
         "pid": env_pid, "type": "alipay", "out_trade_no": order_no,
         "trade_no": "EV" + time.strftime("%Y%m%d%H%M%S") +
-                    "".join(random.choice(string.digits) for _ in range(6)),
+                    "".join(secrets.choice(string.digits) for _ in range(6)),
         "trade_status": "TRADE_SUCCESS", "money": cents_to_yuan(total),
         "name": "HiveMTK module " + order_no,
     }
@@ -450,7 +461,7 @@ def s3_subscription(user: Client, plat: Client, rep: Report, token: str, run: st
     params = {
         "pid": env_pid, "type": "alipay", "out_trade_no": order_no,
         "trade_no": "EV" + time.strftime("%Y%m%d%H%M%S") +
-                    "".join(random.choice(string.digits) for _ in range(6)),
+                    "".join(secrets.choice(string.digits) for _ in range(6)),
         "trade_status": "TRADE_SUCCESS", "money": cents_to_yuan(total),
         "name": "HiveMTK subscription " + order_no,
     }
@@ -526,7 +537,7 @@ def ensure_llm_module(user: Client, plat: Client, rep: Report, token: str,
     params = {
         "pid": env_pid, "type": "alipay", "out_trade_no": order_no,
         "trade_no": "EV" + time.strftime("%Y%m%d%H%M%S") +
-                    "".join(random.choice(string.digits) for _ in range(6)),
+                    "".join(secrets.choice(string.digits) for _ in range(6)),
         "trade_status": "TRADE_SUCCESS", "money": cents_to_yuan(total),
         "name": "HiveMTK llm-cloud " + str(order_no),
     }
@@ -584,7 +595,7 @@ def s4_llm(user: Client, plat: Client, rep: Report, token: str, run: str,
     params = {
         "pid": env_pid, "type": "alipay", "out_trade_no": order_no,
         "trade_no": "EV" + time.strftime("%Y%m%d%H%M%S") +
-                    "".join(random.choice(string.digits) for _ in range(6)),
+                    "".join(secrets.choice(string.digits) for _ in range(6)),
         "trade_status": "TRADE_SUCCESS", "money": cents_to_yuan(total),
         "name": "HiveMTK llm " + order_no,
     }
@@ -631,7 +642,7 @@ def s5_negatives(plat: Client, rep: Report, key: str) -> None:
     raw = {"pid": env_pid, "out_trade_no": "EVPROBE", "trade_no": "EVPROBENO",
            "trade_status": "TRADE_SUCCESS", "money": "1.00"}
     rep.request("POST", url + "  (form)", raw, extra="(无签名)")
-    r = requests.post(url, data=raw, timeout=30)
+    r = safe_post(url, data=raw, timeout=30)
     rep.response(r.status_code, None, (r.text or "")[:200])
     rep.assert_("S5.1 无签名回调 HTTP 401", r.status_code == 401,
                 f"HTTP={r.status_code}")
@@ -645,7 +656,7 @@ def s5_negatives(plat: Client, rep: Report, key: str) -> None:
                              key),
            "sign_type": "MD5"}
     rep.request("POST", url + "  (form)", bad, extra="(改钱不改签)")
-    r = requests.post(url, data=bad, timeout=30)
+    r = safe_post(url, data=bad, timeout=30)
     rep.response(r.status_code, None, (r.text or "")[:200])
     rep.assert_("S5.2 改钱不改签 → 401", r.status_code == 401,
                 f"HTTP={r.status_code}")
@@ -781,8 +792,7 @@ def main():
     env_pid = env.get("EPAY_PID", "") or os.environ.get("EPAY_PID", "")
 
     rep = LiveReport()
-    run = time.strftime("%m%d%H%M") + "".join(random.choice(string.digits)
-                                               for _ in range(3))
+    run = time.strftime("%m%d%H%M") + "".join(secrets.choice(string.digits) for _ in range(3))
     user = Client(args.user_base, rep, False)
     plat = Client(args.plat_base, rep, False)
     if args.client_ip:

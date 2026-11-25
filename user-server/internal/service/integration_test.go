@@ -21,18 +21,18 @@ func testCred(key string) string {
 		return v
 	}
 	parts := map[string][]byte{
-		"api_key":               []byte{'t', 'e', 's', 't', '_', 'a', 'p', 'i', '_', 'k', 'e', 'y'},
-		"api_secret":            []byte{'t', 'e', 's', 't', '_', 'a', 'p', 'i', '_', 's', 'e', 'c', 'r', 'e', 't'},
-		"key":                   []byte{'t', 'e', 's', 't', '_', 'k', 'e', 'y'},
-		"secret":                []byte{'t', 'e', 's', 't', '_', 's', 'e', 'c', 'r', 'e', 't'},
-		"key_2":                 []byte{'t', 'e', 's', 't', '_', 'k', 'e', 'y', '_', '2'},
-		"secret_2":              []byte{'t', 'e', 's', 't', '_', 's', 'e', 'c', 'r', 'e', 't', '_', '2'},
-		testCred("old_key"):     []byte{'o', 'l', 'd', '_', 'k', 'e', 'y'},
-		testCred("old_secret"):  []byte{'o', 'l', 'd', '_', 's', 'e', 'c', 'r', 'e', 't'},
-		testCred("keep_key"):    []byte{'k', 'e', 'e', 'p', '_', 'k', 'e', 'y'},
-		testCred("keep_secret"): []byte{'k', 'e', 'e', 'p', '_', 's', 'e', 'c', 'r', 'e', 't'},
-		testCred("new_key"):     []byte{'n', 'e', 'w', '_', 'k', 'e', 'y'},
-		testCred("new_secret"):  []byte{'n', 'e', 'w', '_', 's', 'e', 'c', 'r', 'e', 't'},
+		"api_key":     []byte{'t', 'e', 's', 't', '_', 'a', 'p', 'i', '_', 'k', 'e', 'y'},
+		"api_secret":  []byte{'t', 'e', 's', 't', '_', 'a', 'p', 'i', '_', 's', 'e', 'c', 'r', 'e', 't'},
+		"key":         []byte{'t', 'e', 's', 't', '_', 'k', 'e', 'y'},
+		"secret":      []byte{'t', 'e', 's', 't', '_', 's', 'e', 'c', 'r', 'e', 't'},
+		"key_2":       []byte{'t', 'e', 's', 't', '_', 'k', 'e', 'y', '_', '2'},
+		"secret_2":    []byte{'t', 'e', 's', 't', '_', 's', 'e', 'c', 'r', 'e', 't', '_', '2'},
+		"old_key":     []byte{'o', 'l', 'd', '_', 'k', 'e', 'y'},
+		"old_secret":  []byte{'o', 'l', 'd', '_', 's', 'e', 'c', 'r', 'e', 't'},
+		"keep_key":    []byte{'k', 'e', 'e', 'p', '_', 'k', 'e', 'y'},
+		"keep_secret": []byte{'k', 'e', 'e', 'p', '_', 's', 'e', 'c', 'r', 'e', 't'},
+		"new_key":     []byte{'n', 'e', 'w', '_', 'k', 'e', 'y'},
+		"new_secret":  []byte{'n', 'e', 'w', '_', 's', 'e', 'c', 'r', 'e', 't'},
 	}
 	if p, ok := parts[key]; ok {
 		return string(p)

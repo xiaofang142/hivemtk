@@ -61,18 +61,20 @@ func TestHTTPAfterSaleClient_RejectsWithoutCapabilityEvidenceBeforeHTTPDo(t *tes
 // DeliverBridgeOutboundMedia 并直接写 message_hub；必须在该独立边界裁决。
 func TestWebhookBridgeSender_RejectsBeforeDirectOutboxWrite(t *testing.T) {
 	const channel WebhookChannel = "douyin_shop"
-	testutil.NewTestDB(t, &model.CapabilitySourceBinding{})
+	database := testutil.NewTestDB(t, &model.CapabilitySourceBinding{}, &model.Channel{}, &model.ChannelAccount{})
+	accountID := seedCanonicalBridgeOutboundAccount(t, database, 501, string(channel), "no-shop-mapping")
 	setupBridgeOutboxForTest(t, string(channel))
 	svc := &WebhookService{}
 	sender, ok := svc.outboundSenderFor(channel)
 	if !ok {
 		t.Fatal("douyin_shop 应由生产 bridge outbox sender 接管")
 	}
+	ctx := localBridgeSubmitContextCustomEdition(t, tenant.WithTenantID(context.Background(), 501), string(channel), accountID, "text")
 	var panicValue any
 	func() {
 		defer func() { panicValue = recover() }()
-		sent, sendErr := svc.sendOutbound(tenant.WithTenantID(context.Background(), 501), channel,
-			"acct-not-a-shop-id", &ParsedPayload{EventID: "ec01-no-binding"}, "must not enqueue",
+		sent, sendErr := svc.sendOutbound(ctx, channel,
+			accountID, &ParsedPayload{EventID: "ec01-no-binding"}, "must not enqueue",
 			&model.MessageHub{TenantID: 501, ConversationID: "conv_gate", SenderID: "buyer"}, nil)
 		if sent {
 			t.Fatal("缺少可信店铺证据时不得报告发送成功")
@@ -89,8 +91,8 @@ func TestWebhookBridgeSender_RejectsBeforeDirectOutboxWrite(t *testing.T) {
 	var submitErr error
 	func() {
 		defer func() { panicValue = recover() }()
-		sender.Send(tenant.WithTenantID(context.Background(), 501), &OutboundRequest{
-			Channel: channel, AccountID: "acct-not-a-shop-id",
+		sender.Send(ctx, &OutboundRequest{
+			Channel: channel, AccountID: accountID,
 			Hub:     &model.MessageHub{TenantID: 501, ConversationID: "conv_gate", SenderID: "buyer"},
 			Content: "must not enqueue", FailUntracked: func(err error) { submitErr = err },
 		})

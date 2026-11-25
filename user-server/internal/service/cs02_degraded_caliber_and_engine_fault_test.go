@@ -25,6 +25,7 @@ import (
 
 	agent_runtime "hivemtk-user/internal/aiagent/agent/runtime"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/edition"
 	"hivemtk-user/internal/pkg/testutil"
 
 	"gorm.io/gorm"
@@ -46,12 +47,19 @@ const (
 func cs02SetupEmptyEngine(t *testing.T, rag *fakeRAGSearcher) (*WebhookService, *gorm.DB) {
 	t.Helper()
 	t.Cleanup(DisableAIQuietHoursForTest(true)) // 024 B1 收口勘误：helper 内 defer 会提前复位，挂到测试级 cleanup // DISABLE_AI_QUIET_HOURS env 已退役（B8），测试装配口顶掉勿扰窗
+	previousEdition := edition.Current()
+	edition.ResetForTest(edition.TypeCustom)
+	t.Cleanup(func() { edition.ResetForTest(previousEdition) })
 	database := testutil.NewTestDB(t,
 		&model.MessageHub{}, &model.InboxConversation{}, &model.UnifiedMessage{},
 		&model.WebhookEvent{}, &model.IntegrationAccount{}, &DelayedOutboundReply{},
 		&model.CustomerSession{}, &model.SessionMessage{}, &model.AISuggestion{},
-		&model.AgentStatus{}, &model.Customer{},
+		&model.AgentStatus{}, &model.Customer{}, &model.FeedbackRecordORM{},
+		&model.Channel{}, &model.ChannelAccount{},
 	)
+	if accountID := seedCanonicalBridgeOutboundAccount(t, database, c01TenantA, c01Channel, "cs02-empty"); accountID != c01AccountA1 {
+		t.Fatalf("CS02 canonical 账号 ID=%q，期望 %q", accountID, c01AccountA1)
+	}
 	engine := NewSalesEngine(newC01EmptyReplyDispatcher(t), fakeIntentRecognizer{}, fakeMemory{}, fakeSOP{}, rag, fakeScript{}, fakeCustomerLookup{})
 	orch := NewSmartCSOrchestrator(engine, DefaultOrchestratorConfig(), nil)
 	ws := NewWebhookService()

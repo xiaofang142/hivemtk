@@ -26,6 +26,10 @@ import os
 import re
 import sys
 
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(os.path.dirname(_SCRIPT_DIR), "..", "scripts"))
+from path_guard import safe_resolve  # noqa: E402  路径闸：源文件写回不得越出 user-server
+
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # user-server/
 TOKEN = "@" + "Router"
 
@@ -91,7 +95,11 @@ def main():
     ap.add_argument('--dry-run', action='store_true')
     args = ap.parse_args()
 
-    routes = json.load(open(args.routes))
+    # routes 是只读输入（命令行给，默认 /tmp/routes_clean.json）：realpath 解析符号链接后确认是普通文件。
+    routes_path = os.path.realpath(args.routes)
+    if not os.path.isfile(routes_path):
+        raise SystemExit(f"routes 文件不存在或不是普通文件: {args.routes}")
+    routes = json.load(open(routes_path))
 
     # 1. 按 (Type, Func) 聚合路由（同 handler 多别名：取第一条做注解，跳过其余）
     by_handler = {}
@@ -155,6 +163,8 @@ def main():
     # 4. 写回（每文件按插入行倒序，避免行号漂移）
     changed = 0
     for fp, inserts in edits.items():
+        # 写回目标过闸：realpath+commonpath 必须留在 user-server 根内。
+        fp = safe_resolve(fp, REPO)
         src = open(fp).read()
         lines = src.split('\n')
         for insert_line, block in sorted(inserts, key=lambda x: -x[0]):
@@ -165,7 +175,8 @@ def main():
                 new.append('//')
             new.extend(block)
             lines[insert_line:insert_line] = new
-        open(fp, 'w').write('\n'.join(lines))
+        with open(fp, 'w') as fh:
+            fh.write('\n'.join(lines))
         changed += 1
     print(f'写回文件数: {changed}')
 

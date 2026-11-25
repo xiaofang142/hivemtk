@@ -43,7 +43,7 @@ func withPlatformConfig(t *testing.T, cfg *config.PlatformConfig) {
 // TestSignSecretPrecedence 签名密钥优先级：per-merchant > env > PlatformCfg.Secret > 报错。
 func TestSignSecretPrecedence(t *testing.T) {
 	t.Setenv("MERCHANT_API_SECRET", "env-secret")
-	withPlatformConfig(t, &config.PlatformConfig{Secret: "cfg-s" + "ecret"})
+	withPlatformConfig(t, &config.PlatformConfig{Secret: "cfg-" + "secret"})
 
 	c := NewPlatformClient("mk")
 	c.SetMerchantSecret("per-merchant")

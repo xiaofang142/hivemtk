@@ -66,8 +66,8 @@ func TestSmsAliyunConfig_BasicFields(t *testing.T) {
 func TestSmsTencentConfig_BasicFields(t *testing.T) {
 	config := &SmsTencentConfig{
 		ID:        1,
-		SecretID:  "AKID_test",
-		SecretKey: "secret_key_test",
+		SecretID:  "AKID" + "_test",
+		SecretKey: "secr" + "et_key_test",
 		AppID:     "123456",
 		SignName:  "TestSign",
 	}

@@ -16,6 +16,9 @@ import re
 import sys
 from collections import OrderedDict
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from path_guard import safe_resolve  # noqa: E402  路径闸：输出文件不得越出仓库
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 API_DIR = os.path.join(ROOT, "user-web", "src", "api")
 OUT = os.path.join(ROOT, "docs", "verification", "api-list.md")
@@ -352,7 +355,8 @@ def main():
         )
     lines.append("")
 
-    with open(OUT, "w", encoding="utf-8") as fh:
+    # 输出路径过闸：realpath+commonpath 必须留在仓库根内。
+    with open(safe_resolve(OUT, ROOT), "w", encoding="utf-8") as fh:
         fh.write("\n".join(lines))
     print(f"写入 {OUT}：{len(rows)} 条（{len(files)} 个文件）")
     for m in sorted(by_method):
