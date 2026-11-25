@@ -4,6 +4,12 @@
 > 否则换机 / 重建部署时会静默丢失（2026-11-04 二次审核发现：`deploy/` 目录
 > 不入库，上传卷与 nginx 分流改完只存在于当前机器）。
 
+## 2026-11-26 · 链 D 二次同步（面包屑/多语言文案 85eb12eeb）
+
+- **背景**：二次审核发现本地 dist 构建于 00:20，不含 00:27 `e1e0a6298`、00:35 `c509fe955` 的 i18n 与 Breadcrumb 文案修正（企微账号面包屑「多账号聚合」→「企微账号管理」）；线上 `version.json` 仍为 `4dcf21698`。
+- **发布动作**：`npx vite build --mode production` 重构建（index.js `index-CrwA33-K.js` → `index-CR0Q5O4i.js`）；备份 `user-web.snapshot-20261126-010153.tgz`（3.1M）后 rsync 同步。
+- **验证**：线上 version buildId=`85eb12eeb-1795626095277`、index.js 指纹与本地一致；ego-browser 访 `#/wecomAccount/list` 面包屑显示「工作台 / 企微账号管理」，0 console.error / 0 非2xx。
+
 ## 2026-11-26 · 线索治理页接入线索发现智能体入口上线（链 D 4dcf21698）
 
 - **发布提交**：`hivemtk-user` `04205d398`（`fix(web): 线索治理页接入线索发现智能体入口`），前端源码 `user-web/src/views/leads/Rules.vue` + 单测；本地 HEAD `4dcf21698`。
