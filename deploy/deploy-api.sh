@@ -255,7 +255,9 @@ fi
 # ---------------------------------------------------------------- 步骤 6：证据 + 台账
 # 容器刚重建后 ssh/docker inspect 偶发抖动（实测一次部署在此处 rc=255 提前退出，
 # 二进制/健康检查都已成功但 state 未写，导致下次重复发布）。这里改为带重试的读数，
-# 且失败不阻断：用已知的本地产物 sha 兜底，保证 state 一定落盘、脚本返回 0。
+# 且失败不阻断：用已校验的上传值兜底，保证 state 一定落盘、脚本返回 0。
+# fallback 来源须可追溯——REMOTE_NEW_SHA 是步骤 2 双端校验过的上传产物，不是猜测值。
+READ_FALLBACKS=""
 remote_read() {
   local label="$1" cmd="$2" fallback="$3" value="" i
   for i in 1 2 3; do
@@ -263,20 +265,24 @@ remote_read() {
     [ -n "${value}" ] && { printf '%s' "${value}"; return 0; }
     sleep 2
   done
-  warn "远程读数失败：${label}（用兜底值；不影响已通过的部署）"
+  warn "远程读数失败：${label}（用已知兜底值；不影响已通过的部署）"
+  READ_FALLBACKS="${READ_FALLBACKS}${READ_FALLBACKS:+, }${label}"
   printf '%s' "${fallback}"
 }
-NEW_IMAGE="$(remote_read "运行镜像" "docker inspect --format '{{.Image}}' ${CONTAINER_NAME}" "${IMAGE_NAME}:latest")"
-STARTED_AT="$(remote_read "容器启动时间" "docker inspect --format '{{.State.StartedAt}}' ${CONTAINER_NAME}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)")"
-REMOTE_SHA_AFTER="$(remote_read "远端二进制 sha256" "sha256sum ${REMOTE_DIR}/user-server | cut -d' ' -f1" "${LOCAL_SHA}")"
+# 镜像 id 无可靠兜底（tag 不是 id），用空串让 state 明确记 unknown，不伪装成 sha256。
+NEW_IMAGE="$(remote_read "运行镜像" "docker inspect --format '{{.Image}}' ${CONTAINER_NAME}" "")"
+STARTED_AT="$(remote_read "容器启动时间" "docker inspect --format '{{.State.StartedAt}}' ${CONTAINER_NAME}" "")"
+# 二进制 sha 用步骤 2 已双端校验过的上传值兜底（等价于部署后回读，且来源可追溯）。
+REMOTE_SHA_AFTER="$(remote_read "远端二进制 sha256" "sha256sum ${REMOTE_DIR}/user-server | cut -d' ' -f1" "${REMOTE_NEW_SHA}")"
 
 cat > "${STATE_FILE}" <<EOF
 {
   "deployed_sha": "${HEAD_SHA}",
   "deployed_at": "$(date -Iseconds)",
   "remote_binary_sha256": "${REMOTE_SHA_AFTER}",
-  "image_id": "${NEW_IMAGE}",
-  "container_started_at": "${STARTED_AT}",
+  "image_id": "${NEW_IMAGE:-unknown}",
+  "container_started_at": "${STARTED_AT:-unknown}",
+  "verify_note": "${READ_FALLBACKS:+fallback: ${READ_FALLBACKS}（ssh 读数失败，值来源见脚本注释）}",
   "rollback_image_tag": "${IMAGE_NAME}:rollback-${STAMP}",
   "rollback_binary": "${REMOTE_DIR}/user-server.bak-${STAMP}",
   "default_credential_probe": "${PROBE_STATUS}",
