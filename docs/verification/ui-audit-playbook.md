@@ -132,3 +132,14 @@ const bad = ev.filter(e => e.method==='Network.responseReceived' && e.params.res
 - `internal/router`（3）：`TestRouteGuardChain_AnonymousSurfaceIsExactlyTheAllowlist`、`...AdminOnlyRoutesCarrySuperAdminGuard`、`...CapabilityRoutesCarryGuard`—`sagex/upload`、`sagex/bootstrap`、`POST /api/mcp` 注册在 `InitGuard` 组之外，缺身份/超管/能力守卫。
 - `internal/service`（5）：`TestChannelDispatchService_SelectionMatrix/preferred`、`TestCRMEntityWrite_AllowedAccountAndClear`、`TestCRMEntityWriteAccountRulePairIsApplied`（3 子用例）、`TestLeadHistory_CanonicalAccountAliases`、`TestSageXBootstrapInstallationCrossTenantUUIDWithRealRepository`—并行开发线的 CRM 账号规则/渠道分发/线索历史/sagex 认证问题，非 UI 测试引入。
 - 前端 `npx vite build --mode production` 通过（PWA 705 entries）。
+
+### INV-04a/b/c（3 个 router 守卫失败）根因与误修警示
+这 3 个失败已在 `docs/architecture/FULL_FEATURE_INVENTORY.md:250-252` 登记为基线缺陷，**不是本轮 UI 测试引入，也不应在本轮顺手"补守卫"**：
+
+| 缺陷 | 路由 | 根因 | 正确修法 |
+|---|---|---|---|
+| INV-04a | `POST /api/integrations/sagex/{upload,bootstrap}` | 只挂 `InitGuard`（安装态，非身份守卫）；鉴权在 controller/service 用 `identify_code` 经 ChannelResolver 反查租户/账号完成 | 登记进 `route_policy_gate_test.go` 的 `anonymousAllowedRoutes`，理由写「identify_code 自证」（同 `POST /api/knowledge-merchant/external/import` 的 X-Knowledge-Token 模式） |
+| INV-04b | 同上 | 命中 `middleware/route_policy.go:108` 的 `/api/integrations/**` 仅超管表但链上无超管守卫 | 收窄 `**` 为精确管理口形状（保留 `/api/integrations`、`/api/integrations/*` 及 `*/test`、`*/sync-customers`、`*/sync-products`），不要动 admin 组的硬守卫 |
+| INV-04c | `POST /api/mcp` | 在生成的能力表 `menu_capability_routes.go:303` 里但独立组无 `RoutePolicyGuard`；`MCPGuard` 本身已是专用凭证身份门（凭证对/单值密钥 + tenant_code，无凭证 fail-closed 503） | 在生成器 `scripts/menu-route-role-audit.py` 加「专用凭证入口」排除名单后重跑 `--emit-go`，不能直接登记匿名清单（否则触发 wronglyAllowed） |
+
+**误修警示**：给 sagex 组挂 `RoutePolicyGuard`/JWT 会因读不到 role 直接 401，打断真机上报；给 mcp 组挂能力守卫会因无授予 403 打断外部 AI 客户端调用（能力表命中还要求 JWT，而 MCP 调用方没有登录态）。运行时探针实证：无凭证访问 upload/mcp 返回 401、bootstrap 404（配置未启用），并非真实匿名漏洞。
