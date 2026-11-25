@@ -4,6 +4,14 @@
 > 否则换机 / 重建部署时会静默丢失（2026-11-04 二次审核发现：`deploy/` 目录
 > 不入库，上传卷与 nginx 分流改完只存在于当前机器）。
 
+## 2026-11-25 · 路由守卫与渠道账号查询修正上线（链 A 2656c5452）
+
+- **发布提交**：`hivemtk-user` `2656c5452187167d1ad9dc5b1c70d141c691efcd`，已推 `gitee-upstream/master` + `upstream/master`；自上次发布基线 `fd0fa270b` 起 1 个 user-server 提交，含外部路由守卫策略、渠道账号版本门查询修正与对应测试。
+- **发布门禁**：`go vet` 通过；`go test` 仅有 `test password is missing` DB 环境门禁（UNVERIFIED，不阻断，无业务失败）；交叉编译产物 sha256 `117a1752f87b10088c6a3b43a3badaad4051edd05d5e812629ea1d178992e3d0`。
+- **API 上线**：2026-11-25 23:08:18 +08:00；运行镜像 `sha256:4ca7fafda681154af135d761de047e05873c6de268b17b5eec176ecd69ed1dad`，容器启动 `2026-11-25T15:05:12.239371402Z`；远端二进制双端 sha256 一致，容器内与公网 `https://workapi.xapptool.cn/api/health` 均健康 code 0，公开 seed 口令探针 GREEN（401）。
+- **回滚点**：镜像 `mtk-user-server:rollback-20261125-230659`，二进制 `/www/wwwroot/hivemtk/user-server/user-server.bak-20261125-230659`。
+- **范围与边界**：user-web / embed-sdk 无源码改动，SPA 未重发；平台端与贡献者门户由并行会话另行同步（迁移 039、入口 `index-DOK_9Q2M.js`，健康 ready）；链 B/C 本轮无改动未执行。
+
 ## 2026-11-25 · 平台端 SageX 授权加固上线（platform 66f7e54，手工 Docker 发布）
 
 - **发布提交**：`hivemtk-platform` `66f7e5476bf936629e73b5690065992d12d76da6`，已推 `origin/master`。
