@@ -16,7 +16,7 @@
 - **发布动作（链 D 手工同步）**：`npx vite build --mode production` 通过（PWA 705 entries）；线上先备份 `user-web.snapshot-20261126-002152.tgz`（3.1M），再 `rsync -a --delete user-web/dist/ → mtk-prod:/www/wwwroot/hivemtk/user-web/`（宝塔 `.user.ini` Operation not permitted 无害）。
 - **验证**：线上 `https://work.xapptool.cn/version.json` buildId=`4dcf21698-1795623643117`（发布前 `1e71d8f2c`）；index.js 指纹线上/本地同为 `assets/index-CrwA33-K.js`。
 - **发布后回归**：ego-browser 线上（租户18/admin）访 `#/leads/rules`，显式点新增的「线索发现智能体」按钮 → 正确跳转 `#/leads/mining-agents`，列表页正常渲染（空态「暂无线索发现智能体」），0 console.error / 0 非2xx。
-- **配套修复**：本轮同时修掉链 A 脚本 `deploy/deploy-api.sh` 的 rc=255 遗留（step6 远程读数 ssh 抖动致 state 未写 → `remote_read` 三次重试 + 已知值兜底，提交 `4dcf21698`），并清理仓根误留的明文 JWT 临时文件 `.audit-token.tmp`。
+- **配套修复**：本轮同时修掉链 A 脚本 `deploy/deploy-api.sh` 的 rc=255 遗留（step6 远程读数 ssh 抖动致 state 未写 → `remote_read` 三次重试 + 兜底，提交 `4dcf21698`，后于 `85eb12eeb` 加固：镜像/时间读不到记 `unknown`、二进制 sha 兜底改用步骤 2 已双端校验的上传值、新增 `verify_note` 标注 fallback 字段、warn 走 stderr 防污染 JSON、写 state 后 `python3 -m json.tool` 校验）。**凡 `verify_note` 标注的 fallback 字段不作为独立上线证据**，上线事实仍以容器内/公网健康检查与镜像 sha256 为准。另有仓根临时 JWT 文件 `.audit-token.tmp`（从未被 git 跟踪），二次审核时已确认当前工作区无该文件。
 
 ## 2026-11-26 · SageX 非文字消息过滤上线（链 A ad8d940c5）
 

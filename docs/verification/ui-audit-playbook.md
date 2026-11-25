@@ -133,16 +133,16 @@ const bad = ev.filter(e => e.method==='Network.responseReceived' && e.params.res
 - `internal/service`（5）：`TestChannelDispatchService_SelectionMatrix/preferred`、`TestCRMEntityWrite_AllowedAccountAndClear`、`TestCRMEntityWriteAccountRulePairIsApplied`（3 子用例）、`TestLeadHistory_CanonicalAccountAliases`、`TestSageXBootstrapInstallationCrossTenantUUIDWithRealRepository`—并行开发线的 CRM 账号规则/渠道分发/线索历史/sagex 认证问题，非 UI 测试引入。
 - 前端 `npx vite build --mode production` 通过（PWA 705 entries）。
 
-### INV-04a/b/c（3 个 router 守卫失败）根因与误修警示
-这 3 个失败已在 `docs/architecture/FULL_FEATURE_INVENTORY.md:250-252` 登记为基线缺陷，**不是本轮 UI 测试引入，也不应在本轮顺手"补守卫"**：
+### INV-04a/b/c（3 个 router 守卫失败）根因、误修警示与修复状态
+这 3 个失败原登记于 `docs/architecture/FULL_FEATURE_INVENTORY.md:250-252`，**不是本轮 UI 测试引入，也不能靠"补守卫"修**。已于 **2026-11-25 `2656c5452` 修复并链 A 上线**（见 `PROD_TOPOLOGY_CHANGES.md` 当日条目）；下表为历史根因与实际采用的修法（非最初的设想方案）：
 
-| 缺陷 | 路由 | 根因 | 正确修法 |
+| 缺陷 | 路由 | 根因 | 实际修法（`2656c5452`） |
 |---|---|---|---|
-| INV-04a | `POST /api/integrations/sagex/{upload,bootstrap}` | 只挂 `InitGuard`（安装态，非身份守卫）；鉴权在 controller/service 用 `identify_code` 经 ChannelResolver 反查租户/账号完成 | 登记进 `route_policy_gate_test.go` 的 `anonymousAllowedRoutes`，理由写「identify_code 自证」（同 `POST /api/knowledge-merchant/external/import` 的 X-Knowledge-Token 模式） |
-| INV-04b | 同上 | 命中 `middleware/route_policy.go:108` 的 `/api/integrations/**` 仅超管表但链上无超管守卫 | 收窄 `**` 为精确管理口形状（保留 `/api/integrations`、`/api/integrations/*` 及 `*/test`、`*/sync-customers`、`*/sync-products`），不要动 admin 组的硬守卫 |
-| INV-04c | `POST /api/mcp` | 在生成的能力表 `menu_capability_routes.go:303` 里但独立组无 `RoutePolicyGuard`；`MCPGuard` 本身已是专用凭证身份门（凭证对/单值密钥 + tenant_code，无凭证 fail-closed 503） | 在生成器 `scripts/menu-route-role-audit.py` 加「专用凭证入口」排除名单后重跑 `--emit-go`，不能直接登记匿名清单（否则触发 wronglyAllowed） |
+| INV-04a | `POST /api/integrations/sagex/{upload,bootstrap}` | 只挂 `InitGuard`（安装态，非身份守卫）；鉴权在 controller/service 用 `identify_code` 经 ChannelResolver 反查租户/账号完成 | 在 `route_policy_gate_test.go` 登记为 `external-credential` 档位并写明 identify_code 自证理由，新增 `TestRouteGuardChain_ExternalCredentialRoutesKeepTheirOwnGuards` 断言 |
+| INV-04b | 同上 | 命中 `middleware/route_policy.go:108` 的 `/api/integrations/**` 仅超管表但链上无超管守卫 | 给 `adminRouteRule` 增加 `ExceptPatterns`，只精确排除这两条外部凭证端点；其余集成管理端点仍受超管策略保护 |
+| INV-04c | `POST /api/mcp` | 在生成的能力表 `menu_capability_routes.go:303` 里但独立组无 `RoutePolicyGuard`；`MCPGuard` 本身已是专用凭证身份门（凭证对/单值密钥 + tenant_code，无凭证 fail-closed 503） | 从生成的能力表删除 `/api/mcp` 行 + 加 `CapabilityOwnerKeysFor("/api/mcp")==0` 断言。**生成器 `scripts/menu-route-role-audit.py` 没有"专用凭证排除名单"机制**（只有强制纳入的 `FORCED_CAPABILITY_SHAPES`），早期"加排除名单重跑"的设想不成立，勿照做 |
 
-**误修警示**：给 sagex 组挂 `RoutePolicyGuard`/JWT 会因读不到 role 直接 401，打断真机上报；给 mcp 组挂能力守卫会因无授予 403 打断外部 AI 客户端调用（能力表命中还要求 JWT，而 MCP 调用方没有登录态）。运行时探针实证：无凭证访问 upload/mcp 返回 401、bootstrap 404（配置未启用），并非真实匿名漏洞。
+**误修警示**：给 sagex 组挂 `RoutePolicyGuard`/JWT 会因读不到 role 直接 401，打断真机上报；给 mcp 组挂能力守卫会因无授予 403 打断外部 AI 客户端调用（能力表命中还要求 JWT，而 MCP 调用方没有登录态）。运行时探针实证：无凭证访问 upload/mcp 返回 401、bootstrap 404（配置未启用），并非真实匿名漏洞。现这三条已修复上线，若 go test 再报同类失败应查新回归而非按旧基线处理。
 
 ## 7. D 轮深度点验方法（数据三源核对，2026-11-25）
 
@@ -150,7 +150,7 @@ C 轮只做"加载观察 + 只读点击"；D 轮追加**数据正确性**核对�
 
 1. **API**：`page.fetch(页面实际请求的路径)` 取 `data.total` / `data.list.length` / 统计值（注意方法是 GET 还是 POST——`/api/asset-bundle/list` 必须 POST + JSON body，GET 会 400）。
 2. **DOM**：页面"共 N 条"文字、`table tbody tr` 行数、统计卡片数值。采集行数时**只取第一个真实数据表**（`querySelectorAll('table tbody tr')` 会把日期面板的 7×2 行算进去，造成虚高）。
-3. **DB**：本机 `psycopg2` 直连 `127.0.0.1:8202`（user_db），查对应表行数/字段值；注意 API 的 total 常是 `data_scope` 过滤后的数（如 clues DB 316 但 API 27），按 US1 数据权限设计解读。
+3. **DB**：本机 `psycopg2` 直连 `127.0.0.1:8202`（user_db），查对应表行数/字段值；比对时先排除软删除：例如 `clues` 表物理 320 行、`deleted_at IS NOT NULL` 293 行，GORM 自动追加 `deleted_at IS NULL` 后未软删 27 行 = API total 27（`model.Clue.DeletedAt` 是 `gorm.DeletedAt`；`repository/clue_query.go` / `service/clue.go` 没有 `data_scope` 条件，不要拿这个差值论证 US1 数据权限）。
 4. **表单/下拉**：空提交看 `.el-form-item__error` + toast + 是否发 POST（前端校验应拦截）；下拉展开核对选项来源（硬编码 preset / API / allow-create），区分多个 select 的 Teleport dropdown 别混采。
 
 ### D 轮代表性核对结果（API total = 页面分页 = DB）
@@ -161,6 +161,7 @@ C 轮只做"加载观察 + 只读点击"；D 轮追加**数据正确性**核对�
 - 线上（租户18）：clue 43、crm 30、faq 30、badCase 235、opLog 4980、c360 54——全部 API total = 页面分页。
 
 ### 口径说明
-- 167 条记为 `D轮深度`（API/DOM/DB 三源核对或等价统计核对），113 条记为 `D轮复核`（导航复核 + API/渲染 + 只读交互），12 条线上 `D轮线上深度`。不把只做导航复核的条目夸大为三源核对。
+- 实际分级（逐行统计，不夸大）：`D轮深度` 167 条中，真正含 DB 数字的只有 **9 条**（API/DOM/DB 三源）；含 API/统计数值的 **约 158 条**（API↔DOM 核对）；4 条纯表单结构复核（行 17/29/43/61，无数值）。另有 `D轮复核` 113 条（导航 + 只读交互）、12 条 `D轮线上深度`。写报告时按此分级表述，不能把 167 条统称为"三源核对"。
+- C 轮 280 行中 267 行是**批量导航基线证据**（"逐条显式导航 + 只读元素点击；0 cerr/0 非2xx"的模板文字），它证明整站无加载级错误，但**不能当作逐元素操作证据**；具体元素与数据的证据以 D 轮带 API 数值/具体交互对象的条目为准。
 - 表单页写操作一律不提交；深链 `:id` 用列表真实 id 复验，不存在的 id 返回 404 属 fail-closed 降级。
 - 当前本地 8204 实例 `TENANT_MODE=off / edition=opensource`（`.env` 被并行会话改过），渠道下拉为空是版本过滤设计内；线上是 SaaS 租户 18。

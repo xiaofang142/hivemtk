@@ -54,7 +54,9 @@ done
 
 log()  { printf '\033[36m[deploy]\033[0m %s\n' "$*"; }
 ok()   { printf '\033[32m[  ok  ]\033[0m %s\n' "$*"; }
-warn() { printf '\033[33m[ warn ]\033[0m %s\n' "$*"; }
+# warn 走 stderr：remote_read 等函数的 stdout 会被 $(...) 捕获并写进 state JSON，
+# 任何 warn 混入都会产生非法 JSON（2026-11-26 二次审核故障注入实测复现）。
+warn() { printf '\033[33m[ warn ]\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[31m[ FAIL ]\033[0m %s\n' "$*" >&2; exit 1; }
 
 STAMP="$(date +%Y%m%d-%H%M%S)"
@@ -257,7 +259,10 @@ fi
 # 二进制/健康检查都已成功但 state 未写，导致下次重复发布）。这里改为带重试的读数，
 # 且失败不阻断：用已校验的上传值兜底，保证 state 一定落盘、脚本返回 0。
 # fallback 来源须可追溯——REMOTE_NEW_SHA 是步骤 2 双端校验过的上传产物，不是猜测值。
-READ_FALLBACKS=""
+# 命令替换 $(remote_read ...) 在子 shell 执行，局部变量改动传不回父 shell，
+# 因此 fallback 标签写入临时文件供写 state 时读取。
+READ_FALLBACKS_FILE="$(mktemp "${TMPDIR:-/tmp}/deploy-fallback.XXXXXX")"
+: > "${READ_FALLBACKS_FILE}"
 remote_read() {
   local label="$1" cmd="$2" fallback="$3" value="" i
   for i in 1 2 3; do
@@ -266,7 +271,7 @@ remote_read() {
     sleep 2
   done
   warn "远程读数失败：${label}（用已知兜底值；不影响已通过的部署）"
-  READ_FALLBACKS="${READ_FALLBACKS}${READ_FALLBACKS:+, }${label}"
+  printf '%s\n' "${label}" >> "${READ_FALLBACKS_FILE}"
   printf '%s' "${fallback}"
 }
 # 镜像 id 无可靠兜底（tag 不是 id），用空串让 state 明确记 unknown，不伪装成 sha256。
@@ -282,7 +287,7 @@ cat > "${STATE_FILE}" <<EOF
   "remote_binary_sha256": "${REMOTE_SHA_AFTER}",
   "image_id": "${NEW_IMAGE:-unknown}",
   "container_started_at": "${STARTED_AT:-unknown}",
-  "verify_note": "${READ_FALLBACKS:+fallback: ${READ_FALLBACKS}（ssh 读数失败，值来源见脚本注释）}",
+  "verify_note": "$({ [ -s "${READ_FALLBACKS_FILE}" ] && printf 'fallback: %s（ssh 读数失败，值来源见脚本注释）' "$(paste -sd, "${READ_FALLBACKS_FILE}")"; } || true)",
   "rollback_image_tag": "${IMAGE_NAME}:rollback-${STAMP}",
   "rollback_binary": "${REMOTE_DIR}/user-server.bak-${STAMP}",
   "default_credential_probe": "${PROBE_STATUS}",
@@ -291,6 +296,11 @@ $(printf '%s\n' "${CHANGED_COMMITS}" | sed 's/[\\"]/\\&/g; s/^/    "/; s/$/",/' 
   ]
 }
 EOF
+
+# state 是下次变更门的唯一事实来源，必须可解析；非法 JSON 立即暴露而不是留到下次发布。
+python3 -m json.tool "${STATE_FILE}" >/dev/null 2>&1 || die "部署 state JSON 非法（${STATE_FILE}），发布已完成但台账写入失败，请人工核对"
+rm -f "${READ_FALLBACKS_FILE}"
+ok "部署 state JSON 校验通过"
 
 echo
 ok "================ 发布完成 ================"

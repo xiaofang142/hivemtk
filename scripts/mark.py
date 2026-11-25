@@ -96,10 +96,15 @@ def main():
     if args.note:
         last = len(cells) - 2  # 末列（倒数第二段；最后一段是行尾 | 后的空串）
         tail = cells[last].rstrip()
-        sep = "" if tail.endswith(("；", ";", "|")) or not tail else "；"
-        # 行末列若已有内容以 |； 结尾（历史上 gen 脚本把注记放 | 外），统一收进列内
-        cells[last] = (tail + sep + args.note) if tail else args.note
-        changed = True
+        # 幂等：同 note 已存在则跳过，避免重复执行（或并行会话重跑）制造重复证据。
+        # 2026-11-26 二次审核发现 D 轮 3 行被重复追加，根因即此处无条件 append。
+        if args.note in tail:
+            print("note 已存在，跳过（幂等）")
+        else:
+            sep = "" if tail.endswith(("；", ";", "|")) or not tail else "；"
+            # 行末列若已有内容以 |； 结尾（历史上 gen 脚本把注记放 | 外），统一收进列内
+            cells[last] = (tail + sep + args.note) if tail else args.note
+            changed = True
 
     if not changed:
         print("无改动（未给 --status/--note）")
