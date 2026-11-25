@@ -505,7 +505,6 @@ var SystemMenuTree = []SystemMenuNode{
 					// capabilityDiagnostics（运行态 implemented/configured/ready）是一对——
 					// 一个看"声明了什么"，一个看"真正能跑什么"。原先只有 /cap/matrix 深链。
 					{Key: "capabilityMatrix", Title: "能力矩阵", Icon: "Grid", Path: "/cap/matrix", Roles: []string{"admin"}},
-					// 功能模块市场：付费能力的**购买入口**。
 				},
 			},
 			{

@@ -587,16 +587,22 @@ flowchart TB
 - **解决什么问题**：最小权限——日常运营不该用超管；坐席只该看到自己该看的。
 - **如何配置 / 使用**：见第 7 节（角色体系 + 行级数据隔离 + fail-closed）。
 
-#### 3.7.3 权限设置组（admin，6 页）
+#### 3.7.3 权限设置组（admin，9 页）
 
 | 模块（路径） | 作用 / 解决什么问题 | 如何使用 |
 |------|------------------|---------|
 | 平台账号（`/platformAccount/list`） | 各渠道平台账号绑定总入口（企微/飞书/钉钉/Telegram…） | 新建/编辑绑定，配好凭证后测试连通 |
 | 第三方对接（`/integration/list`） | 集成账号 + 同步日志 / 外部系统对接要可追踪 | 配对接 → 同步日志看失败原因 |
-| **桥接凭证**（`/bridge/token`） | Bridge Token 生成与轮换 / 扩展连接服务的唯一凭证 | [生成新凭证(轮换)]，明文可在页面再次查看并复制；轮换后旧凭据灰度窗口仍可用（详见 5.3） |
+| **渠道识别码**（`/channels/identify-codes`） | 渠道账号唯一识别码的生成/重置；桥接、Webhook、SageX 上报统一用它识别租户与账号 | [生成/重置] → 复制明文 → 填入扩展 popup「通道识别码」；旧 Bridge Token 协议已退役，服务端不再接受（详见 5.3） |
+| **渠道管理**（`/channels/manage`） | 预设渠道的启停（数据表驱动） | 开启需要的渠道；国内渠道需定制版（`version_type=custom`），开源版不可见 |
+| **渠道账号管理**（`/channels/accounts`） | 单渠道多账号、自他识别名称、两类智能体绑定、数据授权的统一入口 | 新建/编辑账号 → 绑定自动回复与线索发现智能体 → 配数据授权 |
 | **扩展安装包**（`/bridge/extension`） | 浏览器扩展安装包下载（不上架商店，平台上传、租户下载） | 下载 → `chrome://extensions` 加载（详见 5.2） |
 | 操作日志（`/operationLog/list`） | 全量操作审计 | 排障与审计 |
 | 安全审计（`/securityAudit/list`） | 安全事件审计 | unlock 越狱风险定期看这里 |
+
+> 原「桥接凭证」（`/bridge/token`）已退役：页面只保留旧书签兼容并指向渠道识别码；
+> 不要再把它当作扩展鉴权来源。菜单项的权威清单以 `user-server/internal/model/menu.go` 的
+> `SystemMenuTree` 为准（见 [菜单决策](../architecture/USERWEB_MENU_DECISIONS_2026-11-24.md)）。
 
 #### 3.7.4 能力运行诊断（`/cap/diagnostics`，admin）
 
@@ -716,9 +722,9 @@ curl http://localhost:8204/health       # 检查依赖探针；通过后仍需�
 补充：
 
 - Bridge 扩展与服务端之间：上行（私信上报）有单批条数与大小上限；下行（AI 回复拉取）支持长连接推送；
-  凭证用 [桥接凭证] 页生成（支持轮换灰度，详见 5.3）。
-- 服务端两个安全开关：`CORS_ALLOWED_EXTENSIONS` 扩展白名单（不配=拒绝）；
-  `BRIDGE_INGRESS_AUTH` 保持默认（勿设 off，等于裸奔）。
+  识别码在 [系统设置 → 权限设置 → 渠道识别码] 页生成/重置（详见 5.3）。
+- 服务端安全开关：`CORS_ALLOW_ORIGINS_USER` / `SSE_CORS_ALLOW_ORIGINS` / `ALLOWED_WS_ORIGINS`
+  配管理端与 API 域名（生产 .env，由 deploy.conf 派生）；桥接闸门 fail-closed，识别码无效一律 401。
 
 ### 4.7 验证闭环（不依赖真实客户的最短路径）
 
@@ -770,25 +776,25 @@ npm run build        # 产物在 dist/（esbuild 逐入口 IIFE）
 3. 备选路径：不本地构建时，从管理端 [权限设置 → 扩展安装包]（`/bridge/extension`）下载平台上传的安装包
    （浏览器扩展不上架商店，平台上传、租户下载）。
 
-### 5.3 配置（popup 三字段 + 服务端 token）
+### 5.3 配置（popup 四字段 + 渠道识别码）
 
 **扩展 popup**（点扩展图标）：
 
 | 字段 | 填什么 | 默认 |
 |------|--------|------|
-| `serverUrl` | user-server 地址，如 `http://<host>:8204` | `http://localhost:8204` |
-| `token` | Bridge Token（见下），扩展凭它与服务器鉴权，自动随请求携带 | — |
+| `serverUrl` | user-server 地址；点「线上」按钮自动填 SaaS 云端地址 | 云端地址（见 `src/core/constants.js`） |
+| `通道识别码`（表单 id 仍为 `token`，语义是识别码） | 管理员在「渠道识别码管理」页为渠道生成/重置的明文 | —（留空全部 401） |
+| `租户短码 (tenant_code)` | SaaS 多租户必填，如 `tz3rmdj`；离线单机留空 | 空 |
 | `autoConnect` | 自动连接开关 | 开 |
 
-**Bridge Token 从哪来**（两种方式）：
+**识别码从哪来**：网页端 [系统设置 → 权限设置 → 渠道识别码]（`/channels/identify-codes`）→
+[生成/重置] → 复制明文 → 粘贴到扩展 popup「通道识别码」→ 保存并重连。请求以
+`X-Channel-Identify-Code` 头携带（同时作 Bearer 透传）；服务端 fail-closed：识别码无效时
+上行/下发/ack 一律 401。**旧 `X-Bridge-Token` / Bridge Token 协议已退役，服务端不再接受**，
+不再是鉴权来源（见 [菜单决策](../architecture/USERWEB_MENU_DECISIONS_2026-11-24.md)）。
+重置后旧码仅在短暂在途窗口有效，请同步更新所有扩展/上报端，否则请求被 401 拒绝。
 
-- **管理端页面（推荐）**：[权限设置 → 桥接凭证]（`/bridge/token`）→ [生成新凭证(轮换)] →
-  **明文可在页面再次查看并复制**，复制进扩展 popup；轮换后旧凭据进入**灰度窗口仍可用**
-  （页面会提示"请尽快更新各浏览器扩展后再次轮换以移除 PREV"）。
-- **服务端 `.env`**：`BRIDGE_INGEST_TOKEN`（生成 `openssl rand -hex 32`；轮换期旧值放
-  `BRIDGE_INGEST_TOKEN_PREV`，同文件读点）。
-
-**验证**：popup 健康检查变绿即通；也可在 [能力运行诊断]（`/cap/diagnostics`）看各渠道 ready 状态。
+**验证**：popup「测试连接」健康即通；也可在 [能力运行诊断]（`/cap/diagnostics`）看各渠道 ready 状态。
 
 ### 5.4 三条硬约束
 
@@ -796,7 +802,7 @@ npm run build        # 产物在 dist/（esbuild 逐入口 IIFE）
 |------|------|
 | **加载目录路径绝不能变、不能删除重装** | 路径变 ⇒ 扩展 ID 变 ⇒ `chrome.storage` 全丢 ⇒ 服务器地址配置与已发送缓存丢失 ⇒ **可能重复发送历史消息** |
 | `CORS_ALLOWED_EXTENSIONS` 白名单**不要留空** | 扩展 ID 不在白名单 = fail-closed 拒绝；`.env` 里逐 ID 列 |
-| `BRIDGE_INGRESS_AUTH` 保持默认（勿设 off） | off会移除入站鉴权，可能接收伪造消息；排障应核对凭证、租户和响应，不以关闭生产鉴权作为解决办法 |
+| 渠道识别码闸门 fail-closed，不要试图绕过 | 服务端 `/api/bridge/*` 只读 `X-Channel-Identify-Code`（或 `identify_code`），无效一律 401；排障应核对当前生效识别码、租户短码与响应，不以关闭鉴权作为解决办法（旧 `X-Bridge-Token` 已退役） |
 
 ### 5.5 扩展侧行为速览
 
@@ -897,7 +903,7 @@ user-server 在 `/embed/` 路径伺服：`r.Static("/embed", embedDist)`，默�
 | 回复慢 / 超时 | `/health` 的 LLM/Embedding 段；`make inference-host-ps` / `logs`；首请求超时多半是没 warmup |
 | 检索不到内容 | 导入、分块与索引任务是否完成或报错？分块质量？Embedding 服务活吗（降级开关 `EMBEDDING_ALLOW_FALLBACK` 是否在用 Hash 顶替） |
 | 渠道收不到报文 | 各平台后台的回调地址/验签配置是否与本系统一致；[AI 观测与渠道健康] 看板；能力闸（快手/小红书/闲鱼 webhook 恒拒收） |
-| Bridge 连不上 | popup 的 serverUrl/token；服务端 `BRIDGE_INGEST_TOKEN`；`CORS_ALLOWED_EXTENSIONS` 是否含扩展 ID |
+| Bridge 连不上 | popup 的 serverUrl / 通道识别码 / 租户短码是否与「渠道识别码」页当前生效值一致；服务端 `/api/bridge/capabilities` 探活；nginx CORS 域名配置 |
 | AI 不自动回复 | `smart_cs.enable_auto_reply` 配置（缺省开）；智能体-渠道绑定存在吗；置信度看板是不是全转人工了 |
 | 502 / 起不来 | `.env` 密钥（`JWT_SECRET`/`FIELD_ENCRYPTION_KEY` 缺失会启动失败）；`make db-ps`；后端日志 |
 | 某个菜单看不到 | 先核对角色菜单权限、模块启用和登录会话；正常后继续检查路由、接口与前端渲染 |
