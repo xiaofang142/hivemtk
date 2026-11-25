@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/edition"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/testutil"
 )
@@ -21,11 +22,14 @@ import (
 // 后台没有可信店铺映射加载源，消费到期行后须明确拒绝且零出站。
 // 反向测试：删掉 webhook.go 中的 s.startDelayedOutboundDispatch() ⇒ 行保持 pending，测试失败。
 func TestNewWebhookService_DrainsDueDelayedOnBootWithoutShopAuthorization(t *testing.T) {
-	db := testutil.NewTestDBOrSkip(t, &model.MessageHub{}, &DelayedOutboundReply{}, &model.InboxConversation{}, &model.CustomerSession{})
+	db := testutil.NewTestDBOrSkip(t, &model.MessageHub{}, &DelayedOutboundReply{}, &model.InboxConversation{}, &model.CustomerSession{}, &model.Channel{}, &model.ChannelAccount{}, &model.BridgeAccount{}, &model.CapabilitySourceBinding{})
+	priorEdition := edition.Current()
+	edition.SetCurrent(edition.TypeCustom)
+	t.Cleanup(func() { edition.SetCurrent(priorEdition) })
 	ctx := tenant.OnlyTenant(context.Background(), tenant.DefaultTenantID)
 
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
-	account := "acct-boot-" + suffix
+	account := seedCanonicalOutboundAccount(t, db, tenant.DefaultTenantID, "douyin", "acct-boot-"+suffix)
 	conv := "conv-boot-" + suffix
 
 	rec := &DelayedOutboundReply{

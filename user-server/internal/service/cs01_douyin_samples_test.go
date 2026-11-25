@@ -214,6 +214,13 @@ func c01SetupAI(t *testing.T, rag *fakeRAGSearcher, intent interface {
 	Recognize(ctx context.Context, sessionID, customerID, text string) (*dto.RecognizeResult, error)
 }) (*WebhookService, *SmartCSOrchestrator, *gorm.DB) {
 	t.Helper()
+	return c01SetupAIForTenant(t, c01TenantA, rag, intent)
+}
+
+func c01SetupAIForTenant(t *testing.T, fixtureTenant uint, rag *fakeRAGSearcher, intent interface {
+	Recognize(ctx context.Context, sessionID, customerID, text string) (*dto.RecognizeResult, error)
+}) (*WebhookService, *SmartCSOrchestrator, *gorm.DB) {
+	t.Helper()
 	t.Cleanup(DisableAIQuietHoursForTest(true)) // 024 B1 收口勘误：装配 helper 内 defer 会提前复位，挂到测试级 cleanup // DISABLE_AI_QUIET_HOURS env 已退役（B8），测试装配口顶掉勿扰窗
 	previousEdition := edition.Current()
 	edition.ResetForTest(edition.TypeCustom)
@@ -225,7 +232,7 @@ func c01SetupAI(t *testing.T, rag *fakeRAGSearcher, intent interface {
 		&model.AgentStatus{}, &model.Customer{}, &model.FeedbackRecordORM{},
 		&model.Channel{}, &model.ChannelAccount{},
 	)
-	if accountID := seedCanonicalBridgeOutboundAccount(t, database, c01TenantA, c01Channel, "cs01-a1"); accountID != c01AccountA1 {
+	if accountID := seedCanonicalBridgeOutboundAccount(t, database, fixtureTenant, c01Channel, "cs01-a1"); accountID != c01AccountA1 {
 		t.Fatalf("CS01 canonical 账号 ID=%q，期望 %q", accountID, c01AccountA1)
 	}
 

@@ -34,12 +34,16 @@ func TestQuietReplay_OnlyConfirmedHandoffIsSent(t *testing.T) {
 			ctx := tenant.OnlyTenant(context.Background(), tenant.DefaultTenantID)
 			defer svc.Stop(ctx)
 			database := svc.eventRepo.GetDB()
+			account := tc.account
+			if account == "quiet-test-account" {
+				account = seedCanonicalOutboundAccount(t, database, tenant.DefaultTenantID, "douyin", account)
+			}
 			id := uint(900_000_000 + time.Now().UnixNano()%90_000_000)
 			now := time.Now()
 			lease := now.Add(time.Minute)
 			rec := &DelayedOutboundReply{
 				ID: id, TenantID: tenant.DefaultTenantID, Platform: "douyin",
-				AccountID: tc.account, ConversationID: fmt.Sprintf("quiet-conv-%d", id),
+				AccountID: account, ConversationID: fmt.Sprintf("quiet-conv-%d", id),
 				SenderID: fmt.Sprintf("quiet-customer-%d", id), Content: "合成夜间回复，不发送真实消息",
 				SendAt: now.Add(time.Hour), CreatedAt: now, Status: model.DelayedStatusSending,
 				Kind: tc.kind, ClaimToken: fmt.Sprintf("quiet-token-%d", id), ClaimedAt: &now, LeaseUntil: &lease,

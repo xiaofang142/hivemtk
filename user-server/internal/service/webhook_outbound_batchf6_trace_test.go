@@ -512,11 +512,9 @@ func TestOutboundSendFailed_BF6_NoTraceTargetOnlyLogs(t *testing.T) {
 	}
 }
 
-// TestSendOutbound_BF6_BridgeUndeliverableKeepsSingleOutboundRow 桥接族的失败轨迹本来就是它
-// 自己落的那一行（status=failed + scenario=undeliverable + 原因）。这一支改走"只记日志"后
-// 仍回传结构化错误；若顺手再补一行 send_failed，同一会话会出现两行出站，坐席侧与补触发侧
-// 都会看到一条根本不存在的回复。
-func TestSendOutbound_BF6_BridgeUndeliverableKeepsSingleOutboundRow(t *testing.T) {
+// TestSendOutbound_BF6_InvalidBridgeAccountCannotCreateOutbound 非法显式账号须在写出站前拒绝，
+// 不为一次未获准的发送伪造出站消息。
+func TestSendOutbound_BF6_InvalidBridgeAccountCannotCreateOutbound(t *testing.T) {
 	quietHoursOffForTest(t)
 	db := testutil.NewTestDBOrSkip(t, &model.MessageHub{}, &model.InboxConversation{}, &DelayedOutboundReply{})
 	svc := NewWebhookService()
@@ -543,14 +541,8 @@ func TestSendOutbound_BF6_BridgeUndeliverableKeepsSingleOutboundRow(t *testing.T
 		Order("id ASC").Find(&rows).Error; err != nil {
 		t.Fatalf("find: %v", err)
 	}
-	if len(rows) != 1 {
-		t.Fatalf("桥接不可达只应留桥接自己那一行出站，实得 %d：%+v", len(rows), bf6RowIDs(rows))
-	}
-	if rows[0].Status != "failed" {
-		t.Errorf("桥接不可达行的状态期望 failed（它自己的口径），实得 %q", rows[0].Status)
-	}
-	if v, _ := rows[0].Extra["scenario"].(string); v != "undeliverable" {
-		t.Errorf("Extra.scenario 期望 undeliverable，实得 %q", v)
+	if len(rows) != 0 {
+		t.Fatalf("非法账号不得生成出站消息，实得 %d：%+v", len(rows), bf6RowIDs(rows))
 	}
 }
 

@@ -191,7 +191,6 @@ func TestOutboundBehaviorFreezeGolden(t *testing.T) {
 	}
 	// E3 显式账号契约：bridge 出站账号必须是可解析的数值 ID。
 	canonicalAccountID := seedCanonicalOutboundAccount(t, database, 1, "douyin", "acct-golden-q")
-	undeliverableAccountID := seedCanonicalOutboundAccount(t, database, 1, "douyin", "acct-golden-unknown")
 	for _, s := range seed {
 		if err := database.Create(s).Error; err != nil {
 			t.Fatalf("seed 渠道账号失败: %v", err)
@@ -425,7 +424,7 @@ func TestOutboundBehaviorFreezeGolden(t *testing.T) {
 			case "bridge":
 				accountID := canonicalAccountID
 				if tc.Sample == "undeliverable" {
-					accountID = undeliverableAccountID
+					accountID = "douyin-unknown"
 				}
 				hub := bridgeInboundHub("douyin", accountID, "cs-golden-bridge-"+tc.Sample, "cust-golden-bridge")
 				if err := database.Create(hub).Error; err != nil {

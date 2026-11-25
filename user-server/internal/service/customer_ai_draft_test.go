@@ -24,11 +24,11 @@ func newCRMAIDraftStore() *crmAIDraftStore {
 }
 
 func (s *crmAIDraftStore) Create(_ context.Context, d *model.AIInsightDraft) error {
-	cp := *d
-	if cp.CreatedAt.IsZero() {
-		cp.CreatedAt = time.Now()
+	if d.CreatedAt.IsZero() {
+		d.CreatedAt = time.Now()
 	}
-	cp.UpdatedAt = cp.CreatedAt
+	d.UpdatedAt = d.CreatedAt
+	cp := *d
 	s.drafts[d.DraftID] = &cp
 	return nil
 }
@@ -60,6 +60,7 @@ func (s *crmAIDraftStore) UpdateReview(_ context.Context, id, status string, by 
 		d.ConfirmedBy = by
 	}
 	d.ReviewNote = note
+	d.UpdatedAt = d.UpdatedAt.Add(time.Second)
 	if applied != "" {
 		d.AppliedActionJSON = json.RawMessage(applied)
 	}
@@ -71,10 +72,13 @@ type crmAIDraftPermission struct {
 	customers map[string]*model.Customer
 }
 
-func (p *crmAIDraftPermission) GetByIDScoped(_ context.Context, _ CustomerDataScope, id string) (*model.Customer, error) {
+func (p *crmAIDraftPermission) GetByIDScoped(_ context.Context, scope CustomerDataScope, id string) (*model.Customer, error) {
 	c, ok := p.customers[id]
 	if !ok {
 		return nil, gorm.ErrRecordNotFound
+	}
+	if !(&CustomerPermissionService{}).CanAccess(scope, c) {
+		return nil, ErrCRMCustomerForbidden
 	}
 	return c, nil
 }
@@ -185,6 +189,14 @@ func TestCRM14_ConfirmIdempotentAndAuditVisible(t *testing.T) {
 	second, err := svc.Confirm(context.Background(), draft.DraftID, 7, in)
 	if err != nil || second.Applied || applyCalls != 1 {
 		t.Fatalf("重复确认不得重复建单：second=%+v applyCalls=%d err=%v", second, applyCalls, err)
+	}
+	if store.writes[draft.DraftID] != 1 || second.AppliedAction["type"] != "followup_suggestion" {
+		t.Fatalf("重复确认只回读既有结果，不得重写状态：writes=%d result=%+v", store.writes[draft.DraftID], second)
+	}
+	revoked := in
+	revoked.Scope.AccountIDs = []string{"acc-2"}
+	if result, err := svc.Confirm(context.Background(), draft.DraftID, 7, revoked); err == nil || result != nil {
+		t.Fatalf("权限撤销后不得回读已确认结果：result=%+v err=%v", result, err)
 	}
 	svc.audit = func(context.Context, string, string, any) error { return errors.New("audit down") }
 	draft2, _ := svc.CreateFromAnalysis(context.Background(), CRMAIDraftInput{CustomerID: "c-1", Scope: CustomerDataScope{UserID: 7, RestrictedAccounts: true, AccountIDs: []string{"acc-1"}}, Result: crmAISuggestionResult()})

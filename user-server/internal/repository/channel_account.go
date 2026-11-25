@@ -73,7 +73,14 @@ func applyChannelEditionGate(ctx context.Context, q *gorm.DB) *gorm.DB {
 	if edition.AllowsContext(ctx, edition.FeatureDomesticChannels) {
 		return q
 	}
-	return q.Where("channel_id IN (SELECT id FROM channels WHERE code NOT IN ?)", edition.DomesticChannelCodes())
+	// 用 GORM 子查询而非裸 SQL 字面量：租户隔离 callback 会在子查询的 Query 链上
+	// 照常注入 tenant_id；裸字面量里的 (SELECT … FROM channels) 是 callback
+	// 注入不到的盲区（见 internal/router/tenant_scan_test.go S-18）。
+	sub := q.Session(&gorm.Session{NewDB: true}).WithContext(ctx).
+		Model(&model.Channel{}).
+		Select("id").
+		Where("code NOT IN ?", edition.DomesticChannelCodes())
+	return q.Where("channel_id IN (?)", sub)
 }
 
 func (r *channelAccountRepo) validateChannelForAccount(ctx context.Context, channelID uint) error {

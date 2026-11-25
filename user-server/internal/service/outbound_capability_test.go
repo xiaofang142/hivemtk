@@ -75,6 +75,9 @@ func localBridgeSubmitContext(t *testing.T, ctx context.Context, product, accoun
 		tenantID = tenant.DefaultTenantID
 		ctx = tenant.WithTenantID(ctx, tenantID)
 	}
+	if _, explicitEdition := edition.FromContext(ctx); !explicitEdition {
+		ctx = edition.WithContext(ctx, edition.TypeCustom)
+	}
 	binding.Key.TenantID, evidence.TenantID = tenantID, tenantID
 	return capregistry.WithCellEvidence(capregistry.WithSubmissionBinding(ctx, binding), evidence)
 }

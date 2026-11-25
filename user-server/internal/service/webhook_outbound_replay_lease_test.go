@@ -38,11 +38,12 @@ func TestReplayLease_InvalidExecutionCannotCreateOutbound(t *testing.T) {
 			ctx := tenant.OnlyTenant(context.Background(), tenant.DefaultTenantID)
 			defer svc.Stop(ctx)
 			database := svc.eventRepo.GetDB()
+			account := seedCanonicalOutboundAccount(t, database, tenant.DefaultTenantID, "douyin", "lease-test-account")
 			now := time.Now()
 			until := now.Add(time.Minute)
 			id := uint(700_000_000 + time.Now().UnixNano()%90_000_000)
 			stored := DelayedOutboundReply{ID: id, TenantID: tenant.DefaultTenantID,
-				Platform: "douyin", AccountID: "lease-test-account", ConversationID: fmt.Sprintf("lease-conv-%d", id),
+				Platform: "douyin", AccountID: account, ConversationID: fmt.Sprintf("lease-conv-%d", id),
 				SenderID: fmt.Sprintf("lease-customer-%d", id), Content: "数据库当前合成答复", Kind: model.DelayedKindQuietHours,
 				Status: model.DelayedStatusSending, SendAt: now.Add(time.Hour), CreatedAt: now,
 				ClaimToken: fmt.Sprintf("lease-token-%d", id), ClaimedAt: &now, LeaseUntil: &until}

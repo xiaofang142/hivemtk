@@ -145,11 +145,18 @@ func (s *CRMAISuggestionDraftService) Confirm(ctx context.Context, draftID strin
 	if err != nil {
 		return nil, err
 	}
-	if d.Status != "draft" {
-		return nil, fmt.Errorf("草稿状态为%s，不可确认", d.Status)
-	}
 	if err := s.verifyScopeVersion(ctx, d, in); err != nil {
 		return nil, err
+	}
+	if d.Status == "applied" || d.Status == "confirmed" {
+		var applied map[string]any
+		if err := json.Unmarshal(d.AppliedActionJSON, &applied); err != nil {
+			return nil, fmt.Errorf("读取已确认业务结果失败: %w", err)
+		}
+		return &AIInsightConfirmResult{Draft: d, Applied: false, AppliedAction: applied}, nil
+	}
+	if d.Status != "draft" {
+		return nil, fmt.Errorf("草稿状态为%s，不可确认", d.Status)
 	}
 	if in.EditedContent != "" {
 		var content map[string]any
@@ -174,18 +181,19 @@ func (s *CRMAISuggestionDraftService) Confirm(ctx context.Context, draftID strin
 	if err := s.drafts.UpdateReview(ctx, draftID, status, &confirmedBy, in.EditedContent, string(appliedJSON)); err != nil {
 		return nil, fmt.Errorf("草稿状态写回失败: %w", err)
 	}
-	if s.audit != nil {
-		if err := s.audit(ctx, "crm_ai_draft_confirm", draftID, map[string]any{
-			"status": status, "scope": in.Scope, "applied": applied,
-		}); err != nil {
-			return nil, fmt.Errorf("审计写失败（业务已落地）: %w", err)
-		}
-	}
 	updated, err := s.drafts.GetByDraftID(ctx, draftID)
 	if err != nil {
 		return nil, err
 	}
-	return &AIInsightConfirmResult{Draft: updated, Applied: status == "applied", AppliedAction: applied}, nil
+	result := &AIInsightConfirmResult{Draft: updated, Applied: status == "applied", AppliedAction: applied}
+	if s.audit != nil {
+		if err := s.audit(ctx, "crm_ai_draft_confirm", draftID, map[string]any{
+			"status": status, "scope": in.Scope, "applied": applied,
+		}); err != nil {
+			return result, fmt.Errorf("审计写失败（业务已落地）: %w", err)
+		}
+	}
+	return result, nil
 }
 
 // Reject 只改草稿状态，不写任何业务对象。
@@ -218,6 +226,10 @@ func (s *CRMAISuggestionDraftService) verifyScopeVersion(ctx context.Context, d 
 	customer, err := s.permission.GetByIDScoped(ctx, in.Scope, d.EntityID)
 	if err != nil || customer == nil {
 		return fmt.Errorf("确认时客户已越权或不存在: %w", err)
+	}
+	// 已确认草稿只回读既有结果，不再次写业务；仍须先通过当前权限检查。
+	if d.Status != "draft" {
+		return nil
 	}
 	version := d.UpdatedAt.UTC().Format(time.RFC3339)
 	if d.UpdatedAt.IsZero() {

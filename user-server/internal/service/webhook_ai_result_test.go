@@ -44,7 +44,8 @@ func TestWebhookAIResult_MissingLockScopeMustNotSend(t *testing.T) {
 			} else {
 				result.SessionID = ""
 			}
-			hub := bridgeInboundHub("douyin", "missing-scope-account", "missing-scope-conversation", "missing-scope-customer")
+			account := seedCanonicalOutboundAccount(t, ws.eventRepo.GetDB(), c01TenantA, "douyin", "missing-scope-account")
+			hub := bridgeInboundHub("douyin", account, "missing-scope-conversation", "missing-scope-customer")
 			hub.TenantID = c01TenantA
 			ctx = localBridgeSubmitContext(t, ctx, hub.Platform, hub.AccountID, "text")
 			eventID := "missing-lock-scope-" + missing
@@ -88,7 +89,8 @@ func TestWebhookAIResult_PresendLockMustBeConfirmed(t *testing.T) {
 				fixture.Cache = memory
 			}
 			ws.ingressSvc.cache = tc.lockCache
-			hub := bridgeInboundHub("douyin", "presend-account", "presend-conversation", "presend-customer")
+			account := seedCanonicalOutboundAccount(t, ws.eventRepo.GetDB(), c01TenantA, "douyin", "presend-account")
+			hub := bridgeInboundHub("douyin", account, "presend-conversation", "presend-customer")
 			hub.TenantID = c01TenantA
 			useLegacyBridgeFixture(t)
 			ctx = localBridgeSubmitContext(t, ctx, hub.Platform, hub.AccountID, "text")
@@ -210,9 +212,9 @@ func TestWebhookAIResult_RecreatedAnswerUsesSafeExit(t *testing.T) {
 	for index, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			intent := &resultExitIntent{}
-			ws, orch, database := c01SetupAI(t, &fakeRAGSearcher{}, intent)
 			// 单机夹具的会话/消息由默认租户写入；上下文与行身份必须一致。
 			fixtureTenant := tenant.DefaultTenantID
+			ws, orch, database := c01SetupAIForTenant(t, fixtureTenant, &fakeRAGSearcher{}, intent)
 			ctx := tenant.WithTenantID(context.Background(), fixtureTenant)
 			conv := "result-exit-conversation"
 			sender := "result-exit-customer"
@@ -224,7 +226,8 @@ func TestWebhookAIResult_RecreatedAnswerUsesSafeExit(t *testing.T) {
 			firstReply := "已投递过的标准硬件介绍。"
 			eventID := "result-exit-event"
 			// 每个子用例重建专用测试库；账号区分以免共享确认缓存影响其他用例。
-			accountID := []string{"result-exit-handoff", "result-exit-no-reply", "result-exit-lock", "result-exit-normal"}[index]
+			accountName := []string{"result-exit-handoff", "result-exit-no-reply", "result-exit-lock", "result-exit-normal"}[index]
+			accountID := seedCanonicalOutboundAccount(t, database, fixtureTenant, "douyin", accountName)
 			ctx = localBridgeSubmitContext(t, ctx, "douyin", accountID, "text")
 			hub := c01InboundHub(eventID, conv, sender, accountID, question)
 			hub.TenantID = fixtureTenant

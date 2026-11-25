@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/edition"
 	"hivemtk-user/internal/pkg/testutil"
 )
 
@@ -25,7 +26,7 @@ func newBridgeSentTestService(t *testing.T) (*WebhookService, context.Context) {
 		&model.WebhookEvent{}, &model.IntegrationAccount{}, &DelayedOutboundReply{},
 	)
 	svc := NewWebhookService()
-	return svc, context.Background()
+	return svc, edition.WithContext(context.Background(), edition.TypeCustom)
 }
 
 func bridgeInboundHub(platform, account, conv, sender string) *model.MessageHub {

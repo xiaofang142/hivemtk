@@ -104,7 +104,7 @@ func TestNextSendRetryAt_BackoffAndQuietHours(t *testing.T) {
 
 // TestSendOutbound_RetryableFailureEntersRetryLane 实时投递失败 → 落队列，而不是只留日志。
 func TestSendOutbound_RetryableFailureEntersRetryLane(t *testing.T) {
-	db := testutil.NewTestDBOrSkip(t, &model.MessageHub{}, &DelayedOutboundReply{})
+	db := testutil.NewTestDBOrSkip(t, &model.MessageHub{}, &DelayedOutboundReply{}, &model.Channel{}, &model.ChannelAccount{})
 	svc := NewWebhookService()
 	defer svc.Stop(context.Background())
 	releaseReplyClaimForTest(t, "evt-retry-live")
@@ -139,8 +139,9 @@ func TestSendOutbound_RetryableFailureEntersRetryLane(t *testing.T) {
 
 	// 反向对照：走通的路径（桥接渠道落库成功）不得顺手也入一条重投队列。
 	releaseReplyClaimForTest(t, "evt-retry-ok")
+	account := seedCanonicalOutboundAccount(t, db, 1, "douyin", "acct-retry-ok")
 	hub2 := &model.MessageHub{
-		MsgID: "mh:in-retry-ok", Platform: "douyin", AccountID: "acct-retry-ok",
+		MsgID: "mh:in-retry-ok", Platform: "douyin", AccountID: account,
 		Direction: "inbound", MsgType: "text", SenderID: "cust-retry-ok",
 		Content: "在吗", ConversationID: "conv-retry-ok", SentAt: time.Now(),
 	}
@@ -149,8 +150,8 @@ func TestSendOutbound_RetryableFailureEntersRetryLane(t *testing.T) {
 	}
 	p2 := &ParsedPayload{EventID: "evt-retry-ok", Sender: "cust-retry-ok", Content: "在吗", ChatID: "conv-retry-ok"}
 	useLegacyBridgeFixture(t)
-	bridgeCtx := localBridgeSubmitContext(t, context.Background(), "douyin", "acct-retry-ok", "text")
-	sent2, sendErr2 := svc.sendOutbound(bridgeCtx, ChannelDouyin, "acct-retry-ok", p2, "AI 回复（成功）", hub2, nil)
+	bridgeCtx := localBridgeSubmitContext(t, context.Background(), "douyin", account, "text")
+	sent2, sendErr2 := svc.sendOutbound(bridgeCtx, ChannelDouyin, account, p2, "AI 回复（成功）", hub2, nil)
 	if !sent2 || sendErr2 != nil {
 		t.Fatalf("桥接渠道应判成功且无错误，got sent=%v err=%v", sent2, sendErr2)
 	}

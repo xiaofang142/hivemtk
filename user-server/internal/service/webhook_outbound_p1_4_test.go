@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"time"
 
@@ -11,7 +10,7 @@ import (
 )
 
 func TestSendOutbound_BridgeChannel_ExtraMetadata_P1_4(t *testing.T) {
-	db := testutil.NewTestDBOrSkip(t, &model.MessageHub{}, &model.InboxConversation{})
+	db := testutil.NewTestDBOrSkip(t, &model.MessageHub{}, &model.InboxConversation{}, &model.Channel{}, &model.ChannelAccount{})
 	// -count=N 隔离：释放上一轮固定 EventID 的出站认领
 	releaseReplyClaimForTest(t, "evt-p14-1")
 	svc := NewWebhookService()
@@ -19,9 +18,9 @@ func TestSendOutbound_BridgeChannel_ExtraMetadata_P1_4(t *testing.T) {
 
 	const (
 		platform = "douyin"
-		account  = "acct-p14-real"
 		conv     = "conv-p14-1"
 	)
+	account := seedCanonicalOutboundAccount(t, db, 1, platform, "acct-p14-real")
 	hub := &model.MessageHub{
 		MsgID:          "mh:in-p14-1",
 		Platform:       platform,
@@ -91,8 +90,7 @@ func TestSendOutbound_BridgeChannel_ExtraMetadata_P1_4(t *testing.T) {
 }
 
 // 占位账号（前端 getAccountId DOM 兜底失败 → account_id=*-unknown）必须被识别为
-// undeliverable，Extra 补 undeliverable_reason + scenario=undeliverable，message_hub
-// 直接落 status=failed，避免污染 pending 出库队列。
+// 非法显式账号，在出站入库前拒绝，避免污染出库队列。
 func TestSendOutbound_PlaceholderAccount_Undeliverable_P1_4(t *testing.T) {
 	db := testutil.NewTestDBOrSkip(t, &model.MessageHub{}, &model.InboxConversation{})
 	// -count=N 隔离：释放上一轮固定 EventID 的出站认领
@@ -129,22 +127,17 @@ func TestSendOutbound_PlaceholderAccount_Undeliverable_P1_4(t *testing.T) {
 	ctx := HandleResultToContext(context.Background(), result)
 	useLegacyBridgeFixture(t)
 	ctx = localBridgeSubmitContext(t, ctx, platform, hub.AccountID, "text")
-	svc.sendOutbound(ctx, ChannelDouyin, hub.AccountID, p, result.Reply, hub, nil)
-
-	var out model.MessageHub
-	err := db.Where("direction = ? AND conversation_id = ?", "outbound", conv).
-		Order("id DESC").First(&out).Error
-	if err != nil {
-		t.Fatalf("query outbound failed: %v", err)
+	sent, sendErr := svc.sendOutbound(ctx, ChannelDouyin, hub.AccountID, p, result.Reply, hub, nil)
+	ce := AsChannelError(sendErr)
+	if sent || ce == nil || ce.Category != CategoryBadRequest || ce.Retryable {
+		t.Fatalf("占位账号应明确拒绝且不可重试：sent=%v err=%v", sent, sendErr)
 	}
-	if out.Status != "failed" {
-		t.Errorf("placeholder account should mark status=failed, got %q", out.Status)
+	var count int64
+	if err := db.Model(&model.MessageHub{}).Where("direction = ? AND conversation_id = ?", "outbound", conv).Count(&count).Error; err != nil {
+		t.Fatal(err)
 	}
-	if v, _ := out.Extra["scenario"].(string); v != "undeliverable" {
-		t.Errorf("Extra.scenario expected 'undeliverable', got %q", v)
-	}
-	if v, _ := out.Extra["undeliverable_reason"].(string); !strings.Contains(v, "placeholder") {
-		t.Errorf("Extra.undeliverable_reason expected to contain 'placeholder', got %q", v)
+	if count != 0 {
+		t.Fatalf("占位账号不得产生出站行，实际=%d", count)
 	}
 }
 
@@ -152,7 +145,7 @@ func TestSendOutbound_PlaceholderAccount_Undeliverable_P1_4(t *testing.T) {
 // 有稳定的 dm_target/scenario/triggered_by，但 confidence/intent/handler_type 缺省
 // 显式填空为 "unknown"（不允许 nil，否则 trace_learning group by key 漂移）。
 func TestSendOutbound_NoCtxResult_StillFillsStableFields_P1_4(t *testing.T) {
-	db := testutil.NewTestDBOrSkip(t, &model.MessageHub{}, &model.InboxConversation{})
+	db := testutil.NewTestDBOrSkip(t, &model.MessageHub{}, &model.InboxConversation{}, &model.Channel{}, &model.ChannelAccount{})
 	// -count=N 隔离：释放上一轮固定 EventID 的出站认领
 	releaseReplyClaimForTest(t, "evt-p14-noctx")
 	svc := NewWebhookService()
@@ -160,9 +153,9 @@ func TestSendOutbound_NoCtxResult_StillFillsStableFields_P1_4(t *testing.T) {
 
 	const (
 		platform = "douyin"
-		account  = "acct-p14-noctx"
 		conv     = "conv-p14-noctx-1"
 	)
+	account := seedCanonicalOutboundAccount(t, db, 1, platform, "acct-p14-noctx")
 	hub := &model.MessageHub{
 		MsgID:          "mh:in-p14-noctx",
 		Platform:       platform,
@@ -319,7 +312,7 @@ func init() {
 
 // TestSendOutbound_QuietHoursDefersToQueue H-3 端到端：窗口内 AI 回复不直发，入延迟队列
 func TestSendOutbound_QuietHoursDefersToQueue(t *testing.T) {
-	db := testutil.NewTestDBOrSkip(t, &model.MessageHub{}, &DelayedOutboundReply{})
+	db := testutil.NewTestDBOrSkip(t, &model.MessageHub{}, &DelayedOutboundReply{}, &model.Channel{}, &model.ChannelAccount{})
 	svc := NewWebhookService()
 	defer svc.Stop(context.Background())
 
@@ -329,9 +322,9 @@ func TestSendOutbound_QuietHoursDefersToQueue(t *testing.T) {
 
 	const (
 		platform = "douyin"
-		account  = "acct-h3-e2e"
 		conv     = "conv-h3-e2e"
 	)
+	account := seedCanonicalOutboundAccount(t, db, 1, platform, "acct-h3-e2e")
 	hub := &model.MessageHub{
 		MsgID: "mh:in-h3-e2e", Platform: platform, AccountID: account, Direction: "inbound",
 		MsgType: "text", SenderID: "sender-h3", Content: "原始消息", ConversationID: conv, SentAt: time.Now(),

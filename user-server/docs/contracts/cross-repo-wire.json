@@ -155,6 +155,11 @@
         {
           "json": "version",
           "kind": "string"
+        },
+        {
+          "json": "version_type",
+          "kind": "string",
+          "omitempty": true
         }
       ]
     },

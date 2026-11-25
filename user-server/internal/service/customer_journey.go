@@ -435,9 +435,8 @@ func (s *CustomerJourneyService) persistStateCAS(ctx context.Context, state *Jou
 		}
 	} else if err == ErrJourneyCacheReadFault {
 		return err
-	} else {
-		// 未命中（新客户）允许首次写入。
 	}
+	// 未命中（新客户）允许首次写入。
 	return s.persistState(ctx, state)
 }
 

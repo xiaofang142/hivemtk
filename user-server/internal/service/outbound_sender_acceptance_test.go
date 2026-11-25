@@ -30,7 +30,7 @@ func senderTestDB(t *testing.T) *gorm.DB {
 		&model.AgentStatus{}, &model.Customer{}, &model.MessageTrace{},
 		&model.FeishuAccount{}, &model.FeishuMessage{}, &model.TelegramAccount{},
 		&model.WechatAccount{}, &model.WeComAccount{}, &model.QQAccount{},
-		&model.WhatsAppCloudAccount{},
+		&model.WhatsAppCloudAccount{}, &model.Channel{}, &model.ChannelAccount{},
 	)
 }
 
@@ -704,15 +704,16 @@ func TestBridgeSender_DuplicateOccupied(t *testing.T) {
 	svc := bridgeAcceptSvc(t)
 
 	const conv = "cs-sa-br-dup"
-	hub := bridgeInboundHub("douyin", "acct-sa-br", conv, "cust-sa-br")
+	account := seedCanonicalOutboundAccount(t, database, 1, "douyin", "acct-sa-br")
+	hub := bridgeInboundHub("douyin", account, conv, "cust-sa-br")
 	if err := database.Create(hub).Error; err != nil {
 		t.Fatalf("seed inbound: %v", err)
 	}
 	content := "golden 桥接重复正文"
 	dup := &model.MessageHub{
 		MsgID:    ContentHashMsgID("douyin", conv, content),
-		Platform: "douyin", AccountID: "acct-sa-br", Direction: "outbound",
-		Status: "delivered", MsgType: "text", SenderID: "acct-sa-br",
+		Platform: "douyin", AccountID: account, Direction: "outbound",
+		Status: "delivered", MsgType: "text", SenderID: account,
 		ReceiverID: hub.SenderID, Content: content,
 		ConversationID: conv, IsAIReply: true, SentAt: time.Now(),
 	}
@@ -722,8 +723,8 @@ func TestBridgeSender_DuplicateOccupied(t *testing.T) {
 
 	bridgeCtx := tenant.WithTenantID(context.Background(), 1) // 占位/审计行需要租户（fail-closed）
 	useLegacyBridgeFixture(t)
-	bridgeCtx = localBridgeSubmitContext(t, bridgeCtx, "douyin", "acct-sa-br", "text")
-	sent, sendErr := svc.sendOutbound(bridgeCtx, ChannelDouyin, "acct-sa-br",
+	bridgeCtx = localBridgeSubmitContext(t, bridgeCtx, "douyin", account, "text")
+	sent, sendErr := svc.sendOutbound(bridgeCtx, ChannelDouyin, account,
 		&ParsedPayload{EventID: "evt-sa-br-dup", Sender: hub.SenderID, Content: "在吗", ChatID: conv},
 		content, hub, nil)
 	if sent {
@@ -767,13 +768,12 @@ func TestBridgeSender_UndeliverableReason(t *testing.T) {
 	if ce == nil || ce.Retryable {
 		t.Fatalf("占位账号失败不可重试，got %+v", sendErr)
 	}
-	var row model.MessageHub
-	if err := database.Where("platform = ? AND conversation_id = ? AND direction = ?", "douyin", conv, "outbound").
-		Order("id desc").First(&row).Error; err != nil {
-		t.Fatalf("应落出站行: %v", err)
+	var count int64
+	if err := database.Model(&model.MessageHub{}).Where("platform = ? AND conversation_id = ? AND direction = ?", "douyin", conv, "outbound").Count(&count).Error; err != nil {
+		t.Fatal(err)
 	}
-	if row.Status != "failed" || row.Extra["undeliverable_reason"] != "placeholder-account" {
-		t.Errorf("应标 failed 且携带 undeliverable_reason，status=%s Extra=%v", row.Status, row.Extra)
+	if ce.Category != CategoryBadRequest || count != 0 {
+		t.Fatalf("非法显式账号应在入队前拒绝：category=%s outbound=%d", ce.Category, count)
 	}
 }
 
@@ -791,11 +791,12 @@ func TestBridgeSender_RetryCarriesStrippedContent(t *testing.T) {
 	// 超长会话号触发 message_hub 出站行写入失败（varchar 100）→ 可重试失败 → 重试行入队。
 	// 入站 hub 行只在内存里造（不落库）——先撞同一个长度限制就轮不到出库失败分支（b5 同款）。
 	longConv := "cs-sa-br-strip-" + strings.Repeat("x", 110)
-	hub := bridgeInboundHub("douyin", "acct-sa-br", longConv, "cust-sa-br-strip")
+	account := seedCanonicalOutboundAccount(t, database, 1, "douyin", "acct-sa-br-strip")
+	hub := bridgeInboundHub("douyin", account, longConv, "cust-sa-br-strip")
 	bridgeCtx := tenant.WithTenantID(context.Background(), 1)
 	useLegacyBridgeFixture(t)
 	bridgeCtx = localBridgeSubmitContext(t, bridgeCtx, "douyin", hub.AccountID, "text")
-	sent, sendErr := svc.sendOutbound(bridgeCtx, ChannelDouyin, "acct-sa-br",
+	sent, sendErr := svc.sendOutbound(bridgeCtx, ChannelDouyin, account,
 		&ParsedPayload{EventID: "evt-sa-br-strip", Sender: hub.SenderID, Content: "在吗", ChatID: longConv},
 		md, hub, nil)
 	if sent {

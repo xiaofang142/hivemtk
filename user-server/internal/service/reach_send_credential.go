@@ -46,8 +46,8 @@ var ErrReachSendUnknown = errors.New("reach send result unknown: 发送结果未
 
 // reachSendCredential 是持久在 job.Payload 里的发送凭据。
 type reachSendCredential struct {
-	IntentKey string `json:"intent_key"`          // 发送意图（租户+作业+渠道+账号+客户+内容）
-	State     string `json:"state"`               // sending/accepted/failed/unknown
+	IntentKey string `json:"intent_key"`           // 发送意图（租户+作业+渠道+账号+客户+内容）
+	State     string `json:"state"`                // sending/accepted/failed/unknown
 	MessageID string `json:"message_id,omitempty"` // 平台受理/入队凭据
 	Channel   string `json:"channel"`
 	Delivery  string `json:"delivery,omitempty"` // queued(email)/sent(其它)
