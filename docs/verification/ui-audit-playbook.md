@@ -143,3 +143,24 @@ const bad = ev.filter(e => e.method==='Network.responseReceived' && e.params.res
 | INV-04c | `POST /api/mcp` | 在生成的能力表 `menu_capability_routes.go:303` 里但独立组无 `RoutePolicyGuard`；`MCPGuard` 本身已是专用凭证身份门（凭证对/单值密钥 + tenant_code，无凭证 fail-closed 503） | 在生成器 `scripts/menu-route-role-audit.py` 加「专用凭证入口」排除名单后重跑 `--emit-go`，不能直接登记匿名清单（否则触发 wronglyAllowed） |
 
 **误修警示**：给 sagex 组挂 `RoutePolicyGuard`/JWT 会因读不到 role 直接 401，打断真机上报；给 mcp 组挂能力守卫会因无授予 403 打断外部 AI 客户端调用（能力表命中还要求 JWT，而 MCP 调用方没有登录态）。运行时探针实证：无凭证访问 upload/mcp 返回 401、bootstrap 404（配置未启用），并非真实匿名漏洞。
+
+## 7. D 轮深度点验方法（数据三源核对，2026-11-25）
+
+C 轮只做"加载观察 + 只读点击"；D 轮追加**数据正确性**核对，按以下三源交叉（每页只核对一两个最关键的数值，不做脚本批点）：
+
+1. **API**：`page.fetch(页面实际请求的路径)` 取 `data.total` / `data.list.length` / 统计值（注意方法是 GET 还是 POST——`/api/asset-bundle/list` 必须 POST + JSON body，GET 会 400）。
+2. **DOM**：页面"共 N 条"文字、`table tbody tr` 行数、统计卡片数值。采集行数时**只取第一个真实数据表**（`querySelectorAll('table tbody tr')` 会把日期面板的 7×2 行算进去，造成虚高）。
+3. **DB**：本机 `psycopg2` 直连 `127.0.0.1:8202`（user_db），查对应表行数/字段值；注意 API 的 total 常是 `data_scope` 过滤后的数（如 clues DB 316 但 API 27），按 US1 数据权限设计解读。
+4. **表单/下拉**：空提交看 `.el-form-item__error` + toast + 是否发 POST（前端校验应拦截）；下拉展开核对选项来源（硬编码 preset / API / allow-create），区分多个 select 的 Teleport dropdown 别混采。
+
+### D 轮代表性核对结果（API total = 页面分页 = DB）
+- `/profile`：API current-user(id26/uit_admin/UI测试管理员/email) = DOM 值 = DB `system_users` row26。
+- `/channels/accounts`：DB `channel_accounts` 3 行 = API 3 条 = 表格 3 行；搜"deepverify"→1 行、重置→3 行。
+- `/aiProductivity/list`：overview API 53/96.29%/3.145s/340145 = DOM 53/96%/3/340,145。
+- `/faq/list` 13393、`/operationLog/list` 54506、`/geo-tools/alerts` 17747、`/messageHub/list` 785、`/badCase/list` 264、`/crm/list` 139、`/oneid/list` 141、`/clue/list` 27。
+- 线上（租户18）：clue 43、crm 30、faq 30、badCase 235、opLog 4980、c360 54——全部 API total = 页面分页。
+
+### 口径说明
+- 167 条记为 `D轮深度`（API/DOM/DB 三源核对或等价统计核对），113 条记为 `D轮复核`（导航复核 + API/渲染 + 只读交互），12 条线上 `D轮线上深度`。不把只做导航复核的条目夸大为三源核对。
+- 表单页写操作一律不提交；深链 `:id` 用列表真实 id 复验，不存在的 id 返回 404 属 fail-closed 降级。
+- 当前本地 8204 实例 `TENANT_MODE=off / edition=opensource`（`.env` 被并行会话改过），渠道下拉为空是版本过滤设计内；线上是 SaaS 租户 18。
