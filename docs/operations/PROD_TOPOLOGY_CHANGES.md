@@ -4,6 +4,14 @@
 > 否则换机 / 重建部署时会静默丢失（2026-11-04 二次审核发现：`deploy/` 目录
 > 不入库，上传卷与 nginx 分流改完只存在于当前机器）。
 
+## 2026-11-26 · 线索治理页接入线索发现智能体入口上线（链 D 4dcf21698）
+
+- **发布提交**：`hivemtk-user` `04205d398`（`fix(web): 线索治理页接入线索发现智能体入口`），前端源码 `user-web/src/views/leads/Rules.vue` + 单测；本地 HEAD `4dcf21698`。
+- **发布动作（链 D 手工同步）**：`npx vite build --mode production` 通过（PWA 705 entries）；线上先备份 `user-web.snapshot-20261126-002152.tgz`（3.1M），再 `rsync -a --delete user-web/dist/ → mtk-prod:/www/wwwroot/hivemtk/user-web/`（宝塔 `.user.ini` Operation not permitted 无害）。
+- **验证**：线上 `https://work.xapptool.cn/version.json` buildId=`4dcf21698-1795623643117`（发布前 `1e71d8f2c`）；index.js 指纹线上/本地同为 `assets/index-CrwA33-K.js`。
+- **发布后回归**：ego-browser 线上（租户18/admin）访 `#/leads/rules`，显式点新增的「线索发现智能体」按钮 → 正确跳转 `#/leads/mining-agents`，列表页正常渲染（空态「暂无线索发现智能体」），0 console.error / 0 非2xx。
+- **配套修复**：本轮同时修掉链 A 脚本 `deploy/deploy-api.sh` 的 rc=255 遗留（step6 远程读数 ssh 抖动致 state 未写 → `remote_read` 三次重试 + 已知值兜底，提交 `4dcf21698`），并清理仓根误留的明文 JWT 临时文件 `.audit-token.tmp`。
+
 ## 2026-11-26 · SageX 非文字消息过滤上线（链 A ad8d940c5）
 
 - **发布提交**：`hivemtk-user` `ad8d940c5`（`fix(user-server): reject non-text SageX notifications before inbox`），已推 `gitee-upstream/master` + `upstream/master`；自上次发布基线 `2656c5452` 起 1 个 user-server 提交。配套客户端提交在独立仓 `sagex`：`9fcf859`（`fix(sagex): drop non-text placeholder notifications from upload chain`，已推 `origin/main`），两端 Android 单测 + debug 构建均通过。
