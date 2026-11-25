@@ -4,6 +4,15 @@
 > 否则换机 / 重建部署时会静默丢失（2026-11-04 二次审核发现：`deploy/` 目录
 > 不入库，上传卷与 nginx 分流改完只存在于当前机器）。
 
+## 2026-11-26 · SageX 非文字消息过滤上线（链 A ad8d940c5）
+
+- **发布提交**：`hivemtk-user` `ad8d940c5`（`fix(user-server): reject non-text SageX notifications before inbox`），已推 `gitee-upstream/master` + `upstream/master`；自上次发布基线 `2656c5452` 起 1 个 user-server 提交。配套客户端提交在独立仓 `sagex`：`9fcf859`（`fix(sagex): drop non-text placeholder notifications from upload chain`，已推 `origin/main`），两端 Android 单测 + debug 构建均通过。
+- **发布门禁**：`go vet` 通过；`go test` 仅有 `test password is missing` DB 环境门禁（UNVERIFIED，不阻断，无业务失败）；交叉编译产物 sha256 `e563289b718f70d5…`。
+- **API 上线**：2026-11-26 00:05（脚本时间戳 20261125-235619）；运行镜像 `sha256:458ecf50bf59a426cd46403dc6793efd2998cfc632ae5cd7c544f3452f0d357b`，容器启动 `2026-11-25T15:57:52.386746351Z`；远端二进制双端 sha256 一致，容器内与公网 `https://workapi.xapptool.cn/api/health` 均健康 code 0，公开 seed 口令探针 GREEN（401）。
+- **回滚点**：镜像 `mtk-user-server:rollback-20261125-235619`，二进制 `/www/wwwroot/hivemtk/user-server/user-server.bak-20261125-235619`。
+- **线上行为核验**：以有效 identify_code 向 `/api/integrations/sagex/upload` 发批次实测——`[图片]` / `【语音】` / `parse_status=content_unavailable` 三类事件均返回 `rejected / NO_TEXT_CONTENT`（3 条终态 receipt），**0 条进入 message_hub**；同批正常文字消息仍返回 `accepted` 并入库 1 条。探针数据（1 条 hub 行 + 4 条 receipt + 2 条 installation）已在事务内清理并复核 `0|0|0`，本地临时凭证文件已删除。
+- **范围与边界**：SageX 是独立 Android 仓，客户端修复需随 APK 重打包发布才到用户设备；本轮链 A 只发布服务端兜底。user-web / embed-sdk 无源码改动，SPA 未重发；平台端与链 B/C 本轮无改动未执行。
+
 ## 2026-11-25 · 路由守卫与渠道账号查询修正上线（链 A 2656c5452）
 
 - **发布提交**：`hivemtk-user` `2656c5452187167d1ad9dc5b1c70d141c691efcd`，已推 `gitee-upstream/master` + `upstream/master`；自上次发布基线 `fd0fa270b` 起 1 个 user-server 提交，含外部路由守卫策略、渠道账号版本门查询修正与对应测试。
