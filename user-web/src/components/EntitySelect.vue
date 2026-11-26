@@ -1,6 +1,6 @@
 <template>
   <el-select
-    :model-value="modelValue"
+    :model-value="displayValue"
     :placeholder="placeholder"
     :clearable="clearable"
     :filterable="filterable"
@@ -21,7 +21,9 @@
 <script setup>
 // 外键字段统一下拉：entity=user|adminUser|agent|customer。
 // 值是关联实体 id（原类型直传），label 是「名称（#id）」，与列表关联值同口径。
+import { computed } from 'vue'
 import { useEntityOptions } from '@/composables/useEntityOptions'
+import { normalizeSelectValue } from '@/utils/selectValue'
 
 const props = defineProps({
   modelValue: { type: [String, Number, Array], default: null },
@@ -36,6 +38,7 @@ const props = defineProps({
 })
 const emit = defineEmits(['update:modelValue', 'change'])
 const { options } = useEntityOptions(props.entity, { admin: props.admin })
+const displayValue = computed(() => normalizeSelectValue(props.modelValue, options.value))
 
 function onChange(value) {
   emit('update:modelValue', value)

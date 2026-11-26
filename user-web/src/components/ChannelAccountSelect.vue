@@ -1,6 +1,6 @@
 <template>
   <el-select
-    :model-value="modelValue"
+    :model-value="displayValue"
     :placeholder="placeholder"
     :clearable="clearable"
     filterable
@@ -22,6 +22,7 @@
 // 且所属渠道被停用时 fail-closed 不返回。value 为账号数字 ID，与业务表 account_id 同口径。
 import { computed, onMounted } from 'vue'
 import { useChannelCatalogStore } from '@/stores/channelCatalog'
+import { normalizeSelectValue } from '@/utils/selectValue'
 
 const props = defineProps({
   modelValue: { type: [String, Number], default: null },
@@ -38,6 +39,7 @@ const catalog = useChannelCatalogStore()
 onMounted(() => catalog.ensure())
 
 const options = computed(() => catalog.accountOptions(props.channel))
+const displayValue = computed(() => normalizeSelectValue(props.modelValue, options.value))
 
 function onChange(value) {
   emit('update:modelValue', value)
