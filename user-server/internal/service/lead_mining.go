@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"hivemtk-user/internal/aiagent/llm"
@@ -100,6 +101,46 @@ type Service struct {
 	hitsProvider func(context.Context, DetectionInput) ([]model.LeadMiningHit, error)
 	cancel       context.CancelFunc
 	wg           sync.WaitGroup
+
+	// LM-09：按账号/会话的尾判水位；内存只做唤醒，耐久所有权仍归 BridgeLeadTask/MessageHub。
+	// 「仅入队」不算完成，只有判定耐久落库后才 NoteJudged 移除待处理。
+	tail        *LeadTailWatermark
+	tailSeq     atomic.Uint64
+	tailHubs    sync.Map // key -> leadTailCandidate，每个水位保留最新一条用于尾判重放
+	pending     chan *model.MessageHub
+	tailMaxWait time.Duration
+
+	// LM-03：判定记录仓储注入口。生产构造时装配并开启严格模式（落库失败即挡副作用）；
+	// 未装配的单测保留旧的 fail-visible 兼容行为，不因此改变既有断言。
+	judgementRepo   repository.LeadMiningJudgementRepository
+	strictJudgement bool
+
+	// LM-07：一次分析冻结一份有效配置快照。nil 时保持 legacy 判据（单测兼容）。
+	configResolver *LeadMiningConfigResolver
+}
+
+// leadTailCandidate 水位对应的最新待判消息与序号；迟到旧任务不得覆盖新水位。
+type leadTailCandidate struct {
+	hub *model.MessageHub
+	seq uint64
+}
+
+// 尾判重放时经 context 传递，避免为 force 改坏 s.process 的既有调用面。
+type leadTailForceKey struct{}
+type leadTailSeqKey struct{}
+
+// leadTailKeyFor 与 process 的防抖键同账号边界，确保跨账号同发送人不互相抑制。
+func leadTailKeyFor(hub *model.MessageHub) string {
+	if hub == nil {
+		return ""
+	}
+	key := fmt.Sprintf("%d|%s|%s|", hub.TenantID, strings.TrimSpace(hub.Platform), strings.TrimSpace(hub.AccountID))
+	if hub.IsGroup {
+		key += "g:" + strings.TrimSpace(hub.GroupID)
+	} else {
+		key += "c:" + strings.TrimSpace(hub.ConversationID)
+	}
+	return key
 }
 
 var singleton *Service
@@ -169,7 +210,14 @@ func NewLeadMiningService(clueRepo repository.ClueRepository) *Service {
 		lastJudge:     make(map[string]time.Time),
 		cfgCache:      make(map[uint]leadMiningConfigCacheEntry),
 		cfgGeneration: make(map[uint]uint64),
-		cancel:        cancel,
+		tail:          NewLeadTailWatermark(),
+		pending:       make(chan *model.MessageHub, 1024),
+		tailMaxWait:   leadMiningDebounce,
+		judgementRepo: repository.NewLeadMiningJudgementRepository(),
+		// 生产 fail-closed：判定记录落库失败时不得进入标签/通知/商机等确定性副作用。
+		strictJudgement: true,
+		configResolver:  NewLeadMiningConfigResolver(),
+		cancel:          cancel,
 	}
 	singleton = s
 	for i := 0; i < s.workers; i++ {
@@ -271,6 +319,41 @@ func ListLeadMiningJudgements(ctx context.Context, page, limit int, platform, ac
 	return repository.NewLeadMiningJudgementRepository().List(ctx, page, limit, platform, accountID, leadRole, matched)
 }
 
+// ListLeadMiningJudgementsScoped 按员工可见账号集合过滤判定记录（LM-13）。
+// accounts=nil 表示管理员全量；受限员工传入可见账号集合，空集合拒绝/空列表由仓储处理。
+func ListLeadMiningJudgementsScoped(ctx context.Context, accounts []string, page, limit int, platform, accountID, leadRole string, matched *bool) ([]model.LeadMiningJudgement, int64, error) {
+	repo := repository.NewLeadMiningJudgementRepository()
+	if accounts == nil {
+		return repo.List(ctx, page, limit, platform, accountID, leadRole, matched)
+	}
+	if accountID != "" {
+		allowed := false
+		for _, a := range accounts {
+			if strings.TrimSpace(a) == strings.TrimSpace(accountID) {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			return []model.LeadMiningJudgement{}, 0, nil
+		}
+		accounts = []string{accountID}
+	}
+	return repo.ListScoped(ctx, accounts, page, limit, platform, leadRole, matched)
+}
+
+// GetLeadMiningJudgementDetailScoped 按员工可见账号集合读取判定详情（LM-13）。
+func GetLeadMiningJudgementDetailScoped(ctx context.Context, judgementID string, accounts []string) (*model.LeadMiningJudgement, error) {
+	if strings.TrimSpace(judgementID) == "" {
+		return nil, fmt.Errorf("judgement_id 不能为空")
+	}
+	repo := repository.NewLeadMiningJudgementRepository()
+	if accounts == nil {
+		return repo.GetByID(ctx, judgementID)
+	}
+	return repo.GetByIDScoped(ctx, judgementID, accounts)
+}
+
 func leadMiningConfigToDTO(m *model.LeadMiningConfig) *dto.LeadMiningConfig {
 	return &dto.LeadMiningConfig{
 		ID:             m.ID,
@@ -307,24 +390,79 @@ func (s *Service) Stop() {
 	s.wg.Wait()
 }
 
-// Enqueue 非阻塞入队：核心业务只在消息落库后调用一次，绝不阻塞/入侵
+// SetConfigResolver 注入一次分析冻结的有效配置快照解析器（装配点/测试用）。
+func (s *Service) SetConfigResolver(r *LeadMiningConfigResolver) {
+	if s != nil && r != nil {
+		s.configResolver = r
+	}
+}
+
+// Enqueue 非阻塞入队：核心业务只在消息落库后调用一次，绝不阻塞/入侵。
+// LM-09：队列满不再静默丢弃——保留水位并转待处理缓冲，由 worker 补扫；
+// 缓冲也满时记显式错误而非无声丢消息，水位保留供按 MessageHub 补扫恢复。
 func (s *Service) Enqueue(hub *model.MessageHub) {
 	if s == nil || hub == nil {
 		return
 	}
+	if s.tail == nil {
+		select {
+		case s.queue <- hub:
+		default:
+			logger.Warnf("[lead-mining] 队列已满，丢弃消息 msgID=%s", hub.MsgID)
+		}
+		return
+	}
+	seq := s.tailSeq.Add(1)
+	key := leadTailKeyFor(hub)
+	at := time.Now()
+	s.tailHubs.Store(key, leadTailCandidate{hub: hub, seq: seq})
 	select {
 	case s.queue <- hub:
+		s.tail.NoteEnqueued(key, seq, at)
 	default:
-		logger.Warnf("[lead-mining] 队列已满，丢弃消息 msgID=%s", hub.MsgID)
+		s.tail.NoteQueueFull(key, seq, at)
+		select {
+		case s.pending <- hub:
+			logger.Warnf("[lead-mining] 主队列已满，消息转入待处理缓冲 msgID=%s", hub.MsgID)
+		default:
+			logger.Errorf("[lead-mining] 待处理缓冲已满，水位保留待补扫 key=%s msgID=%s", key, hub.MsgID)
+		}
 	}
+}
+
+// tailFlushInterval 尾判扫描周期：不超过最大等待的一半，最低 200ms，避免忙轮询。
+func (s *Service) tailFlushInterval() time.Duration {
+	wait := s.tailMaxWait
+	if wait <= 0 {
+		wait = leadMiningDebounce
+	}
+	interval := wait / 2
+	if interval < 200*time.Millisecond {
+		interval = 200 * time.Millisecond
+	}
+	if interval > 5*time.Second {
+		interval = 5 * time.Second
+	}
+	return interval
 }
 
 func (s *Service) worker(ctx context.Context) {
 	defer s.wg.Done()
+	ticker := time.NewTicker(s.tailFlushInterval())
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-ticker.C:
+			s.drainPending()
+			s.flushDueTails(ctx)
+		case hub := <-s.pending:
+			select {
+			case s.queue <- hub:
+			default:
+				// 主队列仍满：水位未清，下个周期继续补扫，不丢消息。
+			}
 		case hub := <-s.queue:
 			func() {
 				defer func() {
@@ -336,6 +474,57 @@ func (s *Service) worker(ctx context.Context) {
 			}()
 		}
 	}
+}
+
+// drainPending 把待处理缓冲里的消息重新投入主队列；投不进去的保持水位待下轮。
+func (s *Service) drainPending() {
+	if s.tail == nil {
+		return
+	}
+	for {
+		select {
+		case hub := <-s.pending:
+			select {
+			case s.queue <- hub:
+			default:
+				s.pending <- hub
+				return
+			}
+		default:
+			return
+		}
+	}
+}
+
+// flushDueTails 最后一条入队后超过最大等待仍无判定结果时，强制重放最新消息做尾判。
+// 尾判只在仍有 unfinished 水位时触发；判定落库成功后水位已被 NoteJudged 清除。
+func (s *Service) flushDueTails(ctx context.Context) {
+	if s.tail == nil {
+		return
+	}
+	now := time.Now()
+	s.tailHubs.Range(func(key, value any) bool {
+		k, ok := key.(string)
+		if !ok || !s.tail.ShouldFlush(k, now, s.tailMaxWait) {
+			return true
+		}
+		cand, ok := value.(leadTailCandidate)
+		if !ok || cand.hub == nil {
+			return true
+		}
+		forced := context.WithValue(ctx, leadTailForceKey{}, true)
+		forced = context.WithValue(forced, leadTailSeqKey{}, cand.seq)
+		select {
+		case s.queue <- cand.hub:
+			logger.Infof("[lead-mining] 尾判重放 key=%s msgID=%s", k, cand.hub.MsgID)
+		default:
+			select {
+			case s.pending <- cand.hub:
+			default:
+			}
+		}
+		return true
+	})
 }
 
 // leadSideEffectsEligible 是业务副作用的统一准入闸：
@@ -354,10 +543,17 @@ func leadSideEffectsEligible(jd *LeadJudgement, evidenceComplete bool, minScore 
 	return true
 }
 
-func (s *Service) process(ctx context.Context, hub *model.MessageHub) {
+func (s *Service) process(ctx context.Context, hub *model.MessageHub, force ...bool) {
 	if hub == nil || hub.Direction != "inbound" {
 		return
 	}
+	// LM-09：尾判重放通过 variadic / context 传入，跳过 60 秒防抖直接分析末条。
+	forced := len(force) > 0 && force[0]
+	if v, ok := ctx.Value(leadTailForceKey{}).(bool); ok && v {
+		forced = true
+	}
+	seq, _ := ctx.Value(leadTailSeqKey{}).(uint64)
+	tailKey := leadTailKeyFor(hub)
 	if hub.TenantID == 0 && tenant.IsMultiTenant() {
 		logger.Warnf("[lead-mining] 拒绝无租户归属的消息 msgID=%s", hub.MsgID)
 		return
@@ -410,14 +606,35 @@ func (s *Service) process(ctx context.Context, hub *model.MessageHub) {
 		return
 	}
 
+	// LM-07：同一分析冻结一份有效配置快照，gate/判定/持久化共用；
+	// 解析/查询故障 fail-closed，不再静默放大到全局启用或混用新旧版本。
+	if s.configResolver != nil {
+		target := s.processRuleTarget(ctx, hub)
+		snap, snapErr := s.configResolver.Resolve(ctx, target)
+		if snapErr != nil || snap == nil {
+			logger.Warnf("[lead-mining] 有效配置解析失败，fail-closed 不发掘 account=%s: %v", hub.AccountID, snapErr)
+			return
+		}
+		// 没有配置任何规则时沿用 legacy 判据，避免未迁移租户被快照整体关闭；
+		// 已配置规则时以快照为唯一权威，规则关闭立即生效。
+		if snap.RuleScope != "" && !snap.Enabled {
+			return
+		}
+		if snap.MinIntentScore > gate.minIntentScore {
+			gate.minIntentScore = snap.MinIntentScore
+		}
+		cfg = applyLeadMiningSnapshotToConfig(cfg, snap)
+	}
+
 	// 日志用粗粒度 account；LM-10 需求分桶键依赖 jd，在 persistLead 内计算。
 	account := fmt.Sprintf("%s:%s", hub.Platform, hub.SenderID)
 	if hub.IsGroup && strings.TrimSpace(hub.GroupID) != "" {
 		account = fmt.Sprintf("%s:%s:%s", hub.Platform, hub.AccountID, hub.GroupID)
 	}
 	s.mu.Lock()
-	if last, ok := s.lastJudge[debounceKey]; ok && time.Since(last) < leadMiningDebounce {
+	if last, ok := s.lastJudge[debounceKey]; ok && time.Since(last) < leadMiningDebounce && !forced {
 		s.mu.Unlock()
+		// 防抖命中不等于已完成：水位由 Enqueue 记录，超时后尾判重放末条。
 		return
 	}
 	s.mu.Unlock()
@@ -431,6 +648,8 @@ func (s *Service) process(ctx context.Context, hub *model.MessageHub) {
 	// 仍走原 Judge 路径，不改变既有测试契约。
 	judgementID := fmt.Sprintf("lmj_%d", time.Now().UnixNano())
 	jctx := s.buildLeadJudgeContext(ctx, hub, history, judgementID)
+	// LM-12：真实消息级快照与提示词共用同一批 hub 行；伪造/合成 ID 不在快照内。
+	jctx.Evidence = NewLeadEvidenceSnapshot(s.fetchHistoryEvidence(ctx, hub))
 	ctx = withLeadReactTask(ctx, buildLeadReactTask(ctx, hub, jctx, scope))
 	var jd *LeadJudgement
 	var err error
@@ -456,7 +675,16 @@ func (s *Service) process(ctx context.Context, hub *model.MessageHub) {
 	s.mu.Lock()
 	s.lastJudge[debounceKey] = time.Now()
 	s.mu.Unlock()
-	s.recordLeadMiningJudgement(ctx, hub, jd, jctx)
+	// LM-03：判定记录落库是副作用的前置检查点。失败时保留本次计算结果与失败原因，
+	// 但不把它当作完整证据放行标签/通知/商机；水位保留，尾判可重试。
+	if !s.recordLeadMiningJudgement(ctx, hub, jd, jctx) {
+		logger.Warnf("[lead-mining] 判定落库失败，仅保留计算结果不进入副作用 msgID=%s", hub.MsgID)
+		return
+	}
+	// LM-09：判定耐久保存后才清除待处理水位；迟到旧任务不会回退新水位。
+	if s.tail != nil && tailKey != "" {
+		s.tail.NoteJudged(tailKey, seq, time.Now())
+	}
 	// D8：判定成功后把结论写成会话历史摘要（compaction），供多轮/长会话复用。
 	saveCompactSummary(ctx, hub, jctx.ChannelAccountID, jd)
 	// 统一业务副作用准入：判定记录/候选已落库，判定自身降级（含 React 降级）不得触发标签/通知/商机。
@@ -466,7 +694,32 @@ func (s *Service) process(ctx context.Context, hub *model.MessageHub) {
 		return
 	}
 
-	s.persistLead(ctx, cfg, hub, account, jd)
+	s.persistLead(ctx, cfg, hub, account, jd, jctx)
+}
+
+// applyLeadMiningSnapshotToConfig 把冻结快照的执行字段并入本次分析使用的配置副本，
+// 不写回缓存/DB（快照只在本次分析生命周期内有效），避免改配置时前后消费不同版本。
+func applyLeadMiningSnapshotToConfig(cfg *model.LeadMiningConfig, snap *LeadMiningConfigSnapshot) *model.LeadMiningConfig {
+	out := cloneLeadMiningConfig(cfg)
+	if out == nil {
+		out = &model.LeadMiningConfig{}
+	}
+	if snap == nil {
+		return out
+	}
+	if snap.MinIntentScore > 0 {
+		out.MinIntentScore = snap.MinIntentScore
+	}
+	if strings.TrimSpace(snap.Model) != "" {
+		out.Model = snap.Model
+	}
+	if strings.TrimSpace(snap.Requirement) != "" {
+		out.Requirement = snap.Requirement
+	}
+	if len(snap.Keywords) > 0 {
+		out.Keywords = append(model.JSONStrings(nil), snap.Keywords...)
+	}
+	return out
 }
 
 // leadMiningGate 发掘准入判据（P0-a）。rule 命中时为唯一权威源；
@@ -662,7 +915,12 @@ func (s *Service) fetchHistory(ctx context.Context, hub *model.MessageHub) []llm
 	return s.fetchHistoryDB(ctx, hub)
 }
 
-func (s *Service) fetchHistoryDB(ctx context.Context, hub *model.MessageHub) []llm.ChatMessage {
+// loadHistoryHubs 是唯一的历史读取口：LM-12 的证据快照与 llm 历史共用同一批真实 hub 行，
+// 避免提示词与证据引用来自不同窗口。
+func (s *Service) loadHistoryHubs(ctx context.Context, hub *model.MessageHub) []model.MessageHub {
+	if s == nil || s.hubRepo == nil || hub == nil {
+		return nil
+	}
 	scope, scopeErr := s.historyScope(ctx, hub)
 	if scopeErr != nil {
 		logger.Warnf("[lead-mining] 拒绝不明确的历史作用域: %v", scopeErr)
@@ -688,6 +946,17 @@ func (s *Service) fetchHistoryDB(ctx context.Context, hub *model.MessageHub) []l
 	for i, j := 0, len(hubs)-1; i < j; i, j = i+1, j-1 {
 		hubs[i], hubs[j] = hubs[j], hubs[i]
 	}
+	return hubs
+}
+
+// fetchHistoryEvidence 取本次授权快照的真实消息行；合成 history_N 不进入快照。
+func (s *Service) fetchHistoryEvidence(ctx context.Context, hub *model.MessageHub) []model.MessageHub {
+	hubs := s.loadHistoryHubs(ctx, hub)
+	return append(hubs, *hub)
+}
+
+func (s *Service) fetchHistoryDB(ctx context.Context, hub *model.MessageHub) []llm.ChatMessage {
+	hubs := s.loadHistoryHubs(ctx, hub)
 	msgs := make([]llm.ChatMessage, 0, len(hubs))
 	for _, h := range hubs {
 		c := strings.TrimSpace(h.Content)
@@ -714,7 +983,11 @@ func (s *Service) fetchHistoryDB(ctx context.Context, hub *model.MessageHub) []l
 	return msgs
 }
 
-func (s *Service) persistLead(ctx context.Context, cfg *model.LeadMiningConfig, hub *model.MessageHub, account string, jd *LeadJudgement) {
+func (s *Service) persistLead(ctx context.Context, cfg *model.LeadMiningConfig, hub *model.MessageHub, account string, jd *LeadJudgement, jctxs ...*LeadJudgeContext) {
+	// LM-07：配置解析失败/未装配时不得因 cfg==nil 在 cfg.Tags 处 panic。
+	if cfg == nil {
+		cfg = &model.LeadMiningConfig{}
+	}
 	tenantID, ok := tenant.FromContext(ctx)
 	if !ok {
 		if tenant.IsMultiTenant() {
@@ -745,17 +1018,25 @@ func (s *Service) persistLead(ctx context.Context, cfg *model.LeadMiningConfig, 
 		}
 	}
 
+	var jctx *LeadJudgeContext
+	if len(jctxs) > 0 {
+		jctx = jctxs[0]
+	}
 	clueType := ClueTypeLeadMining
-
 	nowJudged := time.Now().Unix()
-	evidenceJSON, _ := json.Marshal([]map[string]any{{
-		"message_id": hub.MsgID, "conversation_id": hub.ConversationID,
-		"sender_id": hub.SenderID, "platform": hub.Platform, "reason": jd.Reason,
-	}})
-	leadRole := normalizeLeadRole(jd.LeadRole)
+	evidenceJSON := leadMiningEvidenceJSON(hub, jd, jctx)
+	sourceHitIDs := leadMiningSourceHitIDs(jctx)
+	status := classifyLeadStatus(jd, cfg) // D11/D12：低分/证据不完整进 candidate 待审
 	conversationType := "private"
 	if hub.IsGroup {
 		conversationType = "group"
+	}
+	// LM-14：归档时间只有归档真正成功才写；候选/降级结论不伪填。
+	archiveEligible := leadArchiveAllowed(status == "candidate", jd.Degraded)
+	var archivedAt *int64
+	if archiveEligible {
+		at := nowJudged
+		archivedAt = &at
 	}
 	clue := &model.Clue{
 		Type:               clueType,
@@ -771,27 +1052,25 @@ func (s *Service) persistLead(ctx context.Context, cfg *model.LeadMiningConfig, 
 		OwnerAccount:       hub.AccountID,
 		IsGroup:            hub.IsGroup,
 		GroupID:            hub.GroupID,
-		LeadRole:           leadRole,
-		Status:             classifyLeadStatus(jd, cfg), // D11/D12：低分/证据不完整进 candidate 待审
-		EvidenceJSON:       string(evidenceJSON),
+		LeadRole:           normalizeLeadRole(jd.LeadRole),
+		Status:             status,
+		EvidenceJSON:       evidenceJSON,
 		Summary:            jd.Summary,
 		FollowupSuggestion: jd.FollowupSuggestion,
 		LastJudgedAt:       &nowJudged,
 		SourceChannel:      hub.Platform,
 		SourceAccountID:    hub.AccountID,
 		ConversationType:   conversationType,
+		// LM-14：四条写入路径共用的归档关联字段，使 360/证据回放可回查真实主体与来源。
+		CustomerID:   customer.ID,
+		UserInfo:     leadMiningUserInfo(customer, hub),
+		SourceHitIDs: sourceHitIDs,
+		ArchivedAt:   archivedAt,
 	}
 
-	existing, gerr := s.clueRepo.FindByTypeAndAccount(ctx, clueType, account)
-	if gerr == nil && existing != nil {
-		nowJudged := time.Now().Unix()
-		evidenceJSON, _ := json.Marshal([]map[string]any{{
-			"message_id": hub.MsgID, "conversation_id": hub.ConversationID,
-			"sender_id": hub.SenderID, "platform": hub.Platform, "reason": jd.Reason,
-		}})
-		promoted := promoteStatus(existing.Status, jd, cfg) // D14：高分自动转正，只升不降
-		if err := s.clueRepo.UpdateByID(ctx, existing.ID, map[string]any{
-			"status":              promoted,
+	updates := func(statusValue string) map[string]any {
+		m := map[string]any{
+			"status":              statusValue,
 			"intent_score":        int64(jd.IntentScore),
 			"desc":                jd.Summary,
 			"is_opportunity":      boolToInt(jd.IntentScore >= leadMiningHighOpportunity),
@@ -800,36 +1079,46 @@ func (s *Service) persistLead(ctx context.Context, cfg *model.LeadMiningConfig, 
 			"is_group":            hub.IsGroup,
 			"group_id":            hub.GroupID,
 			"lead_role":           normalizeLeadRole(jd.LeadRole),
-			"evidence_json":       string(evidenceJSON),
+			"evidence_json":       evidenceJSON,
 			"summary":             jd.Summary,
 			"followup_suggestion": jd.FollowupSuggestion,
 			"last_judged_at":      nowJudged,
 			"source_channel":      hub.Platform,
 			"source_account_id":   hub.AccountID,
-			"conversation_type":   map[bool]string{true: "group", false: "private"}[hub.IsGroup],
-		}); err != nil {
-			logger.Warnf("[lead-mining] 更新线索失败 account=%s: %v", account, err)
+			"conversation_type":   conversationType,
+			"customer_id":         customer.ID,
+			"user_info":           leadMiningUserInfo(customer, hub),
+			"source_hit_ids":      sourceHitIDs,
+		}
+		if archiveEligible {
+			m["archived_at"] = archivedAt
+		}
+		return m
+	}
+
+	existing, gerr := s.clueRepo.FindByTypeAndAccount(ctx, clueType, account)
+	if gerr == nil && existing != nil {
+		promoted := promoteStatus(existing.Status, jd, cfg) // D14：高分自动转正，只升不降
+		if err := s.clueRepo.UpdateByID(ctx, existing.ID, updates(promoted)); err != nil {
+			// LM-14：归档写入失败即停止，不得继续通知/转商机造成假成功。
+			logger.Warnf("[lead-mining] 更新线索失败，停止后续副作用 account=%s: %v", account, err)
+			return
 		}
 		// D14：candidate 被后续高分判定自动转正时补发通知（此前 candidate 被抑制）。
 		if existing.Status == "candidate" && promoted != "candidate" {
 			existing.Status = promoted
 			s.notifyLeadDiscovery(ctx, existing, jd)
 		}
-		// 更新分支到此为止没有 clueRepo.Create，线索号是查出来的那一条 ——
-		// 本分支的 return 早于新建那一支，是这条接缝最容易只接一半的地方（判据见用例）。
 		s.tryConvertToOpportunity(ctx, existing.ID, customer, jd)
 		return
 	}
 	if err := s.clueRepo.Create(ctx, clue); err != nil {
 		// TOCTOU 兜底：并发插入冲突时回查已有记录并转为更新（D-01）。
 		if existing2, gerr := s.clueRepo.FindByTypeAndAccount(ctx, clueType, account); gerr == nil && existing2 != nil {
-			nowJudged2 := time.Now().Unix()
-			if uerr := s.clueRepo.UpdateByID(ctx, existing2.ID, map[string]any{
-				"intent_score":   int64(jd.IntentScore),
-				"desc":           jd.Summary,
-				"last_judged_at": nowJudged2,
-			}); uerr != nil {
-				logger.Warnf("[lead-mining] TOCTOU 兜底更新线索失败 account=%s: %v", account, uerr)
+			// 兜底更新与新建写入同字段，不能只写 score/desc/last_judged_at 三个字段。
+			if uerr := s.clueRepo.UpdateByID(ctx, existing2.ID, updates(promoteStatus(existing2.Status, jd, cfg))); uerr != nil {
+				logger.Warnf("[lead-mining] TOCTOU 兜底更新线索失败，停止后续副作用 account=%s: %v", account, uerr)
+				return
 			}
 			s.tryConvertToOpportunity(ctx, existing2.ID, customer, jd)
 			return
@@ -839,6 +1128,50 @@ func (s *Service) persistLead(ctx context.Context, cfg *model.LeadMiningConfig, 
 	}
 	s.notifyLeadDiscovery(ctx, clue, jd)
 	s.tryConvertToOpportunity(ctx, clue.ID, customer, jd)
+}
+
+// leadMiningEvidenceJSON 把真实消息引用（MsgID/说话人/平台/原文/方向）冻结进证据 JSON。
+// 合成 history_N 不属于精确证据，只有 LeadJudgeContext 的真实消息才参与。
+func leadMiningEvidenceJSON(hub *model.MessageHub, jd *LeadJudgement, jctx *LeadJudgeContext) string {
+	rows := make([]map[string]any, 0, 4)
+	if jctx != nil && jctx.Evidence != nil {
+		for _, id := range jctx.Evidence.RealMessageIDs() {
+			rows = append(rows, map[string]any{
+				"message_id": id, "conversation_id": hub.ConversationID,
+				"platform": hub.Platform, "reason": jd.Reason, "coverage": "snapshot",
+			})
+		}
+	}
+	rows = append(rows, map[string]any{
+		"message_id": hub.MsgID, "conversation_id": hub.ConversationID,
+		"sender_id": hub.SenderID, "platform": hub.Platform, "reason": jd.Reason, "coverage": "current",
+	})
+	b, _ := json.Marshal(rows)
+	return string(b)
+}
+
+func leadMiningSourceHitIDs(jctx *LeadJudgeContext) model.JSONStrings {
+	if jctx == nil {
+		return model.JSONStrings{}
+	}
+	out := make(model.JSONStrings, 0, len(jctx.Hits))
+	for _, h := range jctx.Hits {
+		out = append(out, strconv.FormatInt(h.ID, 10))
+	}
+	return out
+}
+
+// leadMiningUserInfo 保留归档时的客户画像与成员身份快照，不凭昵称强并身份。
+func leadMiningUserInfo(c *model.Customer, hub *model.MessageHub) string {
+	if c == nil {
+		return "{}"
+	}
+	b, _ := json.Marshal(map[string]any{
+		"customer_id": c.ID, "unified_id": c.UnifiedID, "name": c.Name,
+		"platform": hub.Platform, "sender_id": hub.SenderID, "sender_name": hub.SenderName,
+		"conversation_id": hub.ConversationID, "is_group": hub.IsGroup, "group_id": hub.GroupID,
+	})
+	return string(b)
 }
 
 // tryConvertToOpportunity 线索写完之后的那一跳（T-P4-05：达标的线索自动变成有人推进的商机）。
@@ -937,17 +1270,11 @@ func (s *Service) resolveCustomer(ctx context.Context, platform, sourceAccountID
 	if platform == "" || senderID == "" {
 		return nil, fmt.Errorf("无客户身份标识")
 	}
-	// LM-PR3: 优先复用已有 Customer 身份，避免 lm:platform:sender 平行主身份长期膨胀。
+	// LM-04：来源账号作用域优先；带来源账号时不得先回退到无作用域的 legacy
+	// lm:platform:sender 键，避免不同接入账号的同名联系人被合并。legacy 键仅在
+	// 缺少可信来源账号（历史/迁移场景）时作为兼容回退。
 	legacyKey := "lm:" + platform + ":" + senderID
-	if c, gerr := s.custRepo.GetByUnifiedID(ctx, legacyKey); gerr == nil && c != nil {
-		if name != "" && (c.Name == "" || c.Name == legacyKey) {
-			c.Name = name
-			_ = s.custRepo.Update(ctx, c)
-		}
-		return c, nil
-	}
-	candidate := &model.Customer{Name: name}
-	applyLeadMiningIdentity(candidate, platform, senderID)
+	scoped := strings.TrimSpace(sourceAccountID) != ""
 	unifiedID := leadMiningUnifiedIDFor(platform, sourceAccountID, senderID)
 	if unifiedID == "" {
 		unifiedID = legacyKey
@@ -959,6 +1286,17 @@ func (s *Service) resolveCustomer(ctx context.Context, platform, sourceAccountID
 		}
 		return c, nil
 	}
+	if !scoped {
+		if c, gerr := s.custRepo.GetByUnifiedID(ctx, legacyKey); gerr == nil && c != nil {
+			if name != "" && (c.Name == "" || c.Name == legacyKey) {
+				c.Name = name
+				_ = s.custRepo.Update(ctx, c)
+			}
+			return c, nil
+		}
+	}
+	candidate := &model.Customer{Name: name}
+	applyLeadMiningIdentity(candidate, platform, senderID)
 	candidate.UnifiedID = unifiedID
 	candidate.SourceChannel = platform
 	candidate.SourceAccountID = sourceAccountID
@@ -966,7 +1304,7 @@ func (s *Service) resolveCustomer(ctx context.Context, platform, sourceAccountID
 		if c2, g2 := s.custRepo.GetByUnifiedID(ctx, unifiedID); g2 == nil && c2 != nil {
 			return c2, nil
 		}
-		if unifiedID != legacyKey {
+		if !scoped && unifiedID != legacyKey {
 			if c2, g2 := s.custRepo.GetByUnifiedID(ctx, legacyKey); g2 == nil && c2 != nil {
 				return c2, nil
 			}
@@ -1160,18 +1498,24 @@ func normalizeLeadRole(role string) string {
 	}
 }
 
-func (s *Service) recordLeadMiningJudgement(ctx context.Context, hub *model.MessageHub, jd *LeadJudgement, jctxs ...*LeadJudgeContext) {
+// recordLeadMiningJudgement 把判定结果耐久落库，返回是否成功。
+// 生产构造开启 strictJudgement：落库失败必须挡住下游副作用；未装配 DB 的单测
+// 保留 fail-visible 兼容行为（只记日志），不改变既有断言。
+func (s *Service) recordLeadMiningJudgement(ctx context.Context, hub *model.MessageHub, jd *LeadJudgement, jctxs ...*LeadJudgeContext) bool {
 	if hub == nil || jd == nil {
-		return
+		return false
 	}
-	judgementRepo := repository.NewLeadMiningJudgementRepository()
+	judgementRepo := s.judgementRepo
 	if judgementRepo == nil {
-		return
+		judgementRepo = repository.NewLeadMiningJudgementRepository()
+	}
+	if judgementRepo == nil {
+		return false
 	}
 	tid, ok := tenant.FromContext(ctx)
 	if !ok {
 		if tenant.IsMultiTenant() {
-			return
+			return false
 		}
 		tid = tenant.DefaultTenantID
 	}
@@ -1220,13 +1564,28 @@ func (s *Service) recordLeadMiningJudgement(ctx context.Context, hub *model.Mess
 			}
 		}
 		rec.SourceHitIDs = make(model.JSONStrings, 0, len(c.Hits))
-		rec.EvidenceComplete = len(c.Hits) > 0
+		// LM-03：证据完整性与副作用准入闸共用 LeadJudgeContext.EvidenceComplete() 口径：
+		// 必需证据至少一路完整命中即可，可选路/局部覆盖降级不一概挡单；落库与闸门不再分叉。
+		rec.EvidenceComplete = c.EvidenceComplete()
+		evidenceDegraded := c.GroupAggregateFailed || c.ReactDegraded
 		for _, h := range c.Hits {
 			rec.SourceHitIDs = append(rec.SourceHitIDs, strconv.FormatInt(h.ID, 10))
-			if !h.Complete || h.Degraded {
-				rec.EvidenceComplete = false
-				rec.Degraded = true
+			if h.Degraded {
+				evidenceDegraded = true
 			}
+		}
+		if evidenceDegraded {
+			rec.Degraded = true
+		}
+		// LM-03：群聚合失败 / ReAct 降级必须落库可见，不能只藏在 reason 文本。
+		if c.GroupAggregateFailed || c.ReactDegraded || c.DetectionFailed {
+			rec.EvidenceComplete = false
+			rec.Degraded = true
+		}
+		// LM-12：引用的原文/说话人/方向/时间由上下文快照保留；落库失败原因不能
+		// 被当成空证据——结果仍在 ResultJSON 里，只是 EvidenceComplete 关闭。
+		if c.Evidence != nil {
+			rec.ContextMessageIDs = c.Evidence.RealMessageIDs()
 		}
 	}
 	// 二次 LLM 降级判定必须让前端/回放看到 degraded，不能只藏在 reason 文本里。
@@ -1240,7 +1599,10 @@ func (s *Service) recordLeadMiningJudgement(ctx context.Context, hub *model.Mess
 	}
 	if err := judgementRepo.Create(ctx, rec); err != nil {
 		logger.Warnf("[lead-mining] 记录判定失败 msg=%s: %v", hub.MsgID, err)
+		// 生产 fail-closed；未装配仓储的单测只记日志（既有契约）。
+		return !s.strictJudgement
 	}
+	return true
 }
 
 func targetChannelAccountOf(c *LeadJudgeContext) uint {

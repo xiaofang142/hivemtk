@@ -171,8 +171,8 @@ func TestListParentsMergesDBAndSeed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("err=%v", err)
 	}
-	want := []string{"approval_status", "bad_case_status", "custom_domain",
-		"human_task_status", "opportunity_stage", "payment_status"}
+	want := []string{"approval_status", "bad_case_status", "crm_business_type", "crm_industry",
+		"crm_requirement_category", "custom_domain", "human_task_status", "opportunity_stage", "payment_status"}
 	if len(got) != len(want) {
 		t.Fatalf("want %v, got %v", want, got)
 	}

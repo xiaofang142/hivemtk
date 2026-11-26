@@ -87,7 +87,7 @@ func (r *channelAccountRepo) validateChannelForAccount(ctx context.Context, chan
 	if channelID == 0 {
 		return ErrChannelAccountChannelUnavailable
 	}
-	q := r.db.WithContext(tenant.WithSystemScope(ctx)).Model(&model.Channel{}).Where("id = ?", channelID)
+	q := dbFromCtx(tenant.WithSystemScope(ctx)).Model(&model.Channel{}).Where("id = ?", channelID)
 	if !edition.AllowsContext(ctx, edition.FeatureDomesticChannels) {
 		q = q.Where("code NOT IN ?", edition.DomesticChannelCodes())
 	}
@@ -126,7 +126,7 @@ func (r *channelAccountRepo) Create(ctx context.Context, acc *model.ChannelAccou
 	if err := r.validateChannelForAccount(ctx, acc.ChannelID); err != nil {
 		return err
 	}
-	return r.db.WithContext(ctx).Create(acc).Error
+	return dbFromCtx(ctx).Create(acc).Error
 }
 
 func (r *channelAccountRepo) GetByID(ctx context.Context, tenantID, id uint) (*model.ChannelAccount, error) {
@@ -134,7 +134,7 @@ func (r *channelAccountRepo) GetByID(ctx context.Context, tenantID, id uint) (*m
 		return nil, ErrChannelStoreUnavailable
 	}
 	var acc model.ChannelAccount
-	err := applyChannelEditionGate(ctx, r.db.WithContext(ctx).Model(&model.ChannelAccount{}).
+	err := applyChannelEditionGate(ctx, dbFromCtx(ctx).Model(&model.ChannelAccount{}).
 		Where("tenant_id = ? AND id = ?", tenantID, id)).First(&acc).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
@@ -149,7 +149,7 @@ func (r *channelAccountRepo) List(ctx context.Context, opts ChannelAccountListOp
 	if !r.Available() {
 		return nil, ErrChannelStoreUnavailable
 	}
-	q := applyChannelEditionGate(ctx, r.db.WithContext(ctx).Model(&model.ChannelAccount{}).
+	q := applyChannelEditionGate(ctx, dbFromCtx(ctx).Model(&model.ChannelAccount{}).
 		Where("tenant_id = ?", opts.TenantID))
 	if opts.ChannelID > 0 {
 		q = q.Where("channel_id = ?", opts.ChannelID)
@@ -184,7 +184,7 @@ func (r *channelAccountRepo) GetByIDs(ctx context.Context, tenantID uint, ids []
 		return nil, nil
 	}
 	var rows []model.ChannelAccount
-	if err := applyChannelEditionGate(ctx, r.db.WithContext(ctx).Model(&model.ChannelAccount{}).
+	if err := applyChannelEditionGate(ctx, dbFromCtx(ctx).Model(&model.ChannelAccount{}).
 		Where("tenant_id = ? AND id IN ?", tenantID, ids)).Find(&rows).Error; err != nil {
 		return nil, err
 	}
@@ -203,7 +203,7 @@ func (r *channelAccountRepo) GetByIdentifyCode(ctx context.Context, code string)
 	sysCtx := tenant.WithSystemScope(ctx)
 
 	var byCode []model.ChannelAccount
-	if err := applyChannelEditionGate(ctx, r.db.WithContext(sysCtx).Model(&model.ChannelAccount{}).
+	if err := applyChannelEditionGate(ctx, dbFromCtx(sysCtx).Model(&model.ChannelAccount{}).
 		Where("identify_code = ?", code)).Limit(2).Find(&byCode).Error; err != nil {
 		return nil, err
 	}
@@ -217,7 +217,7 @@ func (r *channelAccountRepo) GetByIdentifyCode(ctx context.Context, code string)
 	// 权威码表：闸门与解析必须一致——当前码或在途窗口内旧码都接受，
 	// 窗口外旧码返回 nil（fail-closed）。渠道码只确定 tenant+channel，
 	// 多账号时由调用方用明确账号信息消歧，这里绝不取首条。
-	rec, err := findValidIdentifyCode(ctx, r.db, code)
+	rec, err := findValidIdentifyCode(ctx, dbFromCtx(ctx), code)
 	if err != nil {
 		return nil, err
 	}
@@ -225,7 +225,7 @@ func (r *channelAccountRepo) GetByIdentifyCode(ctx context.Context, code string)
 		return nil, nil
 	}
 	var byChannel []model.ChannelAccount
-	if err := applyChannelEditionGate(ctx, r.db.WithContext(sysCtx).Model(&model.ChannelAccount{}).
+	if err := applyChannelEditionGate(ctx, dbFromCtx(sysCtx).Model(&model.ChannelAccount{}).
 		Where("tenant_id = ? AND channel_id = ?", rec.TenantID, rec.ChannelID)).
 		Limit(2).Find(&byChannel).Error; err != nil {
 		return nil, err
@@ -255,7 +255,7 @@ func (r *channelAccountRepo) Update(ctx context.Context, tenantID, id uint, upda
 			return err
 		}
 	}
-	return applyChannelEditionGate(ctx, r.db.WithContext(ctx).Model(&model.ChannelAccount{}).
+	return applyChannelEditionGate(ctx, dbFromCtx(ctx).Model(&model.ChannelAccount{}).
 		Where("tenant_id = ? AND id = ?", tenantID, id)).Updates(updates).Error
 }
 
@@ -263,7 +263,7 @@ func (r *channelAccountRepo) Delete(ctx context.Context, tenantID, id uint) erro
 	if !r.Available() {
 		return ErrChannelStoreUnavailable
 	}
-	return applyChannelEditionGate(ctx, r.db.WithContext(ctx).Model(&model.ChannelAccount{}).
+	return applyChannelEditionGate(ctx, dbFromCtx(ctx).Model(&model.ChannelAccount{}).
 		Where("tenant_id = ? AND id = ?", tenantID, id)).Delete(&model.ChannelAccount{}).Error
 }
 
@@ -272,7 +272,7 @@ func (r *channelAccountRepo) DeleteByChannel(ctx context.Context, tenantID, chan
 	if !r.Available() {
 		return ErrChannelStoreUnavailable
 	}
-	return applyChannelEditionGate(ctx, r.db.WithContext(ctx).Model(&model.ChannelAccount{}).
+	return applyChannelEditionGate(ctx, dbFromCtx(ctx).Model(&model.ChannelAccount{}).
 		Where("tenant_id = ? AND channel_id = ?", tenantID, channelID)).Delete(&model.ChannelAccount{}).Error
 }
 
@@ -280,6 +280,6 @@ func (r *channelAccountRepo) SetIdentifyCodeByChannel(ctx context.Context, tenan
 	if !r.Available() {
 		return ErrChannelStoreUnavailable
 	}
-	return applyChannelEditionGate(ctx, r.db.WithContext(ctx).Model(&model.ChannelAccount{}).
+	return applyChannelEditionGate(ctx, dbFromCtx(ctx).Model(&model.ChannelAccount{}).
 		Where("tenant_id = ? AND channel_id = ?", tenantID, channelID)).Update("identify_code", code).Error
 }

@@ -27,6 +27,9 @@ type ChannelIdentifyCodeRepository interface {
 	// 跨租户系统作用域读（凭证闸门在租户解析之前运行），供 guard 候选源使用。
 	ValidCodes(ctx context.Context) ([]string, error)
 	Upsert(ctx context.Context, rec *model.ChannelIdentifyCode) error
+	// WithTransaction 在单个数据库事务内执行 fn，供服务层把权威码写入与冗余列写入
+	// 原子化（CH-06）；fn 收到携带事务句柄的 ctx，仓储方法经 dbFromCtx 自动参与同一事务。
+	WithTransaction(ctx context.Context, fn func(ctx context.Context) error) error
 	// DeleteByChannel 按租户+渠道清除该渠道的全部识别码行（含重置在途旧码）。
 	// 渠道删除时必须级联调用，否则已删渠道的旧码仍会被 ValidCodes 视为有效。
 	DeleteByChannel(ctx context.Context, tenantID, channelID uint) error
@@ -53,7 +56,7 @@ func (r *channelIdentifyCodeRepo) GetByChannel(ctx context.Context, tenantID, ch
 		return nil, ErrChannelStoreUnavailable
 	}
 	var rec model.ChannelIdentifyCode
-	err := r.db.WithContext(ctx).
+	err := dbFromCtx(ctx).
 		First(&rec, "tenant_id = ? AND channel_id = ?", tenantID, channelID).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
@@ -73,7 +76,7 @@ func (r *channelIdentifyCodeRepo) GetByCode(ctx context.Context, code string) (*
 		return nil, nil
 	}
 	var rows []model.ChannelIdentifyCode
-	if err := r.db.WithContext(tenant.WithSystemScope(ctx)).
+	if err := dbFromCtx(tenant.WithSystemScope(ctx)).
 		Where("code = ?", code).Limit(2).Find(&rows).Error; err != nil {
 		return nil, err
 	}
@@ -118,7 +121,7 @@ func (r *channelIdentifyCodeRepo) ListByTenant(ctx context.Context, tenantID uin
 		return nil, ErrChannelStoreUnavailable
 	}
 	var rows []model.ChannelIdentifyCode
-	if err := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID).Order("id ASC").Find(&rows).Error; err != nil {
+	if err := dbFromCtx(ctx).Where("tenant_id = ?", tenantID).Order("id ASC").Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	return rows, nil
@@ -131,7 +134,7 @@ func (r *channelIdentifyCodeRepo) ValidCodes(ctx context.Context) ([]string, err
 		return nil, ErrChannelStoreUnavailable
 	}
 	var rows []model.ChannelIdentifyCode
-	if err := r.db.WithContext(tenant.WithSystemScope(ctx)).
+	if err := dbFromCtx(tenant.WithSystemScope(ctx)).
 		Where("code <> ''").Find(&rows).Error; err != nil {
 		return nil, err
 	}
@@ -163,7 +166,7 @@ func (r *channelIdentifyCodeRepo) Upsert(ctx context.Context, rec *model.Channel
 	if rec == nil {
 		return errors.New("识别码为空")
 	}
-	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
+	return dbFromCtx(ctx).Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "channel_id"}},
 		DoUpdates: clause.AssignmentColumns([]string{"code", "version", "prev_code", "prev_valid_until", "reset_at", "updated_at"}),
 	}).Create(rec).Error
@@ -178,7 +181,7 @@ func (r *channelIdentifyCodeRepo) RotateCAS(ctx context.Context, tenantID, chann
 	if expectVersion <= 0 {
 		// 并发首次轮转：DoNothing 抑制唯一键冲突但不返回错误；
 		// 必须检查 RowsAffected，否则败者会把库里并不存在的码当成成功返回。
-		res := r.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(rec)
+		res := dbFromCtx(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(rec)
 		if res.Error != nil {
 			return res.Error
 		}
@@ -187,7 +190,7 @@ func (r *channelIdentifyCodeRepo) RotateCAS(ctx context.Context, tenantID, chann
 		}
 		return nil
 	}
-	res := r.db.WithContext(ctx).Model(&model.ChannelIdentifyCode{}).
+	res := dbFromCtx(ctx).Model(&model.ChannelIdentifyCode{}).
 		Where("tenant_id = ? AND channel_id = ? AND version = ?", tenantID, channelID, expectVersion).
 		Updates(map[string]any{
 			"code": rec.Code, "version": rec.Version,
@@ -209,7 +212,19 @@ func (r *channelIdentifyCodeRepo) DeleteByChannel(ctx context.Context, tenantID,
 	if !r.Available() {
 		return ErrChannelStoreUnavailable
 	}
-	return r.db.WithContext(ctx).
+	return dbFromCtx(ctx).
 		Where("tenant_id = ? AND channel_id = ?", tenantID, channelID).
 		Delete(&model.ChannelIdentifyCode{}).Error
+}
+
+// WithTransaction 在单个数据库事务内执行 fn，并把事务句柄放进回调 ctx，
+// 供服务层把权威码写入与冗余列写入纳入同一原子提交（CH-06）。
+// 仓储方法经 dbFromCtx 读取 txCtx，确保读改写都在同一事务。
+func (r *channelIdentifyCodeRepo) WithTransaction(ctx context.Context, fn func(ctx context.Context) error) error {
+	if r == nil || r.db == nil {
+		return ErrChannelStoreUnavailable
+	}
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		return fn(context.WithValue(ctx, txContextKey{}, tx))
+	})
 }

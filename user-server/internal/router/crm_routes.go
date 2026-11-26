@@ -19,6 +19,7 @@ func setupCRMRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	ctl.SetClueNotifier(service.NewLeadNotifyService())
 	if gormDB != nil {
 		ctl.SetProfileService(service.NewCustomer360Service(repository.NewClueRepositoryWithDB(gormDB)))
+		ctl.SetDictionaryService(service.NewDictionaryService(repository.NewDictionaryRepository(gormDB)))
 	}
 
 	g := auth.Group("/manage/crm")
@@ -37,7 +38,11 @@ func setupCRMRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 
 		// 导入导出
 		g.POST("/import", ctl.Import)
+		g.POST("/import/precheck", ctl.ImportPrecheck)
 		g.GET("/export", ctl.Export)
+
+		// CRM-19：行业/业务类型/需求分类受控字典（与编辑/筛选/导入共用）
+		g.GET("/dictionaries/:domain", ctl.BusinessDictionary)
 
 		// 360 / 跨账号行业交叉检索 / AI
 		g.GET("/360/:id", ctl.View360)

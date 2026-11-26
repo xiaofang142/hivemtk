@@ -24,17 +24,21 @@ import (
 type CustomerImportJobService struct {
 	repo          repository.CustomerImportJobRepository
 	custRepo      repository.CustomerRepository
+	companyRepo   repository.CompanyRepository
 	readCSVFileFn func(path string) ([][]string, error) // nil 用生产实现；测试注入故障出口
 	permission    *CustomerPermissionService
 	rowScopeCheck func(rec map[string]string) error // scoped 执行时逐行校验写入权限
-	precheckActor uint                              // scoped 预检时记录创建者
+	executeScope  CustomerDataScope
+	hasScope      bool
+	precheckActor uint // scoped 预检时记录创建者
 }
 
 func NewCustomerImportJobService() *CustomerImportJobService {
 	return &CustomerImportJobService{
-		repo:       repository.NewCustomerImportJobRepository(),
-		custRepo:   repository.NewCustomerRepository(),
-		permission: NewCustomerPermissionService(),
+		repo:        repository.NewCustomerImportJobRepository(),
+		custRepo:    repository.NewCustomerRepository(),
+		companyRepo: repository.NewCompanyRepository(),
+		permission:  NewCustomerPermissionService(),
 	}
 }
 
@@ -386,7 +390,24 @@ func (s *CustomerImportJobService) Execute(ctx context.Context, jobID string) (*
 				report.Errors = append(report.Errors, ImportPrecheckRowError{Row: rowNum, Message: "与系统已有客户重复"})
 				continue
 			case "update":
+				original := *existing
+				// 先验证旧对象在当前员工范围内，再应用新值并验证最终状态。
+				if s.hasScope && s.permission != nil && !s.permission.CanAccess(s.executeScope, existing) {
+					report.FailedRows++
+					report.Errors = append(report.Errors, ImportPrecheckRowError{Row: rowNum, Message: "无权更新该客户"})
+					continue
+				}
 				applyCustomerRecord(existing, rec)
+				ownerID := uint(0)
+				if existing.OwnerUserID != nil {
+					ownerID = *existing.OwnerUserID
+				}
+				if s.hasScope && s.permission != nil && !s.permission.AllowsWrite(s.executeScope, existing.SourceAccountID, existing.Industry, ownerID) {
+					*existing = original
+					report.FailedRows++
+					report.Errors = append(report.Errors, ImportPrecheckRowError{Row: rowNum, Message: "无权导入该客户的账号/行业/负责人"})
+					continue
+				}
 				if err := s.custRepo.Update(ctx, existing); err != nil {
 					report.FailedRows++
 					report.Errors = append(report.Errors, ImportPrecheckRowError{Row: rowNum, Message: "更新客户失败: " + err.Error()})
@@ -846,6 +867,10 @@ func (s *CustomerImportJobService) ExecuteScoped(ctx context.Context, scope Cust
 		return nil, ErrImportJobForbidden
 	}
 	previous := s.rowScopeCheck
+	previousScope := s.executeScope
+	previousHas := s.hasScope
+	s.executeScope = scope
+	s.hasScope = true
 	s.rowScopeCheck = func(rec map[string]string) error {
 		ownerID, _ := cjParseUint(rec["owner_user_id"])
 		if !s.permission.AllowsWrite(scope, rec["source_account_id"], rec["industry"], ownerID) {
@@ -854,9 +879,41 @@ func (s *CustomerImportJobService) ExecuteScoped(ctx context.Context, scope Cust
 		if scope.OnlyOwned && ownerID != scope.UserID {
 			return ErrImportJobForbidden
 		}
+		if rec["company_id"] != "" {
+			id, err := cjParseInt64(rec["company_id"])
+			if err != nil {
+				return ErrImportJobForbidden
+			}
+			if s.companyRepo == nil {
+				s.companyRepo = repository.NewCompanyRepository()
+			}
+			comp, err := s.companyRepo.GetByID(ctx, id)
+			if err != nil || comp == nil {
+				return ErrImportJobForbidden
+			}
+			tid := tenant.WriteTenantID(ctx)
+			if tid > 0 && comp.TenantID != tid {
+				return ErrImportJobForbidden
+			}
+			if !scope.AllAccounts {
+				if len(scope.Industries) > 0 && comp.Industry != "" && !containsCRMString(scope.Industries, comp.Industry) {
+					return ErrImportJobForbidden
+				}
+				if scope.OnlyOwned && (comp.OwnerUserID == nil || *comp.OwnerUserID != scope.UserID) {
+					return ErrImportJobForbidden
+				}
+				if scope.OwnerUserID > 0 && (comp.OwnerUserID == nil || *comp.OwnerUserID != scope.OwnerUserID) {
+					return ErrImportJobForbidden
+				}
+			}
+		}
 		return nil
 	}
-	defer func() { s.rowScopeCheck = previous }()
+	defer func() {
+		s.rowScopeCheck = previous
+		s.executeScope = previousScope
+		s.hasScope = previousHas
+	}()
 	return s.Execute(ctx, jobID)
 }
 

@@ -46,3 +46,18 @@ func (s *LeadEvidenceSnapshot) ReferencesValid(ids []string) bool {
 	}
 	return true
 }
+
+// RealMessageIDs 快照内全部真实消息 ID（排除合成 history_N），用于证据落库与引用校验。
+func (s *LeadEvidenceSnapshot) RealMessageIDs() []string {
+	if s == nil {
+		return nil
+	}
+	out := make([]string, 0, len(s.Messages))
+	for _, m := range s.Messages {
+		id := strings.TrimSpace(m.MsgID)
+		if id != "" && !strings.HasPrefix(id, "history_") {
+			out = append(out, id)
+		}
+	}
+	return out
+}

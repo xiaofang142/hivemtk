@@ -397,6 +397,22 @@ func (s *SageXUploadService) processEvent(ctx context.Context, inst *model.SageX
 		return SageXAckItem{EventID: eventID, Status: SageXAckRetry, Code: "INGEST_FAILED"}
 	}
 
+	// LM-05：通知载荷里的 messages/historic_messages 不再只留在 Extra 里。
+	// 逐条转成规范消息进入同一 ingress；EventID 由源消息级指纹派生，重发/聚合更新
+	// 落到同一 hub 行（幂等），数组重叠由 NormalizeSageXNotificationMessages 去重。
+	arrayEvents := s.buildNormalizedMessageEvents(inst, installationID, batchID, platform, ev, msgEvent)
+	for _, arrayEvent := range arrayEvents {
+		arrayResult, aerr := s.ingress.HandleIngressMessage(ctx, arrayEvent)
+		if aerr != nil {
+			logger.Ctx(ctx).Warn().Msgf("[SageX] array ingress failed installation=%s event=%s source=%s err=%v",
+				installationID, eventID, arrayEvent.EventID, aerr)
+			return SageXAckItem{EventID: eventID, Status: SageXAckRetry, Code: "ARRAY_INGEST_FAILED"}
+		}
+		if arrayResult != nil && !arrayResult.Accepted && !isSageXIngressDuplicateReason(arrayResult.Reason) {
+			return s.saveTerminalReceipt(ctx, inst, installationID, batchID, eventID, SageXAckRejected, 0, "INGRESS_REJECTED")
+		}
+	}
+
 	status := SageXAckAccepted
 	if result != nil {
 		if isSageXIngressDuplicateReason(result.Reason) {
@@ -538,6 +554,92 @@ func (s *SageXUploadService) buildMessageEvent(inst *model.SageXInstallation, in
 		},
 	}
 	return msgEvent, nil
+}
+
+// buildNormalizedMessageEvents LM-05：把已上报的 messages/historic_messages 数组逐条转成
+// 规范 MessageEvent。方向没有来源依据时保持 unknown（SenderType 不冒充 customer/self），
+// 采集完整性/截断/解析状态随事件透传；源消息级 EventID 指纹保证重发幂等。
+func (s *SageXUploadService) buildNormalizedMessageEvents(inst *model.SageXInstallation, installationID, batchID, platform string, ev *SageXEventItem, primary *model.MessageEvent) []*model.MessageEvent {
+	if ev == nil || primary == nil {
+		return nil
+	}
+	normalized := NormalizeSageXNotificationMessages(SageXNotificationUpload{
+		EventID:          strings.TrimSpace(ev.EventID),
+		Messages:         ev.RawNotification.Messages,
+		HistoricMessages: ev.RawNotification.HistoricMessages,
+		ParseStatus:      ev.ParseStatus,
+		TruncatedFields:  ev.TruncatedFields,
+	})
+	if len(normalized.Messages) == 0 {
+		return nil
+	}
+	primaryAt := primary.Timestamp.UnixMilli()
+	accountID := strings.TrimSpace(inst.AccountID)
+	if accountID == "" {
+		accountID = "sagex_inst_" + strconv.FormatUint(uint64(inst.ID), 10)
+	}
+	out := make([]*model.MessageEvent, 0, len(normalized.Messages))
+	for _, m := range normalized.Messages {
+		content := sanitizeSageXText(m.Content)
+		if content == "" {
+			continue
+		}
+		// primary 已经承载通知正文；同一条文本且时间接近时不重复入库。
+		if content == strings.TrimSpace(primary.Content) && (m.At == 0 || absInt64(m.At-primaryAt) <= 2000) {
+			continue
+		}
+		senderID := strings.TrimSpace(m.MemberID)
+		if senderID == "" {
+			senderID = strings.TrimSpace(primary.SenderID)
+		}
+		senderName := strings.TrimSpace(m.MemberName)
+		if senderName == "" {
+			senderName = senderID
+		}
+		at := time.UnixMilli(m.At)
+		if m.At <= 0 || at.After(time.Now().Add(time.Minute)) {
+			at = time.Now()
+		}
+		out = append(out, &model.MessageEvent{
+			// 源消息级幂等键：同通知重发/聚合更新落同一 hub 行。
+			EventID:        "sagex:" + installationID + ":src:" + m.SourceMessageID,
+			SessionID:      primary.SessionID,
+			EventType:      model.EventTypeMessageReceived,
+			Channel:        platform,
+			SenderID:       senderID,
+			SenderName:     senderName,
+			SenderType:     "unknown", // 通知数组无方向依据，不凭昵称推断客户/本人
+			ReceiverID:     accountID,
+			MsgType:        model.MsgTypeText,
+			Content:        content,
+			ConversationID: primary.ConversationID,
+			IsGroup:        primary.IsGroup,
+			GroupID:        primary.GroupID,
+			Timestamp:      at,
+			Extra: map[string]any{
+				"sagex": map[string]any{
+					"event_id":              strings.TrimSpace(ev.EventID),
+					"batch_id":              batchID,
+					"installation_id":       installationID,
+					"source_message_id":     m.SourceMessageID,
+					"source_coverage":       m.SourceCoverage, // live / historic
+					"reported_direction":    "unknown",
+					"parse_status":          normalized.ParseStatus,
+					"truncated_fields":      normalized.TruncatedFields,
+					"collection_incomplete": normalized.CollectionIncomplete,
+				},
+				"account_id": accountID,
+			},
+		})
+	}
+	return out
+}
+
+func absInt64(v int64) int64 {
+	if v < 0 {
+		return -v
+	}
+	return v
 }
 
 // sagexNonTextPlaceholder matches the bracketed media/attachment labels QQ and WeChat render

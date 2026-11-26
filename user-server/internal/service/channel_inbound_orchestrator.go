@@ -109,7 +109,12 @@ func (o *ChannelInboundOrchestrator) DeliverAndArchive(ctx context.Context, msg 
 		if msg.IsGroup {
 			conversationType = "group"
 		}
-		identity, aerr = o.resolver.IdentifySpeaker(ctx, acc.TenantID, acc.AccountID, conversationType, msg.SenderID, "", nil)
+		// CH-08：把平台自己的稳定 userID 与群成员角色证据传到统一识别口，
+		// 不再以空 self / nil members 调用（那会把所有发言人压成 unknown）。
+		identity, aerr = o.resolver.IdentifySpeaker(
+			ctx, acc.TenantID, acc.AccountID, conversationType,
+			msg.SenderID, msg.SelfPlatformID, toGroupMemberRoles(msg.MemberRoles),
+		)
 		if aerr != nil {
 			out.Status, out.Reason = "rejected", "自他识别失败"
 			return out, aerr
@@ -132,6 +137,13 @@ func (o *ChannelInboundOrchestrator) DeliverAndArchive(ctx context.Context, msg 
 		SenderID:       msg.SenderID,
 		Content:        msg.Content,
 		MsgType:        msg.MsgType,
+		IsGroup:        msg.IsGroup,
+		GroupID:        msg.GroupID,
+	}
+	// 入站信封时间是 UnixMilli（channelgw adapter 口径），落库 SentAt 同源，
+	// 供归档适配器的乱序检测按同一时间轴比较。
+	if msg.Timestamp > 0 {
+		hub.SentAt = time.UnixMilli(msg.Timestamp)
 	}
 	if err := o.archive.Archive(ctx, hub); err != nil {
 		out.Status, out.Reason = "persist_failed", "归档失败"
@@ -154,6 +166,18 @@ func (o *ChannelInboundOrchestrator) DeliverAndArchive(ctx context.Context, msg 
 	}
 	out.Automation = decision
 	return out, nil
+}
+
+// toGroupMemberRoles 把信封里的成员证据转成识别口类型（model 不依赖 service）。
+func toGroupMemberRoles(rows []model.InboundMemberRole) []GroupMemberRole {
+	if len(rows) == 0 {
+		return nil
+	}
+	out := make([]GroupMemberRole, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, GroupMemberRole{PlatformUserID: r.PlatformUserID, Role: r.Role})
+	}
+	return out
 }
 
 func channelFirstNonEmpty(vals ...string) string {

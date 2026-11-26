@@ -58,6 +58,33 @@ func NewDictionaryServiceWithRepo(repo dictionaryRepo) *DictionaryService {
 	return &DictionaryService{repo: repo}
 }
 
+// seedOnlyDictionaryRepo 不接 DB 的只读仓储：任何查询都返回空集，
+// 触发 GetDictionary 的「DB 无该域则回落种子」口径。
+type seedOnlyDictionaryRepo struct{}
+
+func (*seedOnlyDictionaryRepo) ListByParent(context.Context, string) ([]model.Dictionary, error) {
+	return nil, nil
+}
+func (*seedOnlyDictionaryRepo) ListParents(context.Context) ([]string, error) { return nil, nil }
+func (*seedOnlyDictionaryRepo) GetByCode(context.Context, string, string) (*model.Dictionary, error) {
+	return nil, nil
+}
+func (*seedOnlyDictionaryRepo) Upsert(context.Context, *model.Dictionary, uint) error {
+	return errors.New("seed-only 字典仓储不支持写入")
+}
+func (*seedOnlyDictionaryRepo) ListTransitions(context.Context, string) ([]model.DictionaryTransition, error) {
+	return nil, nil
+}
+func (*seedOnlyDictionaryRepo) ReplaceTransitions(context.Context, string, []model.DictionaryTransition, uint) error {
+	return errors.New("seed-only 字典仓储不支持写入")
+}
+
+// NewSeedOnlyDictionaryService 纯种子字典服务：站点尚未配置 DB 字典项时，
+// CRM 编辑/筛选/导入预检仍有一套确定、可回查的受控选项。
+func NewSeedOnlyDictionaryService() *DictionaryService {
+	return &DictionaryService{repo: &seedOnlyDictionaryRepo{}}
+}
+
 // GetDictionary 取一个域的完整定义（项 + 跃迁）。DB 没有该域时回落种子。
 func (s *DictionaryService) GetDictionary(ctx context.Context, parent string) ([]model.Dictionary, []model.DictionaryTransition, error) {
 	items, err := s.repo.ListByParent(ctx, parent)

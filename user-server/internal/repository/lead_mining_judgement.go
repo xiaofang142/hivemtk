@@ -21,6 +21,8 @@ type LeadMiningJudgementRepository interface {
 	Create(ctx context.Context, rec *model.LeadMiningJudgement) error
 	List(ctx context.Context, page, limit int, platform, accountID, leadRole string, matched *bool) ([]model.LeadMiningJudgement, int64, error)
 	GetByID(ctx context.Context, judgementID string) (*model.LeadMiningJudgement, error)
+	// GetByIDScoped 按员工可见账号集合读取判定详情；受限无权返回 ErrLeadScopeDenied。
+	GetByIDScoped(ctx context.Context, judgementID string, accounts []string) (*model.LeadMiningJudgement, error)
 	UpdateFeedback(ctx context.Context, judgementID, status, reason, by string) error
 	GetQualityStats(ctx context.Context, days int) (map[string]any, error)
 	// GetQualityStatsScoped 按员工可见账号集合统计；accounts=nil 表示管理员全量，空切片表示受限拒绝。
@@ -201,6 +203,25 @@ func (r *leadMiningJudgementRepo) GetByID(ctx context.Context, judgementID strin
 		return nil, err
 	}
 	return &rec, nil
+}
+
+func (r *leadMiningJudgementRepo) GetByIDScoped(ctx context.Context, judgementID string, accounts []string) (*model.LeadMiningJudgement, error) {
+	rec, err := r.GetByID(ctx, judgementID)
+	if err != nil {
+		return nil, err
+	}
+	if accounts == nil {
+		return rec, nil
+	}
+	if len(accounts) == 0 {
+		return nil, ErrLeadScopeDenied
+	}
+	for _, a := range accounts {
+		if strings.TrimSpace(a) == strings.TrimSpace(rec.AccountID) {
+			return rec, nil
+		}
+	}
+	return nil, ErrLeadScopeDenied
 }
 
 func (r *leadMiningJudgementRepo) UpdateFeedback(ctx context.Context, judgementID, status, reason, by string) error {

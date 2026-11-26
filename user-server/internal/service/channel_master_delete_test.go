@@ -7,6 +7,7 @@ import (
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/repository"
+
 )
 
 // channelMasterDeleteCall 记录级联删除收到的租户/渠道实参，防止「删错渠道」回归。
@@ -62,6 +63,9 @@ func (f *channelMasterFakeCodeRepo) ListByTenant(_ context.Context, _ uint) ([]m
 func (f *channelMasterFakeCodeRepo) ValidCodes(_ context.Context) ([]string, error) { return nil, nil }
 func (f *channelMasterFakeCodeRepo) Upsert(_ context.Context, _ *model.ChannelIdentifyCode) error {
 	return nil
+}
+func (f *channelMasterFakeCodeRepo) WithTransaction(ctx context.Context, fn func(ctx context.Context) error) error {
+	return fn(ctx)
 }
 func (f *channelMasterFakeCodeRepo) DeleteByChannel(_ context.Context, tenantID, channelID uint) error {
 	f.calls = append(f.calls, channelMasterDeleteCall{tenantID: tenantID, channelID: channelID})

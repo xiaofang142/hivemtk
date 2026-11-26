@@ -177,29 +177,68 @@ func (s *channelIdentifyService) rotate(ctx context.Context, tenantID, channelID
 		Version: version, ResetAt: resetAt,
 		PrevCode: prevCode, PrevValidUntil: prevUntil,
 	}
-	// CAS 写权威码：生产仓储实现 CAS 端口；替身仓储不支持时退回 Upsert（测试用）。
-	type casRotator interface {
-		RotateCAS(ctx context.Context, tenantID, channelID uint, expectVersion int, rec *model.ChannelIdentifyCode) error
+	// CH-06：权威码写入与冗余列写入纳入同一事务，避免半写。
+	// 生产仓储实现 WithTransaction 端口时走事务；替身仓储不支持时退回直接写入（测试用）。
+	type txProvider interface {
+		WithTransaction(ctx context.Context, fn func(ctx context.Context) error) error
 	}
-	if cas, ok := s.codeRepo.(casRotator); ok {
-		if err := cas.RotateCAS(ctx, tenantID, channelID, version-1, rec); err != nil {
+	if tp, ok := s.codeRepo.(txProvider); ok && s.codeRepo.Available() {
+		err := tp.WithTransaction(ctx, func(txCtx context.Context) error {
+			// CAS 写权威码（事务内仓储必支持 CAS）。
+			type casRotator interface {
+				RotateCAS(ctx context.Context, tenantID, channelID uint, expectVersion int, rec *model.ChannelIdentifyCode) error
+			}
+			cas, ok := s.codeRepo.(casRotator)
+			if !ok {
+				return errors.New("事务仓储不支持 CAS")
+			}
+			if err := cas.RotateCAS(txCtx, tenantID, channelID, version-1, rec); err != nil {
+				return err
+			}
+			// 冗余列：只写给显式账号；未指定时清空该渠道全部冗余码，避免多账号同码冲突。
+			if s.accountRepo != nil && s.accountRepo.Available() {
+				if accountID > 0 {
+					if err := s.accountRepo.Update(txCtx, tenantID, accountID, map[string]any{"identify_code": code}); err != nil {
+						return err
+					}
+				} else {
+					if err := s.accountRepo.SetIdentifyCodeByChannel(txCtx, tenantID, channelID, ""); err != nil {
+						return err
+					}
+				}
+			}
+			return nil
+		})
+		if err != nil {
 			if errors.Is(err, repository.ErrIdentifyVersionConflict) {
 				return nil, err // 并发重置明确冲突，不静默覆盖
 			}
 			return nil, err
 		}
-	} else if err := s.codeRepo.Upsert(ctx, rec); err != nil {
-		return nil, err
-	}
-	// 冗余列：只写给显式账号；未指定时清空该渠道全部冗余码，避免多账号同码冲突。
-	if s.accountRepo != nil && s.accountRepo.Available() {
-		if accountID > 0 {
-			if err := s.accountRepo.Update(ctx, tenantID, accountID, map[string]any{"identify_code": code}); err != nil {
+	} else {
+		// 替身/非事务仓储：退回直接写入（测试用）。
+		type casRotator interface {
+			RotateCAS(ctx context.Context, tenantID, channelID uint, expectVersion int, rec *model.ChannelIdentifyCode) error
+		}
+		if cas, ok := s.codeRepo.(casRotator); ok {
+			if err := cas.RotateCAS(ctx, tenantID, channelID, version-1, rec); err != nil {
+				if errors.Is(err, repository.ErrIdentifyVersionConflict) {
+					return nil, err
+				}
 				return nil, err
 			}
-		} else {
-			if err := s.accountRepo.SetIdentifyCodeByChannel(ctx, tenantID, channelID, ""); err != nil {
-				return nil, err
+		} else if err := s.codeRepo.Upsert(ctx, rec); err != nil {
+			return nil, err
+		}
+		if s.accountRepo != nil && s.accountRepo.Available() {
+			if accountID > 0 {
+				if err := s.accountRepo.Update(ctx, tenantID, accountID, map[string]any{"identify_code": code}); err != nil {
+					return nil, err
+				}
+			} else {
+				if err := s.accountRepo.SetIdentifyCodeByChannel(ctx, tenantID, channelID, ""); err != nil {
+					return nil, err
+				}
 			}
 		}
 	}

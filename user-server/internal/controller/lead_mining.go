@@ -77,7 +77,14 @@ func (c *LeadMiningController) GetJudgements(ctx *gin.Context) {
 		b := v == "1" || v == "true"
 		matched = &b
 	}
-	items, total, err := service.ListLeadMiningJudgements(ctx.Request.Context(), page, limit, platform, accountID, leadRole, matched)
+	uid := getUserIDFromContext(ctx)
+	scope, _ := service.NewBusinessScopeService().Resolve(ctx.Request.Context(), uid)
+	var accounts []string
+	if !scope.AllAccounts {
+		ids, _ := scope.AllowedSourceAccountIDs()
+		accounts = ids
+	}
+	items, total, err := service.ListLeadMiningJudgementsScoped(ctx.Request.Context(), accounts, page, limit, platform, accountID, leadRole, matched)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "获取判定记录失败")
 		return
@@ -98,7 +105,14 @@ func (c *LeadMiningController) GetClueStats(ctx *gin.Context) {
 // GetJudgementDetail 返回判定记录回放详情（LM-PR6）。
 func (c *LeadMiningController) GetJudgementDetail(ctx *gin.Context) {
 	judgementID := strings.TrimSpace(ctx.Param("judgement_id"))
-	rec, err := service.GetLeadMiningJudgementDetail(ctx.Request.Context(), judgementID)
+	uid := getUserIDFromContext(ctx)
+	scope, _ := service.NewBusinessScopeService().Resolve(ctx.Request.Context(), uid)
+	var accounts []string
+	if !scope.AllAccounts {
+		ids, _ := scope.AllowedSourceAccountIDs()
+		accounts = ids
+	}
+	rec, err := service.GetLeadMiningJudgementDetailScoped(ctx.Request.Context(), judgementID, accounts)
 	if err != nil {
 		if service.IsRecordNotFound(err) {
 			response.Error(ctx, 404, "判定记录不存在")
@@ -141,10 +155,17 @@ func (c *LeadMiningController) SubmitJudgementFeedback(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"judgement_id": judgementID, "feedback_status": req.FeedbackStatus}, "ok")
 }
 
-// GetQualityStats 返回线索发掘质量看板（LM-PR6）。
+// GetQualityStats 返回线索发掘质量看板（LM-PR6/LM-13：按员工可见账号收口）。
 func (c *LeadMiningController) GetQualityStats(ctx *gin.Context) {
 	days, _ := strconv.Atoi(ctx.DefaultQuery("days", "7"))
-	stats, err := service.GetLeadMiningQualityStats(ctx.Request.Context(), days)
+	uid := getUserIDFromContext(ctx)
+	scope, _ := service.NewBusinessScopeService().Resolve(ctx.Request.Context(), uid)
+	var accounts []string
+	if !scope.AllAccounts {
+		ids, _ := scope.AllowedSourceAccountIDs()
+		accounts = ids
+	}
+	stats, err := service.GetLeadMiningQualityStatsScoped(ctx.Request.Context(), accounts, days)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "获取质量看板失败")
 		return

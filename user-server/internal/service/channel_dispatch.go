@@ -23,7 +23,49 @@ type ChannelDispatchService struct {
 	channelRepo repository.ChannelRepository
 	convRepo    ChannelDispatchConversationReader
 	accRepo     repository.ChannelAccountRepository
-	rr          atomic.Uint64
+	// gate CH-05/CH-10：真实运行入口的启停闸门。
+	// 默认生产构造注入「行状态闸门」（渠道主表 + 账号状态）；需要租户 KV 启停
+	// 的入口用 WithGate 显式注入完整 RequireRunnable 口径（见 channelRowStatusGate 注释）。
+	// WithRepos 构造保持 nil，兼容既有只测选号语义的用例。
+	gate ChannelRunnableGate
+	rr   atomic.Uint64
+}
+
+// channelRowStatusGate 是默认生产构造使用的轻量闸门：只校验渠道主表 Enabled + 账号 Status。
+//
+// 为何不默认注入完整 RequireRunnable（租户 KV）：租户 KV 依赖 system_config_kv 表，
+// 存量/夹具环境可能尚未初始化该表；若默认 fail-closed，会把「未配置 KV」误判为停用，
+// 直接拦断既有 AI 出站（CS06 全链回归实证：system_config_kv 不存在 ⇒ 出站 leg 静默失败）。
+// 因此默认闸门只守两行状态，租户 KV 启停由显式 WithGate 装配到已完成预设初始化的入口。
+type channelRowStatusGate struct {
+	reader ChannelStatusReader
+}
+
+func (g *channelRowStatusGate) RequireRunnable(ctx context.Context, tenantID, channelID, accountID uint) (*ResolvedChannelAccount, error) {
+	if tenantID == 0 || channelID == 0 || accountID == 0 {
+		return nil, ErrChannelAccountInvalid
+	}
+	if g == nil || g.reader == nil || !g.reader.Available() {
+		return nil, repository.ErrChannelStoreUnavailable
+	}
+	ch, err := g.reader.ChannelByID(ctx, tenantID, channelID)
+	if err != nil {
+		return nil, err
+	}
+	if ch == nil || !ch.Enabled {
+		return nil, ErrChannelDisabled
+	}
+	acc, err := g.reader.AccountByID(ctx, tenantID, accountID)
+	if err != nil {
+		return nil, err
+	}
+	if acc == nil || acc.Status != 1 || acc.ChannelID != channelID {
+		return nil, ErrChannelAccountDisabled
+	}
+	return &ResolvedChannelAccount{
+		TenantID: tenantID, ChannelID: channelID, AccountID: accountID,
+		ChannelCode: ch.Code, IdentifyCode: acc.IdentifyCode,
+	}, nil
 }
 
 // ChannelDispatchConversationReader 是渠道分发只需要的最小会话查询端口。
@@ -38,25 +80,53 @@ type ChannelDispatchConversationReader interface {
 }
 
 // NewChannelDispatchService 使用全局 DB 对应的默认仓储构造。
+// 生产口默认装配 CH-05 行状态闸门：停用渠道/账号在 bridge 出站、主动触达、
+// 宏、webhook 出站等各调用方自动生效，无需各入口各自接线；租户 KV 启停
+// 通过 WithGate 显式装配到预设已初始化的入口（见 channelRowStatusGate）。
 func NewChannelDispatchService() *ChannelDispatchService {
-	return NewChannelDispatchServiceWithRepos(
-		repository.NewChannelRepository(),
+	chRepo := repository.NewChannelRepository()
+	accRepo := repository.NewChannelAccountRepository()
+	return NewChannelDispatchServiceWithGate(
+		chRepo,
 		repository.NewInboxConversationRepository(),
-		repository.NewChannelAccountRepository(),
+		accRepo,
+		&channelRowStatusGate{reader: NewChannelStatusReader(chRepo, accRepo)},
 	)
 }
 
 // NewChannelDispatchServiceWithRepos 用显式仓储构造（装配点/测试用）。
+// 不注入闸门，保留纯选号语义（粘性/分页/轮转）的既有契约。
 func NewChannelDispatchServiceWithRepos(
 	channelRepo repository.ChannelRepository,
 	convRepo ChannelDispatchConversationReader,
 	accRepo repository.ChannelAccountRepository,
 ) *ChannelDispatchService {
+	return NewChannelDispatchServiceWithGate(channelRepo, convRepo, accRepo, nil)
+}
+
+// NewChannelDispatchServiceWithGate 注入显式仓储 + 运行闸门（装配点/测试用）。
+func NewChannelDispatchServiceWithGate(
+	channelRepo repository.ChannelRepository,
+	convRepo ChannelDispatchConversationReader,
+	accRepo repository.ChannelAccountRepository,
+	gate ChannelRunnableGate,
+) *ChannelDispatchService {
 	return &ChannelDispatchService{
 		channelRepo: channelRepo,
 		convRepo:    convRepo,
 		accRepo:     accRepo,
+		gate:        gate,
 	}
+}
+
+// runnable CH-05：闸门命中即按注入口径校验渠道/账号（默认行状态，WithGate 可含租户 KV）；
+// 闸门缺席为纯选号模式。
+func (s *ChannelDispatchService) runnable(ctx context.Context, tenantID, channelID, accountID uint) error {
+	if s == nil || s.gate == nil {
+		return nil
+	}
+	_, err := s.gate.RequireRunnable(ctx, tenantID, channelID, accountID)
+	return err
 }
 
 type DispatchPickInput struct {
@@ -123,6 +193,10 @@ func (s *ChannelDispatchService) PickAccount(ctx context.Context, in DispatchPic
 					return nil, fmt.Errorf("sticky account %d belongs to channel %d, expected %d", aid, acc.ChannelID, in.ChannelID)
 				}
 				if acc != nil && acc.Status == 1 {
+					// 显式会话粘性：闸门拒绝即显式失败，不静默换号（CH-10）。
+					if err := s.runnable(ctx, in.TenantID, in.ChannelID, acc.ID); err != nil {
+						return nil, fmt.Errorf("sticky account %d not runnable: %w", acc.ID, err)
+					}
 					return &DispatchPickResult{AccountID: acc.ID, AccountName: acc.Name, IdentifyCode: acc.IdentifyCode, Reason: "sticky"}, nil
 				}
 			}
@@ -136,6 +210,10 @@ func (s *ChannelDispatchService) PickAccount(ctx context.Context, in DispatchPic
 			return nil, fmt.Errorf("query preferred account: %w", err)
 		}
 		if acc != nil && acc.Status == 1 && acc.ChannelID == in.ChannelID {
+			// 显式 preferred 与会话粘性同语义：闸门拒绝显式失败，不悄悄换号。
+			if err := s.runnable(ctx, in.TenantID, in.ChannelID, acc.ID); err != nil {
+				return nil, fmt.Errorf("preferred account %d not runnable: %w", acc.ID, err)
+			}
 			return &DispatchPickResult{AccountID: acc.ID, AccountName: acc.Name, IdentifyCode: acc.IdentifyCode, Reason: "preferred"}, nil
 		}
 	}
@@ -160,15 +238,23 @@ func (s *ChannelDispatchService) PickAccount(ctx context.Context, in DispatchPic
 	if len(accs) == 0 {
 		return nil, fmt.Errorf("no active account")
 	}
-	idx := int(s.rr.Add(1)-1) % len(accs)
+	start := int(s.rr.Add(1)-1) % len(accs)
 	// deterministic offset by conversation for better distribution
 	if in.ConversationID != "" {
 		h := fnv.New32a()
 		_, _ = h.Write([]byte(in.ConversationID))
-		idx = int(h.Sum32()) % len(accs)
+		start = int(h.Sum32()) % len(accs)
 	}
-	acc := accs[idx]
-	return &DispatchPickResult{AccountID: acc.ID, AccountName: acc.Name, IdentifyCode: acc.IdentifyCode, Reason: "round_robin"}, nil
+	// CH-05/CH-10：轮转候选逐个过闸门。停用/故障/租户关闭的账号被跳过，
+	// 保证选中、获取下发、执行与回执始终归同一启用账号；全被拒时显式失败。
+	for k := 0; k < len(accs); k++ {
+		acc := accs[(start+k)%len(accs)]
+		if err := s.runnable(ctx, in.TenantID, in.ChannelID, acc.ID); err != nil {
+			continue
+		}
+		return &DispatchPickResult{AccountID: acc.ID, AccountName: acc.Name, IdentifyCode: acc.IdentifyCode, Reason: "round_robin"}, nil
+	}
+	return nil, fmt.Errorf("no runnable account")
 }
 
 // ResolveExplicitOutboundAccount 解析出站账号：只有空账号允许自动分派；bridge 显式账号
@@ -224,6 +310,11 @@ func (s *ChannelDispatchService) ResolveExplicitOutboundAccount(ctx context.Cont
 	requested := strings.TrimSpace(channel)
 	if !strings.EqualFold(strings.TrimSpace(ch.Code), requested) && strconv.FormatUint(uint64(ch.ID), 10) != requested {
 		return "", fmt.Errorf("explicit outbound account %s channel mismatch: account=%s requested=%s", accountID, ch.Code, requested)
+	}
+	// CH-05/CH-10：显式账号也要过运行闸门（默认渠道主表 + 账号状态；显式
+	// WithGate 装配时可含租户 KV），任一关闭/故障即拒绝，不得借旧连接继续下发。
+	if err := s.runnable(ctx, tenantID, acc.ChannelID, acc.ID); err != nil {
+		return "", fmt.Errorf("explicit outbound account %s not runnable: %w", accountID, err)
 	}
 	return strconv.FormatUint(uint64(acc.ID), 10), nil
 }

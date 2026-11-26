@@ -111,7 +111,11 @@ func (c *WebhookController) bindCallbackTenant(ctx *gin.Context, reqCtx context.
 	}
 	// T059：TG hook / 三方上报可在 query（或 X-Channel-Identify-Code 头）携带渠道识别码，
 	// 由 ChannelResolver 全局唯一反查租户/账号；歧义/未命中 fail-closed，不回落默认租户。
-	if code := strings.TrimSpace(ctx.Query("identify_code")); code != "" {
+	code := strings.TrimSpace(ctx.Query("identify_code"))
+	if code == "" {
+		code = strings.TrimSpace(ctx.GetHeader("X-Channel-Identify-Code"))
+	}
+	if code != "" {
 		resolved, rerr := c.svc.ResolveByIdentifyCode(ctx.Request.Context(), code)
 		if rerr != nil || resolved == nil || resolved.TenantID == 0 {
 			if rerr == nil {
@@ -121,6 +125,17 @@ func (c *WebhookController) bindCallbackTenant(ctx *gin.Context, reqCtx context.
 				code, channel, ctx.ClientIP(), rerr)
 			response.Envelope(ctx, http.StatusNotFound, gin.H{"accepted": false, "reason": "unknown identify code"})
 			return reqCtx, false
+		}
+		// CH-07：显式账号引用必须与识别码解析出的账号一致，冲突拒绝，不换号。
+		if strings.TrimSpace(accountID) != "" {
+			if n, perr := strconv.ParseUint(strings.TrimSpace(accountID), 10, 64); perr == nil && n > 0 {
+				if uint(n) != resolved.AccountID {
+					logger.Errorf("[SECURITY] webhook 识别码与路径账号冲突 code=%s account=%s resolved=%d channel=%s ip=%s",
+						code, accountID, resolved.AccountID, channel, ctx.ClientIP())
+					response.Envelope(ctx, http.StatusNotFound, gin.H{"accepted": false, "reason": "identify code/account mismatch"})
+					return reqCtx, false
+				}
+			}
 		}
 		return tenant.WithTenantID(reqCtx, resolved.TenantID), true
 	}

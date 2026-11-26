@@ -40,4 +40,5 @@ func setupChannelRoutes(auth *gin.RouterGroup) {
 	auth.GET("/identify-codes", identifyCtl.List)
 	auth.GET("/identify-codes/:channel_id", identifyCtl.Get)
 	auth.POST("/identify-codes/:channel_id/rotate", identifyCtl.Rotate)
+	auth.POST("/identify-codes/:channel_id/rotate-for-account", identifyCtl.RotateForAccount)
 }

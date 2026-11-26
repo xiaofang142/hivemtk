@@ -5,6 +5,13 @@ package model
 // 后续 US2/US3/US4 任务接入，本阶段不改变任何既有入站行为。
 //
 // 刻意不映射数据库表：真实落库仍由既有 inbox/message_hub 负责，避免重复收件箱。
+// InboundMemberRole 群成员的平台稳定身份与显式角色（CH-08）。
+// 只承载证据，不在此判定 self：判定统一由 ChannelIdentityResolver 完成。
+type InboundMemberRole struct {
+	PlatformUserID string
+	Role           string
+}
+
 type InboundMessage struct {
 	EventID        string
 	Source         string // bridge_http | channelgw_ws | webhook
@@ -15,6 +22,11 @@ type InboundMessage struct {
 	ConversationID string
 	SenderID       string
 	SenderType     string
+	// SelfPlatformID 本账号在平台上的稳定 userID（CH-08）。只有它或显式 self 角色
+	// 能判定「自己」，名称/识别码/数据库账号 ID 一律不作为 self 证据。
+	SelfPlatformID string
+	// MemberRoles 群成员稳定 userID→角色证据；同 ID 多角色冲突时解析器拒绝（不猜）。
+	MemberRoles    []InboundMemberRole
 	MsgType        string
 	Content        string
 	IsGroup        bool

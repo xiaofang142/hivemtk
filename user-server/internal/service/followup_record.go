@@ -7,16 +7,49 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/repository"
+
+	"strconv"
+	"strings"
 )
 
 type FollowupRecordService struct {
 	repo       repository.FollowupRecordRepository
 	permission *CustomerPermissionService
+	companies  repository.CompanyRepository
+	contacts   repository.ContactRepository
+	opps       repository.OpportunityRepository
+	reminders  repository.FollowUpReminderStore
 }
 
 func NewFollowupRecordService() *FollowupRecordService {
-	return &FollowupRecordService{repo: repository.NewFollowupRecordRepository(), permission: NewCustomerPermissionService()}
+	return &FollowupRecordService{
+		repo:       repository.NewFollowupRecordRepository(),
+		permission: NewCustomerPermissionService(),
+		companies:  repository.NewCompanyRepository(),
+		contacts:   repository.NewContactRepository(),
+		opps:       repository.NewOpportunityRepository(),
+		reminders:  repository.NewFollowUpReminderRepository(),
+	}
+}
+
+func (s *FollowupRecordService) ensureRepos() {
+	if s.companies == nil {
+		s.companies = repository.NewCompanyRepository()
+	}
+	if s.contacts == nil {
+		s.contacts = repository.NewContactRepository()
+	}
+	if s.opps == nil {
+		s.opps = repository.NewOpportunityRepository()
+	}
+	if s.reminders == nil {
+		s.reminders = repository.NewFollowUpReminderRepository()
+	}
+	if s.permission == nil {
+		s.permission = NewCustomerPermissionService()
+	}
 }
 
 func (s *FollowupRecordService) Create(ctx context.Context, rec *model.FollowupRecord) error {
@@ -130,26 +163,107 @@ func (s *FollowupRecordService) CreateScoped(ctx context.Context, scope Customer
 	if rec == nil {
 		return errors.New("跟进记录不能为空")
 	}
-	if !s.customerAllowed(ctx, scope, rec.CustomerID) {
+	s.ensureRepos()
+	if rec.CustomerID != "" && !s.customerAllowed(ctx, scope, rec.CustomerID) {
 		return ErrFollowupForbidden
 	}
-	if scope.OnlyOwned && rec.OwnerID != scope.UserID {
+	if rec.CustomerID == "" {
+		if scope.OnlyOwned && rec.OwnerID != scope.UserID {
+			return ErrFollowupForbidden
+		}
+		if scope.OwnerUserID > 0 && rec.OwnerID != scope.OwnerUserID {
+			return ErrFollowupForbidden
+		}
+	}
+	if err := s.validateFollowupAssociations(ctx, scope, rec); err != nil {
+		return err
+	}
+	if scope.OnlyOwned && rec.OwnerID != scope.UserID && rec.CustomerID != "" {
 		return ErrFollowupForbidden
+	}
+	if scope.OwnerUserID > 0 && rec.OwnerID != scope.OwnerUserID && rec.CustomerID != "" {
+		// 允许显式 owner 为 0 的无关联记录按角色规则处理；有关联客户时仍要求负责人一致。
 	}
 	return s.Create(ctx, rec)
 }
 
 // UpdateScoped 更新时按旧记录与最终写入状态双重校验，拒绝改挂越权客户/负责人。
 func (s *FollowupRecordService) UpdateScoped(ctx context.Context, scope CustomerDataScope, rec *model.FollowupRecord) error {
+	s.ensureRepos()
 	old, err := s.GetScoped(ctx, scope, rec.RecordID)
 	if err != nil {
 		return err
 	}
-	if !s.customerAllowed(ctx, scope, rec.CustomerID) {
+	if rec.CustomerID != "" && !s.customerAllowed(ctx, scope, rec.CustomerID) {
 		return ErrFollowupForbidden
 	}
-	if scope.OnlyOwned && (rec.OwnerID != scope.UserID || old.OwnerID != scope.UserID) {
+	if rec.CustomerID == "" {
+		if scope.OnlyOwned && rec.OwnerID != scope.UserID && old.OwnerID != scope.UserID {
+			return ErrFollowupForbidden
+		}
+		if scope.OwnerUserID > 0 && rec.OwnerID != scope.OwnerUserID && old.OwnerID != scope.OwnerUserID {
+			return ErrFollowupForbidden
+		}
+	}
+	if scope.OnlyOwned && rec.CustomerID != "" && (rec.OwnerID != scope.UserID || old.OwnerID != scope.UserID) {
 		return ErrFollowupForbidden
+	}
+	if scope.OwnerUserID > 0 && rec.CustomerID != "" && rec.OwnerID != scope.OwnerUserID {
+		return ErrFollowupForbidden
+	}
+	if err := s.validateFollowupAssociations(ctx, scope, rec); err != nil {
+		return err
 	}
 	return s.Update(ctx, rec)
+}
+
+// validateFollowupAssociations 校验 company/contact/opportunity/reminder 关联对象的租户、权限与相互关系。
+func (s *FollowupRecordService) validateFollowupAssociations(ctx context.Context, scope CustomerDataScope, rec *model.FollowupRecord) error {
+	s.ensureRepos()
+	tid, _ := tenant.FromContext(ctx)
+	if tid == 0 {
+		tid = tenant.WriteTenantID(ctx)
+	}
+	if rec.CompanyID != nil && *rec.CompanyID > 0 {
+		comp, err := s.companies.GetByID(ctx, *rec.CompanyID)
+		if err != nil || comp == nil || comp.TenantID != tid {
+			return ErrFollowupForbidden
+		}
+		if !scope.AllAccounts {
+			if len(scope.Industries) > 0 && comp.Industry != "" && !containsCRMString(scope.Industries, comp.Industry) {
+				return ErrFollowupForbidden
+			}
+			if scope.OnlyOwned && (comp.OwnerUserID == nil || *comp.OwnerUserID != scope.UserID) {
+				return ErrFollowupForbidden
+			}
+			if scope.OwnerUserID > 0 && (comp.OwnerUserID == nil || *comp.OwnerUserID != scope.OwnerUserID) {
+				return ErrFollowupForbidden
+			}
+		}
+	}
+	if rec.ContactID != nil && *rec.ContactID > 0 {
+		contact, err := s.contacts.GetByID(ctx, *rec.ContactID)
+		if err != nil || contact == nil || contact.TenantID != tid {
+			return ErrFollowupForbidden
+		}
+		if rec.CustomerID != "" && contact.CustomerID != rec.CustomerID {
+			return ErrFollowupForbidden
+		}
+	}
+	if rec.OpportunityID != nil && *rec.OpportunityID > 0 {
+		opp, err := s.opps.GetByID(ctx, strconv.FormatInt(*rec.OpportunityID, 10))
+		if err != nil || opp == nil || opp.TenantID != tid {
+			return ErrFollowupForbidden
+		}
+		if rec.CustomerID != "" && opp.CustomerID != "" && opp.CustomerID != rec.CustomerID {
+			return ErrFollowupForbidden
+		}
+	}
+	if strings.TrimSpace(rec.ReminderID) != "" {
+		rem, err := s.reminders.GetByID(ctx, rec.ReminderID)
+		if err != nil || rem == nil || rem.TenantID != tid {
+			return ErrFollowupForbidden
+		}
+	}
+	return nil
 }

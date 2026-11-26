@@ -154,4 +154,46 @@ func init() {
 			dictTrans("paid", "refunded", "退款"),
 		},
 	)
+
+	// ── CRM-19：行业 / 业务类型 / 客户需求分类 ──
+	// 与 CRM 编辑、筛选、导入预检共用同一受控选项。种子项非 SystemLocked：
+	// 运营可在管理端增补行业/业务类型，停用旧项走 Enabled=false（历史行仍保留展示）。
+	//
+	// 注意语义：新写入只允许 Enabled 项；字典里完全没有的历史自由文本按
+	// 「兼容归一」保留（不静默丢弃），只有命中明确停用码才在预检/写入被拒。
+	registerDictionarySeed(CRMDictIndustry,
+		"CRM行业", "CRM 客户/公司/线索共用的行业分类，编辑、筛选与导入预检共用。",
+		[]model.Dictionary{
+			dict("manufacturing", "制造", 1),
+			dict("finance", "金融", 2),
+			dict("medical", "医疗", 3),
+			dict("ecommerce", "电商", 4),
+			dict("beauty", "美妆", 5),
+			dict("food", "食品", 6),
+			dict("electronics", "电子", 7),
+			// legacy_retail 为历史迁移码：保留在册但停用，新写入拒绝。
+			{Code: "legacy_retail", Name: "零售(旧)", SortOrder: 8, Enabled: false},
+		}, nil)
+
+	registerDictionarySeed(CRMDictBusinessType,
+		"CRM业务类型", "CRM 商机/客户的业务类型分类。",
+		[]model.Dictionary{
+			dict("direct_sales", "直销", 1),
+			dict("channel_sales", "渠道销售", 2),
+			dict("after_sales", "售后服务", 3),
+		}, nil)
+
+	registerDictionarySeed(CRMDictRequirementCategory,
+		"CRM客户需求分类", "客户需求分类，供线索/商机/画像分层复用。",
+		[]model.Dictionary{
+			dict("quote", "报价咨询", 1),
+			dict("sample", "索样", 2),
+			dict("visit", "上门拜访", 3),
+			dict("cooperation", "合作洽谈", 4),
+		}, nil)
+}
+
+// dict 造一条非锁定的启用字典项（运营可增补/停用）。
+func dict(code, name string, sort int) model.Dictionary {
+	return model.Dictionary{Code: code, Name: name, SortOrder: sort, Enabled: true}
 }

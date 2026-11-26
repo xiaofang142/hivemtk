@@ -24,11 +24,37 @@ func NewCompanyServiceDefault() *CompanyService {
 }
 
 func (s *CompanyService) Create(ctx context.Context, c *model.Company) error {
+	return s.CreateScoped(ctx, CustomerDataScope{AllAccounts: true}, c)
+}
+
+func (s *CompanyService) CreateScoped(ctx context.Context, scope CustomerDataScope, c *model.Company) error {
 	if c == nil || strings.TrimSpace(c.Name) == "" {
 		return errors.New("公司名称不能为空")
 	}
-	if c.TenantID == 0 {
-		c.TenantID = tenant.WriteTenantID(ctx)
+	tid := tenant.WriteTenantID(ctx)
+	if tid == 0 {
+		if t, ok := tenant.FromContext(ctx); ok {
+			tid = t
+		}
+	}
+	if tid > 0 {
+		if c.TenantID != 0 && c.TenantID != tid {
+			return ErrCRMCustomerForbidden
+		}
+		c.TenantID = tid
+	}
+	if !scope.AllAccounts {
+		if c.Industry != "" && len(scope.Industries) > 0 && !containsCRMString(scope.Industries, c.Industry) {
+			return ErrCRMCustomerForbidden
+		}
+		if c.OwnerUserID != nil {
+			if scope.OnlyOwned && *c.OwnerUserID != scope.UserID {
+				return ErrCRMCustomerForbidden
+			}
+			if scope.OwnerUserID > 0 && *c.OwnerUserID != scope.OwnerUserID {
+				return ErrCRMCustomerForbidden
+			}
+		}
 	}
 	return s.repo.Create(ctx, c)
 }

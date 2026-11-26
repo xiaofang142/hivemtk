@@ -102,7 +102,11 @@ func (ctrl *CompanyController) Create(c *gin.Context) {
 	if req.CreatedBy == nil {
 		req.CreatedBy = &uid
 	}
-	if err := ctrl.svc.Create(c.Request.Context(), &req); err != nil {
+	scope := ctrl.svc.Scope(c.Request.Context(), uid)
+	if err := ctrl.svc.CreateScoped(c.Request.Context(), scope, &req); err != nil {
+		if ctrl.companyScopeError(c, err, "创建公司失败") {
+			return
+		}
 		response.ErrorFromDB(c, err, "创建公司失败")
 		return
 	}

@@ -175,6 +175,11 @@ type LeadJudgeContext struct {
 	GroupRoleCounts map[string]int
 	// GroupAggregateFailed 群聊聚合失败：提示里标注证据不完整，不静默降级。
 	GroupAggregateFailed bool
+	// LM-12：三路检测落库失败时保留已计算结果与失败原因，但不把空 Hits 当完整证据。
+	DetectionFailed bool
+	// Evidence 本次授权的源消息级快照（真实 MsgID/成员/时间/覆盖水位）；
+	// 合成 history_N 不属于快照，不得作为结论引用。
+	Evidence *LeadEvidenceSnapshot
 	// ReactEvidence D18 ReAct 工具取证收集到的证据（只读取证，失败带降级标记）。
 	ReactEvidence []string
 	ReactDegraded bool
@@ -506,7 +511,9 @@ func (s *Service) buildLeadJudgeContext(ctx context.Context, hub *model.MessageH
 		hits, derr = NewLeadDetectionService().Run(ctx, detection)
 	}
 	if derr != nil {
-		logger.Ctx(ctx).Warn().Err(derr).Msg("[lead-mining] 三路检测落库失败，二次判断标记证据不完整")
+		// LM-12：失败可见——结果不丢，但证据完整性关闭，禁止按完整证据自动放行。
+		jctx.DetectionFailed = true
+		logger.Ctx(ctx).Warn().Err(derr).Msg("[lead-mining] 三路检测落库失败，保留计算结果并标记证据不完整")
 	} else {
 		jctx.Hits = hits
 	}
@@ -542,7 +549,7 @@ func (s *Service) configRequirement(ctx context.Context) string {
 // EvidenceComplete 判定快照的必需证据是否齐全：三路命中完整、群聚合成功且 ReAct 未降级。
 // 与 recordLeadMiningJudgement 的 EvidenceComplete 口径一致，供副作用准入闸复用。
 func (c *LeadJudgeContext) EvidenceComplete() bool {
-	if c == nil || len(c.Hits) == 0 || c.GroupAggregateFailed || c.ReactDegraded {
+	if c == nil || len(c.Hits) == 0 || c.GroupAggregateFailed || c.ReactDegraded || c.DetectionFailed {
 		return false
 	}
 	// 必需证据 = 至少一路完整命中；LLM/语义等可选路降级不构成挡单。

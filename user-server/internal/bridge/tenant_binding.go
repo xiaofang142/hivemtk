@@ -128,21 +128,24 @@ func resolveBridgeIdentity(rctx context.Context, channel, accountID, _codeHint, 
 	}
 
 	resolved, err := service.NewChannelResolver().ResolveByIdentifyCode(rctx, identifyCode)
-	if errors.Is(err, service.ErrChannelIdentityUnresolved) {
-		// Fallback: channel-level identify code (channel_identify_codes table).
-		resolved, err = resolveBridgeIdentityByChannelCode(rctx, identifyCode)
-	}
-	if errors.Is(err, service.ErrChannelIdentityAmbiguous) {
-		return rctx, false, nil, ErrBridgeTenantAmbiguous
-	}
-	if errors.Is(err, service.ErrChannelIdentityInvalid) {
-		return rctx, false, nil, ErrBridgeTenantUnresolved
-	}
-	if err != nil {
+	if err != nil && !errors.Is(err, service.ErrChannelIdentityUnresolved) {
+		if errors.Is(err, service.ErrChannelIdentityAmbiguous) {
+			return rctx, false, nil, ErrBridgeTenantAmbiguous
+		}
+		if errors.Is(err, service.ErrChannelIdentityInvalid) {
+			return rctx, false, nil, ErrBridgeTenantUnresolved
+		}
 		return rctx, false, nil, err
 	}
-	if resolved == nil || resolved.TenantID == 0 {
-		return rctx, false, nil, ErrBridgeTenantUnresolved
+	if err != nil || resolved == nil || resolved.TenantID == 0 {
+		// Fallback: channel-level identify code (channel_identify_codes table).
+		resolved, err = resolveBridgeIdentityByChannelCode(rctx, identifyCode, accountID)
+		if err != nil {
+			return rctx, false, nil, err
+		}
+		if resolved == nil || resolved.TenantID == 0 {
+			return rctx, false, nil, ErrBridgeTenantUnresolved
+		}
 	}
 	// ChannelResolver 的 channel-level fallback 可能在未绑定 rctx 下读不到 ChannelCode。
 	// 身份记录已证明 tenant；这里只用内部 child ctx 补读，不改写原 rctx/request。
@@ -206,12 +209,9 @@ func resolveBridgeIdentity(rctx context.Context, channel, accountID, _codeHint, 
 	return bridgeResolvedTenantCtx(rctx, resolved.TenantID), true, id, nil
 }
 
-func resolveBridgeIdentityByChannelCode(rctx context.Context, identifyCode string) (*service.ResolvedChannelAccount, error) {
+func resolveBridgeIdentityByChannelCode(rctx context.Context, identifyCode, accountID string) (*service.ResolvedChannelAccount, error) {
 	codeRepo := repository.NewChannelIdentifyCodeRepository()
 	rec, err := codeRepo.GetByCode(rctx, identifyCode)
-	if errors.Is(err, repository.ErrAmbiguousIdentifyCode) {
-		return nil, ErrBridgeTenantAmbiguous
-	}
 	if err != nil {
 		return nil, err
 	}
@@ -235,22 +235,32 @@ func resolveBridgeIdentityByChannelCode(rctx context.Context, identifyCode strin
 			out.ChannelCode = ch.Code
 		}
 	}
-	// Pick an active account for this channel if present.
-	// FR-029：统一走渠道账号服务的账号选择口，不再各自拼仓储选项。
+	// CH-07：渠道码只证明 tenant+channel，账号必须显式消歧；多账号时禁止取首条 fallback。
 	rows, listErr := service.NewChannelAccountService().ListAccounts(tenantCtx, repository.ChannelAccountListOptions{
 		TenantID: rec.TenantID, ChannelID: rec.ChannelID, Limit: 20,
 	})
 	if listErr != nil {
 		return nil, listErr
 	}
-	for i := range rows {
-		if rows[i].Status == 1 {
-			out.AccountID = rows[i].ID
-			break
-		}
+	if len(rows) == 0 {
+		return nil, ErrBridgeTenantUnresolved
 	}
-	if out.AccountID == 0 && len(rows) > 0 {
+	// 显式账号：必须命中该渠道下的账号。
+	if strings.TrimSpace(accountID) != "" {
+		for i := range rows {
+			if strconv.FormatUint(uint64(rows[i].ID), 10) == strings.TrimSpace(accountID) {
+				out.AccountID = rows[i].ID
+				break
+			}
+		}
+		if out.AccountID == 0 {
+			return nil, ErrBridgeTenantUnresolved
+		}
+	} else if len(rows) == 1 {
 		out.AccountID = rows[0].ID
+	} else {
+		// 多账号且未提供消歧账号：拒绝，避免取首条。
+		return nil, ErrBridgeTenantUnresolved
 	}
 	return out, nil
 }

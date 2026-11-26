@@ -283,6 +283,11 @@ func newTestService(t *testing.T, cfg *model.LeadMiningConfig, j *fakeJudge) *Se
 		channelResolver: NewChannelResolverWithRepos(nil, nil),
 		judge:           j,
 		historyFetcher:  cannedHistory(),
+		// LM-03：纯单测无真实三路检测仓储，显式声明一条完整命中，
+		// 避免证据闸把缺少 DB 的夹具误判为“证据不完整、禁止副作用”。
+		hitsProvider: func(context.Context, DetectionInput) ([]model.LeadMiningHit, error) {
+			return []model.LeadMiningHit{{ID: 1, Type: "keyword", Complete: true}}, nil
+		},
 		custRepo:        newFakeCustRepo(),
 		clueRepo:        newFakeClueRepo(),
 		cfgRepo:         &fakeCfgRepo{cfg: cfg},

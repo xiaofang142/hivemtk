@@ -59,6 +59,13 @@ type ChannelStatusService interface {
 	ChannelEnabled(ctx context.Context, tenantID uint, code string) (bool, error)
 }
 
+// ChannelRunnableGate CH-05/CH-10 运行入口统一闸门。
+// ChannelStatusService 自身即实现；dispatch 等入口只依赖这个窄口，
+// 不碰 *gorm.DB，也不重复渠道/账号状态判据。
+type ChannelRunnableGate interface {
+	RequireRunnable(ctx context.Context, tenantID, channelID, accountID uint) (*ResolvedChannelAccount, error)
+}
+
 type channelStatusService struct {
 	reader ChannelStatusReader
 	preset ChannelService
@@ -90,6 +97,18 @@ func (s *channelStatusService) RequireRunnable(ctx context.Context, tenantID, ch
 	}
 	if ch == nil || !ch.Enabled {
 		return nil, ErrChannelDisabled
+	}
+	// CH-01/CH-05：渠道主表 Enabled 之外，必须再消费租户 KV 启停（两租户互不影响）。
+	// 预设码走租户 KV，自定义码走租户行；无 KV/仓储故障一律 fail-closed，
+	// 不因查库失败把已关闭渠道重新放行。
+	if s.preset != nil {
+		tenantEnabled, perr := s.preset.IsEnabledForTenant(ctx, tenantID, ch.Code)
+		if perr != nil {
+			return nil, perr
+		}
+		if !tenantEnabled {
+			return nil, ErrChannelDisabled
+		}
 	}
 	acc, err := s.reader.AccountByID(ctx, tenantID, accountID)
 	if err != nil {

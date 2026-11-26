@@ -151,6 +151,21 @@ func (r *uploadIdentifyAccountRepo) GetByIdentifyCode(_ context.Context, code st
 	return &cp, nil
 }
 
+// uploadIdentifyChannelRepo 为 SageX 上传测试提供最小可用的渠道仓储，避免
+// ChannelResolver 严格校验（Available + 租户/渠道一致性）时 nil 接口 panic。
+type uploadIdentifyChannelRepo struct {
+	repository.ChannelRepository
+}
+
+func (r *uploadIdentifyChannelRepo) Available() bool { return true }
+
+func (r *uploadIdentifyChannelRepo) GetByID(_ context.Context, tenantID, id uint) (*model.Channel, error) {
+	if tenantID != 1 || id != 1 {
+		return nil, nil
+	}
+	return &model.Channel{ID: 1, TenantID: 1, Code: "wechat"}, nil
+}
+
 func newSageXUploadTestService(
 	instRepo SageXInstallationStore,
 	receiptRepo SageXEventReceiptStore,
@@ -164,7 +179,7 @@ func newSageXUploadTestService(
 			ChannelID:    1,
 			IdentifyCode: sageXUploadIdentifyCode,
 		},
-	}, &resolverChannelRepoStub{available: true, channel: &model.Channel{ID: 1, TenantID: 1, Code: "sagex", Enabled: true}}))
+	}, &uploadIdentifyChannelRepo{}))
 	return svc
 }
 
@@ -290,10 +305,10 @@ func TestSageXUpload_NonTextNotificationsRejected(t *testing.T) {
 				SchemaVersion: SageXSchemaVersion, BatchID: "b1", InstallationID: "i1",
 				Events: []SageXEventItem{{
 					EventID: "e1", EventType: "notification.posted", CapturedAt: "2026-11-23T10:00:00Z",
-					Source:       SageXSource{Platform: "android", Package: "com.tencent.mobileqq"},
-					ParseStatus:  tc.parseStatus,
+					Source: SageXSource{Platform: "android", Package: "com.tencent.mobileqq"},
+					ParseStatus: tc.parseStatus,
 					Conversation: SageXConversation{Type: "group", Title: "项目群"},
-					Message:      SageXMessage{Sender: "张三", Text: tc.text},
+					Message: SageXMessage{Sender: "张三", Text: tc.text},
 				}},
 			}, 10)
 			if err != nil {

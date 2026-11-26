@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -22,6 +23,7 @@ type CRMController struct {
 	permission *service.CustomerPermissionService
 	dedupe     *service.CustomerDedupeService
 	imports    *service.CustomerImportExportService
+	dicts      *service.DictionaryService
 	crm360     *service.CRM360Service
 	ai         *service.CustomerAIService
 	archive    *service.ClueArchiveService
@@ -33,6 +35,7 @@ func NewCRMController() *CRMController {
 		permission: service.NewCustomerPermissionService(),
 		dedupe:     service.NewCustomerDedupeService(),
 		imports:    service.NewCustomerImportExportService(),
+		dicts:      service.NewSeedOnlyDictionaryService(),
 		crm360:     service.NewCRM360Service(),
 		ai:         service.NewCustomerAIService(),
 		archive:    service.NewClueArchiveService(),
@@ -43,6 +46,13 @@ func NewCRMController() *CRMController {
 func (c *CRMController) SetProfileService(svc *service.Customer360Service) {
 	if c.crm360 != nil {
 		c.crm360.SetProfileService(svc)
+	}
+}
+
+// SetDictionaryService 由 Router 装配点注入 DB 字典服务；未注入时保持纯种子服务可用。
+func (c *CRMController) SetDictionaryService(svc *service.DictionaryService) {
+	if svc != nil {
+		c.dicts = svc
 	}
 }
 
@@ -232,6 +242,53 @@ func (c *CRMController) Import(ctx *gin.Context) {
 	response.Success(ctx, result, "导入完成")
 }
 
+// ImportPrecheck POST /api/manage/crm/import/precheck
+// CRM-09/19：复用既有导入作业的预检/报告（jobID 回查），叠加数据权限与业务字典校验。
+func (c *CRMController) ImportPrecheck(ctx *gin.Context) {
+	if _, ok := channelTenantID(ctx); !ok {
+		return
+	}
+	file, err := ctx.FormFile("file")
+	if err != nil {
+		response.Error(ctx, http.StatusBadRequest, "缺少导入文件(file)")
+		return
+	}
+	f, err := file.Open()
+	if err != nil {
+		response.Error(ctx, http.StatusBadRequest, "打开导入文件失败")
+		return
+	}
+	defer func() { _ = f.Close() }()
+	uid := getUserIDFromContext(ctx)
+	report, err := service.PrecheckWithScope(ctx.Request.Context(), c.imports, nil, uid, file.Filename, f, c.scope(ctx), c.dicts)
+	if err != nil {
+		response.Error(ctx, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.Success(ctx, report, "预检完成")
+}
+
+// BusinessDictionary GET /api/manage/crm/dictionaries/:domain
+// CRM-19：编辑/筛选/导入预检共用的受控选项（DB 优先，未配置回落代码种子）。
+func (c *CRMController) BusinessDictionary(ctx *gin.Context) {
+	if _, ok := channelTenantID(ctx); !ok {
+		return
+	}
+	domain := ctx.Param("domain")
+	switch domain {
+	case service.CRMDictIndustry, service.CRMDictBusinessType, service.CRMDictRequirementCategory:
+	default:
+		response.Error(ctx, http.StatusBadRequest, "未知的字典域")
+		return
+	}
+	items, _, err := c.dicts.GetDictionary(ctx.Request.Context(), domain)
+	if err != nil {
+		response.ErrorFromDB(ctx, err, "读取字典失败")
+		return
+	}
+	response.SuccessWithList(ctx, items, int64(len(items)))
+}
+
 // Export GET /api/manage/crm/export
 func (c *CRMController) Export(ctx *gin.Context) {
 	if _, ok := channelTenantID(ctx); !ok {
@@ -266,7 +323,9 @@ func (c *CRMController) View360(ctx *gin.Context) {
 	if _, ok := channelTenantID(ctx); !ok {
 		return
 	}
-	view, err := c.crm360.View(ctx.Request.Context(), c.scope(ctx), ctx.Param("id"))
+	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "50"))
+	view, err := c.crm360.View(ctx.Request.Context(), c.scope(ctx), ctx.Param("id"), service.CRM360ViewOptions{Page: page, PageSize: pageSize})
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "查询 360 视图失败")
 		return
@@ -282,8 +341,14 @@ func (c *CRMController) CrossIndustrySearch(ctx *gin.Context) {
 	}
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "20"))
-	result, err := c.crm360.CrossIndustrySearch(ctx.Request.Context(), tid, c.scope(ctx),
-		ctx.Query("keyword"), ctx.Query("industry"), page, pageSize)
+	var entityTypes []string
+	for _, et := range strings.Split(ctx.Query("entity_types"), ",") {
+		if et = strings.ToLower(strings.TrimSpace(et)); et != "" {
+			entityTypes = append(entityTypes, et)
+		}
+	}
+	result, err := c.crm360.CrossIndustrySearchWithEntities(ctx.Request.Context(), tid, c.scope(ctx),
+		ctx.Query("keyword"), ctx.Query("industry"), entityTypes, page, pageSize)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "跨账号检索失败")
 		return

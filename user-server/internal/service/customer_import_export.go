@@ -34,8 +34,10 @@ type CustomerImportRow struct {
 	SourceAccountID string
 	SourceChannel   string
 	OwnerUserID     uint
-	Tags            string
-	CompanyID       string // 公司主键（受控字段，需与公司范围校验）
+	Tags               string
+	CompanyID          string // 公司主键（受控字段，需与公司范围校验）
+	BusinessType       string // 业务类型（CRM-19 字典受控字段）
+	RequirementCategory string // 客户需求分类（CRM-19 字典受控字段）
 }
 
 // CustomerImportResult 导入结果汇总。
@@ -300,6 +302,7 @@ var crmImportAllowedFields = map[string]bool{
 	"tags": true, "company_id": true, "company": true,
 	"wechat_open_id": true, "douyin_open_id": true, "xiaohongshu_id": true,
 	"whatsapp_phone": true, "telegram_chat_id": true,
+	"business_type": true, "requirement_category": true,
 }
 
 // NormalizeImportFieldMapping 把用户映射归一到白名单字段，未知目标字段一律丢弃。
@@ -360,7 +363,7 @@ func ParseCustomerFile(r io.Reader, fileName string) ([]CustomerImportRow, strin
 		"客户名称": "name", "姓名": "name", "手机号": "phone", "邮箱": "email",
 		"行业": "industry", "负责人": "owner_user_id", "来源账号": "source_account_id",
 		"来源渠道": "source_channel", "公司": "company_id", "公司id": "company_id",
-		"标签": "tags",
+		"标签": "tags", "业务类型": "business_type", "需求分类": "requirement_category",
 	}
 	out := make([]CustomerImportRow, 0, len(rows)-1)
 	for i, rec := range rows[1:] {
@@ -389,6 +392,7 @@ func ParseCustomerFile(r io.Reader, fileName string) ([]CustomerImportRow, strin
 			Industry: get("industry"), SourceAccountID: get("source_account_id"),
 			SourceChannel: get("source_channel"), OwnerUserID: uint(owner),
 			Tags: get("tags"), CompanyID: get("company_id"),
+			BusinessType: get("business_type"), RequirementCategory: get("requirement_category"),
 		})
 		_ = i
 	}
@@ -596,7 +600,7 @@ func crmImportDenyReason(scope CustomerDataScope, row CustomerImportRow) string 
 
 // PrecheckWithScope 复用既有 CustomerImportJobService 的预检/作业，再叠加越权原因。
 // 不新建第二套预检或报告系统：jobID 与持久化报告完全来自既有作业服务。
-func PrecheckWithScope(ctx context.Context, _ *CustomerImportExportService, jobs *CustomerImportJobService, actorID uint, fileName string, reader io.Reader, scope CustomerDataScope) (*ImportPrecheckBrief, error) {
+func PrecheckWithScope(ctx context.Context, _ *CustomerImportExportService, jobs *CustomerImportJobService, actorID uint, fileName string, reader io.Reader, scope CustomerDataScope, dicts ...crmBusinessDictReader) (*ImportPrecheckBrief, error) {
 	if jobs == nil {
 		jobs = NewCustomerImportJobService()
 	}
@@ -628,8 +632,29 @@ func PrecheckWithScope(ctx context.Context, _ *CustomerImportExportService, jobs
 			Message string `json:"message"`
 		}{Row: r.Row, Message: r.Message})
 	}
+	// CRM-19：同一份预检报告里叠加业务字典校验。读字典失败显式返回，
+	// 不能把读失败当成「没有停用项」静默放行。
+	var indDisabled, btDisabled, rcDisabled map[string]bool
+	if len(dicts) > 0 && dicts[0] != nil {
+		var derr error
+		indDisabled, derr = CRMDisabledDictCodes(ctx, dicts[0], CRMDictIndustry)
+		if derr == nil {
+			btDisabled, derr = CRMDisabledDictCodes(ctx, dicts[0], CRMDictBusinessType)
+		}
+		if derr == nil {
+			rcDisabled, derr = CRMDisabledDictCodes(ctx, dicts[0], CRMDictRequirementCategory)
+		}
+		if derr != nil {
+			return nil, derr
+		}
+	}
 	for i, row := range rows {
 		reason := crmImportDenyReason(scope, row)
+		if reason == "" && (indDisabled != nil || btDisabled != nil || rcDisabled != nil) {
+			if derr := CRMValidateRowDicts(row, indDisabled, btDisabled, rcDisabled); derr != nil {
+				reason = derr.Error()
+			}
+		}
 		if reason == "" {
 			continue
 		}
