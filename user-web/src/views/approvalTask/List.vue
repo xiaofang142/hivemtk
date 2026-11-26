@@ -6,8 +6,8 @@
       type="warning"
       show-icon
       :closable="false"
-      title="待办底座不可用"
-      description="后端回的是 503（待办竖未装配或缺 DB 句柄）。下面的空列表不是「人工清完了」，是一次都没读到。"
+      :title="t('businessCopy.approval.unavailableTitle')"
+      :description="t('businessCopy.approval.unavailableDescription')"
     />
     <el-alert
       v-if="!me"
@@ -15,8 +15,8 @@
       type="info"
       show-icon
       :closable="false"
-      title="登录态里没有 user id"
-      description="动作类端点全部要求 operator，所以这一页此刻只能看不能点。重新登录通常就能拿回身份。"
+      :title="t('businessCopy.identity.title')"
+      :description="t('businessCopy.identity.approvalDescription')"
     />
 
     <el-card shadow="never">
@@ -308,6 +308,9 @@
 </template>
 
 <script setup>
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 // EC-20 (future, docs/未来任务清单.md §7.1.8 / M20): this page is the "待办中心/审批人裁决" UI
 // for human tasks (including approval.kind). It is NOT the full "操作审批/异常工作台" described
 // by EC-20 (no exception/reconciling/outcome_unknown queue, no commerce operation workbench,

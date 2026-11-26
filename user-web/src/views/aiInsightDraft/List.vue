@@ -5,7 +5,7 @@
         <h2 class="page-title">
           AI 洞察草稿
         </h2>
-        <span class="page-sub">只读证据生成草稿，人工确认后写回；无证据不展示可应用动作（PR-7）</span>
+        <span class="page-sub">{{ t('businessCopy.insight.subtitle') }}</span>
       </div>
       <div class="head-actions">
         <el-button
@@ -202,7 +202,7 @@
 
     <el-dialog
       v-model="generateVisible"
-      title="生成只读草稿(Stub)"
+      :title="t('businessCopy.insight.generateTitle')"
       width="520px"
       destroy-on-close
     >
@@ -211,7 +211,7 @@
         show-icon
         :closable="false"
         style="margin-bottom:12px"
-        title="只读来源生成：仅使用可审计只读数据。无证据不会生成可应用动作。"
+        :title="t('businessCopy.insight.generationDescription')"
       />
       <el-form
         :model="generateForm"
@@ -321,7 +321,12 @@
             {{ formatConfidence(current.confidence) }}
           </el-descriptions-item>
           <el-descriptions-item label="生成来源">
-            {{ current.generated_by || '-' }} / {{ current.model_name || '-' }} / {{ current.prompt_version || '-' }}
+            <template v-if="current.generated_by === 'stub_readonly' || current.model_name === 'stub-readonly'">
+              {{ t('businessCopy.insight.existingRecordsSource') }}
+            </template>
+            <template v-else>
+              {{ current.generated_by || '-' }} / {{ current.model_name || '-' }} / {{ current.prompt_version || '-' }}
+            </template>
           </el-descriptions-item>
           <el-descriptions-item label="创建时间">
             {{ fmtTime(current.created_at) }}
@@ -426,7 +431,7 @@
         show-icon
         :closable="false"
         style="margin-bottom:12px"
-        title="确认将按 proposed_action 执行可审计写回；请先检查证据链和动作内容。"
+        :title="t('businessCopy.insight.confirmDescription')"
       />
       <el-form label-width="90px">
         <el-form-item label="草稿ID">
@@ -467,6 +472,9 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { aiInsightDraftApi } from '@/api/aiInsightDraft'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const loading = ref(false)
 const generating = ref(false)

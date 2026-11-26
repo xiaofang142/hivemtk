@@ -4,11 +4,11 @@ import "time"
 
 // SystemMenuNode 系统菜单树节点（RBAC 菜单权限的权威注册表）
 //
-// 与前端 user-web/src/layout/Layout.vue 的 topMenus 结构一一对应：
+// GET /api/menus 下发本注册表，经模块与角色授权裁剪后供前端直接渲染：
 //   - Key   节点唯一键（前端 i18n 菜单标题用 t("menu."+Key)、图标用 Key→icon 映射）
 //   - Path  叶子/带页目录的路由路径（空表示纯目录）
-//   - Roles 该节点的旧静态角色词表；为空表示原设计全员可见
-//     （仅用于 DefaultMenuKeys 推导初始分配，分配后以 role_menu_permissions 表为准）
+//   - Roles 角色授权上界，祖先限制同时约束后代；为空表示不额外限制
+//     （DefaultMenuKeys 用于首次分配，存量分配仍须与 EligibleMenuKeys 取交集）
 type SystemMenuNode struct {
 	Key      string           `json:"key"`
 	Title    string           `json:"title"`
@@ -39,57 +39,46 @@ func (RoleMenuPermission) TableName() string {
 // 点菜单会进 NotFound、面包屑也不显示，而两边分处两个目录两个语言，没有编译器会替你
 // 发现。前端 tests/unit/menuRegistry-helper.js 会读本文件，前端
 // tests/unit/router_*.test.js 用它把每个菜单 path 与对应路由模块钉在一起。
-//
-// 注意：原先这条注释写的是"与前端 Layout.vue topMenus 同步"——那句话在菜单搬走后
-// 就已经不成立了（Layout.vue 里不再有静态 topMenus），照着它去 Layout.vue 找对不上的地方
-// 只会白费时间。
 var SystemMenuTree = []SystemMenuNode{
 	{
 		Key: "workspace", Title: "工作台", Icon: "Monitor",
 		Roles: []string{"admin", "viewer", "staff"},
 		Children: []SystemMenuNode{
-			{Key: "messageHub", Title: "消息中台 MQ", Icon: "MessageBox", Path: "/messageHub/list", Roles: []string{"admin"}},
-			{Key: "messageHubDashboard", Title: "消息中台看板", Icon: "DataBoard", Path: "/messageHub/dashboard", Roles: []string{"admin"}},
 			{Key: "inbox", Title: "统一收件箱", Icon: "Box", Path: "/inbox/list"},
 			{Key: "approvalTask", Title: "待办中心", Icon: "Tickets", Path: "/approvalTask/list"},
 			{Key: "badCase", Title: "Bad Case 队列", Icon: "Warning", Path: "/badCase/list"},
-			{Key: "salesCockpit", Title: "销售驾驶舱", Icon: "DataLine", Path: "/sales-cockpit", Roles: []string{"admin"}},
-			{Key: "orderDraft", Title: "订单草稿", Icon: "Document", Path: "/dashboard/drafts", Roles: []string{"admin"}},
-			{Key: "salesWorkbench", Title: "销售工作台", Icon: "Notebook", Path: "/sales-workbench", Roles: []string{"admin"}},
-			{Key: "followups", Title: "今日跟进", Icon: "AlarmClock", Path: "/followups/today", Roles: []string{"admin"}},
-			{Key: "wecomAccount", Title: "多账号聚合", Icon: "Connection", Path: "/wecomAccount/list", Roles: []string{"admin"}},
 		},
 	},
 	{
-		Key: "customer", Title: "客户中心", Icon: "UserFilled",
+		Key: "customer", Title: "客户与销售", Icon: "UserFilled",
 		Roles: []string{"admin", "viewer", "staff"},
 		Children: []SystemMenuNode{
 			{Key: "clueList", Title: "线索列表", Icon: "Document", Path: "/clue/list"},
 			{Key: "clueStatistics", Title: "线索统计", Icon: "DataAnalysis", Path: "/clue/statistics"},
 			{Key: "leadMining", Title: "线索挖掘", Icon: "Search", Path: "/lead-mining/index"},
 			{Key: "customer360", Title: "客户 360", Icon: "UserFilled", Path: "/customer360/list"},
-			// D04：同意事实账（grant/revoke 追加）与触达偏好（暂停/时区）的管理面。
-			// 与 customer360 同组：两者回答的是同一个问题——"这个客户现在能不能联系"。
 			{Key: "customerConsents", Title: "客户同意与偏好", Icon: "DocumentChecked", Path: "/customer360/consents"},
-			{Key: "businessAccountAuth", Title: "业务账号授权", Icon: "Lock", Path: "/businessAccountAuth/list", Roles: []string{"admin"}},
 			{Key: "customerImportJob", Title: "客户导入任务", Icon: "UploadFilled", Path: "/customerImportJob/list", Roles: []string{"admin"}},
 			{Key: "aiInsightDraft", Title: "AI洞察草稿", Icon: "MagicStick", Path: "/aiInsightDraft/list", Roles: []string{"admin"}},
 			{Key: "crossAccountSearch", Title: "跨账号客户检索", Icon: "Search", Path: "/crossAccountSearch/list", Roles: []string{"admin"}},
 			{Key: "customerEvent", Title: "客户事件", Icon: "Bell", Path: "/customerEvent/list"},
 			{Key: "tagSegmentation", Title: "标签分层", Icon: "PriceTag", Path: "/tagSegmentation/list", Roles: []string{"admin", "viewer"}},
 			{Key: "userSegment", Title: "用户分层 RFM", Icon: "PieChart", Path: "/userSegment/list", Roles: []string{"admin", "viewer"}},
-			// 2026-11-24 菜单重整：客户主数据（含去重/360/导入导出/联系人等实体子页）
-			// 与线索治理（规则/通知路由/证据/归档/权限视图）是今日新增的两个独立业务面，
-			// 原先只有深链、侧栏无入口 ⇒ 非超管无从进入，能力面守卫也没有 menu_key 可挂。
-			// 各自收敛为一个菜单入口 + 默认列表页：子页从列表内工作流进入，不铺平铺入口
-			//（沿用 2026-11-20「列表内完成表单操作」的审计口径）。
 			{Key: "crmMaster", Title: "客户主数据", Icon: "User", Path: "/crm/list", Roles: []string{"admin"}},
 			{Key: "leadGovernance", Title: "线索治理", Icon: "Aim", Path: "/leads/rules", Roles: []string{"admin"}},
-			// unifiedMessage（统一消息，/unifiedMessage/list）已于 2026-11-10 除名：
-			// 与「统一收件箱」用户视角重复（同一批渠道入站消息），且同一数据面
-			// 已有两个更精确的消费入口——收件箱按会话呈现、客户 360 按
-			// message_history 呈现（unifiedMsgRepo）。unified_messages 表与
-			// /api/unified-messages 别名接口按 J-7/D-8 保守口径保留不删。
+			{Key: "salesCockpit", Title: "销售驾驶舱", Icon: "DataLine", Path: "/sales-cockpit", Roles: []string{"admin"}},
+			{Key: "orderDraft", Title: "订单草稿", Icon: "Document", Path: "/dashboard/drafts", Roles: []string{"admin"}},
+			{Key: "salesWorkbench", Title: "销售工作台", Icon: "Notebook", Path: "/sales-workbench", Roles: []string{"admin"}},
+			{Key: "followups", Title: "今日跟进", Icon: "AlarmClock", Path: "/followups/today", Roles: []string{"admin"}},
+			{
+				Key: "agentSalesIntel", Title: "销售智能", Icon: "Trophy",
+				Roles: []string{"admin"},
+				Children: []SystemMenuNode{
+					{Key: "objectionList", Title: "异议处理", Icon: "ChatLineRound", Path: "/objection/list"},
+					{Key: "personaList", Title: "销冠画像", Icon: "UserFilled", Path: "/persona/list"},
+				},
+			},
+			{Key: "commerceOperations", Title: "电商操作台", Icon: "Shop", Path: "/commerce/operations", Roles: []string{"admin"}},
 			{
 				Key: "customerIdentity", Title: "客户身份", Icon: "Connection",
 				Roles: []string{"admin"},
@@ -102,7 +91,7 @@ var SystemMenuTree = []SystemMenuNode{
 		},
 	},
 	{
-		Key: "aiAgent", Title: "智能体", Icon: "Cpu",
+		Key: "aiAgent", Title: "智能体与客服", Icon: "Cpu",
 		Roles: []string{"admin", "customer_service", "staff"},
 		Children: []SystemMenuNode{
 			{
@@ -117,42 +106,23 @@ var SystemMenuTree = []SystemMenuNode{
 				Children: []SystemMenuNode{
 					{Key: "customerSession", Title: "客服会话", Icon: "Service", Path: "/customerSession/list"},
 					{Key: "intentRecognition", Title: "意图识别", Icon: "Aim", Path: "/intentRecognition/list"},
-					// intentToolFlow（意图→工具调用流编排，TB-02）：识别到意图后调用什么工具/顺序/参数，
-					// 数据面在 intent_tool_chains（TB-01）；管理动作（编排/启停）属 admin 职责。
 					{Key: "intentToolFlow", Title: "意图工具流", Icon: "Operation", Path: "/intentRecognition/tool-flow", Roles: []string{"admin"}},
 					{Key: "dialogueMemory", Title: "对话记忆", Icon: "ChatDotRound", Path: "/dialogueMemory/list"},
 					{Key: "llmRouting", Title: "LLM 路由", Icon: "Cpu", Path: "/llmRouting/list"},
-					// T1 未知问题运营页（低置信度回流 → FAQ 提交审核）：页面与接口
-					// 2026-10 起就在（src/views/unknownQuestion/List.vue、/api/unknown-questions），
-					// 但注册表一直没有入口，只有 URL 深链可达——2026-11-09 全路由审计
-					// 证实三面（菜单/页内跳转/路由名引用）都查不到它，这里补上。
 					{Key: "unknownQuestions", Title: "未知问题运营", Icon: "QuestionFilled", Path: "/unknown-questions", Roles: []string{"admin"}},
+					{Key: "confidencePanel", Title: "置信度看板", Icon: "CircleCheck", Path: "/confidence/panel", Roles: []string{"admin", "viewer"}},
+					{Key: "humanizePanel", Title: "拟人度看板", Icon: "MagicStick", Path: "/humanize/panel", Roles: []string{"admin", "viewer"}},
+					{Key: "feedbackLoopPanel", Title: "反馈闭环", Icon: "Refresh", Path: "/feedbackLoop/panel", Roles: []string{"admin", "viewer"}},
 				},
 			},
 			{
-				Key: "agentActive", Title: "主动触达", Icon: "Promotion",
-				Children: []SystemMenuNode{
-					{Key: "reachPipeline", Title: "触达 Pipeline", Icon: "Promotion", Path: "/reachPipeline/list", Roles: []string{"admin"}},
-					// D02：静默时段/合规窗口内暂缓的主动触达，可查可取消（仅 pending 可取消）。
-					{Key: "reachDeferredOutbound", Title: "延迟出站管理", Icon: "Timer", Path: "/reachPipeline/deferred-outbound", Roles: []string{"admin"}},
-					{Key: "marketingFlow", Title: "营销流程", Icon: "SetUp", Path: "/marketingFlow/list", Roles: []string{"admin"}},
-					{Key: "batchOperation", Title: "批量运营", Icon: "Operation", Path: "/batchOperation/list", Roles: []string{"admin"}},
-				},
-			},
-			{
-				Key: "agentSupport", Title: "能力支撑", Icon: "Connection",
+				Key: "agentSupport", Title: "工具与 SOP", Icon: "Connection",
 				Children: []SystemMenuNode{
 					{Key: "sopAgent", Title: "SOP 智能体", Icon: "Connection", Path: "/sopAgent/list", Roles: []string{"admin"}},
-					{Key: "sopTemplate", Title: "SOP 模板库", Icon: "Tickets", Path: "/sop-template/list", Roles: []string{"admin"}},
-					{Key: "sopTemplateMarket", Title: "SOP 模板市场", Icon: "ShoppingCart", Path: "/sop-template/market", Roles: []string{"admin"}},
-					{Key: "faqKb", Title: "FAQ 知识库", Icon: "Notebook", Path: "/faq/list"},
-					{Key: "knowledgeBase", Title: "知识库管理", Icon: "Files", Path: "/knowledgeBase"},
 					{Key: "scriptTemplate", Title: "销冠话术库", Icon: "ChatLineSquare", Path: "/scriptTemplate/list"},
 					{Key: "scriptTemplateAbStats", Title: "话术 AB 统计", Icon: "DataLine", Path: "/scriptTemplate/ab-stats"},
 					{Key: "aiToolManagement", Title: "AI 工具管理", Icon: "Tools", Path: "/aiAgent/tools", Roles: []string{"admin"}},
 					{Key: "aiCustomIntegration", Title: "工具接入", Icon: "Link", Path: "/aiAgent/integrations", Roles: []string{"admin"}},
-					// MCP 凭证（src/views/mcp/Credentials.vue，/api/mcp/credentials）：
-					// 与上面 aiCustomIntegration 同属「AI 能调用什么」这一摊，同轮审计补的入口。
 					{Key: "mcpCredentials", Title: "MCP 凭证", Icon: "Key", Path: "/mcp/credentials", Roles: []string{"admin"}},
 				},
 			},
@@ -165,23 +135,7 @@ var SystemMenuTree = []SystemMenuNode{
 					{Key: "quickReply", Title: "快捷回复", Icon: "ChatLineSquare", Path: "/customerService/quickReply"},
 					{Key: "sessionTag", Title: "会话标签", Icon: "CollectionTag", Path: "/customerService/sessionTag"},
 					{Key: "aiSuggestion", Title: "AI 建议", Icon: "MagicStick", Path: "/customerService/aiSuggestion"},
-				},
-			},
-			{
-				Key: "agentChannel", Title: "客服渠道", Icon: "Connection",
-				Roles: []string{"admin"},
-				Children: []SystemMenuNode{
-					{Key: "chatChannelList", Title: "网页客服渠道", Icon: "Connection", Path: "/chatChannel/list"},
-					{Key: "whatsappCloud", Title: "WhatsApp Cloud", Icon: "Connection", Path: "/whatsapp-cloud"},
-					{Key: "dingtalkApp", Title: "钉钉应用账号", Icon: "Connection", Path: "/dingtalk-app"},
-				},
-			},
-			{
-				Key: "agentSalesIntel", Title: "销售智能", Icon: "Trophy",
-				Roles: []string{"admin"},
-				Children: []SystemMenuNode{
-					{Key: "objectionList", Title: "异议处理", Icon: "ChatLineRound", Path: "/objection/list"},
-					{Key: "personaList", Title: "销冠画像", Icon: "UserFilled", Path: "/persona/list"},
+					{Key: "automationCenter", Title: "客服自动化", Icon: "Operation", Path: "/system/automation-hub", Roles: []string{"admin"}},
 				},
 			},
 		},
@@ -190,18 +144,24 @@ var SystemMenuTree = []SystemMenuNode{
 		Key: "reach", Title: "触达运营", Icon: "Promotion",
 		Roles: []string{"admin", "viewer", "staff"},
 		Children: []SystemMenuNode{
-			// 2026-11-24 菜单重整：电商操作台是独立业务对象（平台店铺订单），
-			// 有独立的 /api/v1/commerce 操作→证据→复核闭环，不是任何页面的详情；
-			// 原先只有深链、侧栏无入口。归入触达运营顶级目录。
-			{Key: "commerceOperations", Title: "电商操作台", Icon: "Shop", Path: "/commerce/operations", Roles: []string{"admin"}},
+			{
+				Key: "agentActive", Title: "主动触达", Icon: "Promotion",
+				Children: []SystemMenuNode{
+					{Key: "reachPipeline", Title: "触达 Pipeline", Icon: "Promotion", Path: "/reachPipeline/list", Roles: []string{"admin"}},
+					{Key: "reachDeferredOutbound", Title: "延迟出站管理", Icon: "Timer", Path: "/reachPipeline/deferred-outbound", Roles: []string{"admin"}},
+					{Key: "marketingFlow", Title: "营销流程", Icon: "SetUp", Path: "/marketingFlow/list", Roles: []string{"admin"}},
+					{Key: "batchOperation", Title: "批量运营", Icon: "Operation", Path: "/batchOperation/list", Roles: []string{"admin"}},
+				},
+			},
+			{Key: "systemMaterialLibrary", Title: "素材库", Icon: "Picture", Path: "/system/material-library", Roles: []string{"admin"}},
 			{
 				Key: "emailReach", Title: "邮件触达", Icon: "Message",
 				Children: []SystemMenuNode{
 					{Key: "emailList", Title: "邮件列表", Icon: "ChatSquare", Path: "/email", Roles: []string{"admin"}},
 					{Key: "emailDrafts", Title: "我的草稿", Icon: "Document", Path: "/email/drafts", Roles: []string{"admin"}},
 					{Key: "emailJobs", Title: "我的任务", Icon: "Document", Path: "/email/jobs", Roles: []string{"admin"}},
-					{Key: "emailSmtp", Title: "邮件账号", Icon: "Setting", Path: "/email/smtp", Roles: []string{"admin"}},
-					{Key: "emailInfo", Title: "邮件代理", Icon: "Setting", Path: "/email/info"},
+					{Key: "emailSmtp", Title: "发件账号", Icon: "Setting", Path: "/email/smtp", Roles: []string{"admin"}},
+					{Key: "emailInfo", Title: "邮箱服务商参考", Icon: "Setting", Path: "/email/info"},
 					{Key: "emailDeliverability", Title: "送达分析", Icon: "DataAnalysis", Path: "/email/deliverability", Roles: []string{"admin"}},
 					{Key: "emailGuide", Title: "邮件使用指南", Icon: "Document", Path: "/email/guide"},
 				},
@@ -212,8 +172,6 @@ var SystemMenuTree = []SystemMenuNode{
 					{Key: "smsList", Title: "短信列表", Icon: "ChatDotSquare", Path: "/sms/list"},
 					{Key: "smsDrafts", Title: "短信草稿", Icon: "Document", Path: "/sms/drafts"},
 					{Key: "smsJobs", Title: "短信任务", Icon: "List", Path: "/sms/jobs"},
-					// 2026-11-17 审计 P2-2：短信通道凭证读写口收归 admin（与 adminOnlyRoutes
-					// 的 /api/sms/config/** 同口径；对照邮件配置口本就挂 admin）。
 					{Key: "smsConfig", Title: "短信配置", Icon: "Setting", Path: "/sms/config", Roles: []string{"admin"}},
 				},
 			},
@@ -258,10 +216,6 @@ var SystemMenuTree = []SystemMenuNode{
 				Children: []SystemMenuNode{
 					{Key: "whatsappAccount", Title: "账号管理", Icon: "Cpu", Path: "/whatsapp/account"},
 					{Key: "whatsappDrafts", Title: "草稿箱", Icon: "Document", Path: "/whatsapp/drafts"},
-					// 菜单名与页面内容对齐（2026-11-09 全路由审计）：jobs=群发任务链
-					// （草稿→任务→进度）；bulk-matrix=统计卡+模板群发表单（发对象=全部
-					// WhatsApp 线索）；group-messaging=群组发送+模板管理。原「群发/
-					// 群发统计矩阵/群发矩阵」三个名字指向不清且与页面内容错位。
 					{Key: "whatsappJobs", Title: "群发任务", Icon: "Promotion", Path: "/whatsapp/jobs"},
 					{Key: "whatsappLeadGroup", Title: "群发线索分组", Icon: "UserFilled", Path: "/whatsapp/lead-group-selection"},
 					{Key: "whatsappBulkMatrix", Title: "模板群发", Icon: "Grid", Path: "/whatsapp/bulk-matrix"},
@@ -273,14 +227,10 @@ var SystemMenuTree = []SystemMenuNode{
 				Roles: []string{"admin"},
 				Children: []SystemMenuNode{
 					{Key: "telegramAccount", Title: "机器人", Icon: "Cpu", Path: "/telegram/account"},
-					// 入群管控（src/views/telegram/gate.vue，/api/telegram/gates CRUD）：
-					// 页面 2026-09 交付，菜单一直没接，同轮审计补上。
 					{Key: "telegramGate", Title: "入群管控", Icon: "Lock", Path: "/telegram/gate"},
 				},
 			},
 			{
-				// 2026-11-25 菜单合并优化：单子分组自带 Path 指向唯一功能页，
-				// 点分组名直达，省掉一层空点击；key 保留（历史授权/模块绑定不变）。
 				Key: "qq", Title: "QQ 机器人", Icon: "ChatDotRound", Path: "/qq/account",
 				Roles: []string{"admin"},
 				Children: []SystemMenuNode{
@@ -288,7 +238,6 @@ var SystemMenuTree = []SystemMenuNode{
 				},
 			},
 			{
-				// 2026-11-25 菜单合并优化：同上，单子分组直达唯一功能页。
 				Key: "feishu", Title: "飞书", Icon: "ChatDotRound", Path: "/feishu/account",
 				Roles: []string{"admin"},
 				Children: []SystemMenuNode{
@@ -312,6 +261,10 @@ var SystemMenuTree = []SystemMenuNode{
 		Key: "knowledge", Title: "知识中心", Icon: "Collection",
 		Roles: []string{"admin", "viewer", "staff"},
 		Children: []SystemMenuNode{
+			{Key: "faqKb", Title: "FAQ 知识库", Icon: "Notebook", Path: "/faq/list", Roles: []string{"admin", "customer_service", "staff"}},
+			{Key: "knowledgeBase", Title: "知识库管理", Icon: "Files", Path: "/knowledgeBase", Roles: []string{"admin", "customer_service", "staff"}},
+			{Key: "sopTemplate", Title: "SOP 模板库", Icon: "Tickets", Path: "/sop-template/list", Roles: []string{"admin"}},
+			{Key: "sopTemplateMarket", Title: "SOP 模板市场", Icon: "ShoppingCart", Path: "/sop-template/market", Roles: []string{"admin"}},
 			{
 				Key: "knowledgeWorkspace", Title: "知识库工作台", Icon: "Files",
 				Roles: []string{"admin"},
@@ -326,13 +279,8 @@ var SystemMenuTree = []SystemMenuNode{
 					{Key: "knowledgeRagEval", Title: "RAG 评测", Icon: "CircleCheck", Path: "/knowledge/rag-eval"},
 					{Key: "knowledgeOpenAPI", Title: "OpenAPI 集成", Icon: "Connection", Path: "/knowledge/openapi"},
 					{Key: "knowledgeConnectors", Title: "连接器配置", Icon: "Link", Path: "/knowledge/connectors"},
-					// 2026-11-24 菜单重整：网站爬取源与 QA 审核队列是知识入库/审核流水线
-					// 的两个独立对象（各自有独立 API 面），原先只有路由、侧栏无入口。
 					{Key: "knowledgeCrawlerSources", Title: "网站爬取", Icon: "Connection", Path: "/knowledge/crawler-sources", Roles: []string{"admin"}},
 					{Key: "knowledgeQaCandidates", Title: "QA 审核队列", Icon: "CircleCheck", Path: "/knowledge/qa-candidates", Roles: []string{"admin"}},
-					// 第三方知识库导入器（src/views/kb/Connectors.vue，把 IMA 等第三方
-					// 知识库文档拉进本地 RAG）。与上面 knowledgeConnectors（Notion/飞书/
-					// 钉钉凭据连接器）同组不同职：那个管凭据连通，这个管文档导入。
 					{Key: "kbImportConnectors", Title: "第三方知识库导入", Icon: "Connection", Path: "/kb/connectors", Roles: []string{"admin"}},
 				},
 			},
@@ -340,12 +288,6 @@ var SystemMenuTree = []SystemMenuNode{
 				Key: "ragProductConfig", Title: "RAG 知识库", Icon: "ChatLineRound",
 				Roles: []string{"admin"},
 				Children: []SystemMenuNode{
-					// ragMainConfig（RAG 主配置，/system/rag-product-config）已于
-					// 2026-11-10 除名：它只是个 tabs 包装页（RagProductConfig/index.vue），
-					// 挂载的 RagProductManagement / AccountConfig 本身就是独立路由的
-					// ragProduct / ragAccount 两页——三个菜单两条内容。包装页全仓
-					// 扫描仅此一例。该节点在 ragProductConfig 组（Roles=admin）内，
-					// 非超管从来无从获得授予 ⇒ 无存量授权行，无需清理迁移。
 					{Key: "ragAccount", Title: "RAG 账号配置", Icon: "Key", Path: "/system/rag-account"},
 					{Key: "ragProduct", Title: "RAG 产品管理", Icon: "Goods", Path: "/system/rag-product"},
 				},
@@ -362,13 +304,76 @@ var SystemMenuTree = []SystemMenuNode{
 		},
 	},
 	{
+		Key: "geoTools", Title: "GEO 增长", Icon: "MagicStick", Path: "/geo-tools/keyword-mining",
+		Roles: []string{"admin"},
+		Children: []SystemMenuNode{
+			{
+				Key: "geoDiagnose", Title: "诊断", Icon: "Aim", Path: "/geo-tools/audit-center",
+				Children: []SystemMenuNode{
+					{Key: "geoAuditCenter", Title: "审计中心", Icon: "Aim", Path: "/geo-tools/audit-center"},
+				},
+			},
+			{
+				Key: "geoConfigGroup", Title: "配置", Icon: "Setting",
+				Children: []SystemMenuNode{
+					{Key: "geoBrandConfig", Title: "AI 爬虫访问文件", Icon: "OfficeBuilding", Path: "/geo-tools/brand-config"},
+					{Key: "geoSeoInfra", Title: "SEO 基础设施", Icon: "DocumentChecked", Path: "/geo-tools/seo-infra"},
+					{Key: "geoPusherConfig", Title: "蜘蛛推送配置", Icon: "Key", Path: "/geo-tools/pusher-config"},
+					{Key: "geoSiteConfig", Title: "静态站部署", Icon: "Monitor", Path: "/geo-tools/site-config"},
+					{Key: "geoSchemaTemplates", Title: "Schema 模板", Icon: "Collection", Path: "/geo-tools/schema-templates"},
+					{Key: "geoCompetitors", Title: "竞品管理", Icon: "UserFilled", Path: "/geo-tools/competitors"},
+					{Key: "geoConfig", Title: "品牌与站点资料", Icon: "Setting", Path: "/geo-tools/config"},
+				},
+			},
+			{
+				Key: "geoProd", Title: "生产", Icon: "EditPen",
+				Children: []SystemMenuNode{
+					{Key: "geoAutopilot", Title: "一键自动驾驶", Icon: "MagicStick", Path: "/geo-tools/autopilot"},
+					{Key: "geoKeywordMining", Title: "关键词蒸馏", Icon: "Search", Path: "/geo-tools/keyword-mining"},
+					{Key: "geoContentCreation", Title: "内容创作", Icon: "EditPen", Path: "/geo-tools/content-creation"},
+					{Key: "geoContentOptimize", Title: "文章优化", Icon: "Document", Path: "/geo-tools/content-optimize"},
+					{Key: "geoKnowledgeBase", Title: "GEO 知识库", Icon: "FolderOpened", Path: "/geo-tools/knowledge-base"},
+					{Key: "geoEntityGraph", Title: "实体图谱", Icon: "Share", Path: "/geo-tools/entity-graph"},
+					{Key: "geoDecisionReport", Title: "信源补位任务", Icon: "Document", Path: "/geo/decision-report"},
+				},
+			},
+			{
+				Key: "geoPublish", Title: "发布", Icon: "Connection",
+				Children: []SystemMenuNode{
+					{Key: "geoSitePublish", Title: "发布到官网", Icon: "Upload", Path: "/geo-tools/site-publish"},
+					{Key: "geoPushCenter", Title: "蜘蛛推送", Icon: "Promotion", Path: "/geo-tools/push-center"},
+					{Key: "geoPlatformPublish", Title: "平台发布", Icon: "Connection", Path: "/geo-tools/platform-publish"},
+					{Key: "geoWorkflow", Title: "工作流", Icon: "Setting", Path: "/geo-tools/workflow"},
+				},
+			},
+			{
+				Key: "geoCapture", Title: "承接", Icon: "ChatDotRound", Path: "/geo-tools/capture-links",
+				Children: []SystemMenuNode{
+					{Key: "geoCaptureLinks", Title: "承接链接", Icon: "Link", Path: "/geo-tools/capture-links"},
+				},
+			},
+			{
+				Key: "geoMonitor", Title: "监控", Icon: "Monitor",
+				Children: []SystemMenuNode{
+					{Key: "geoFunnelDashboard", Title: "漏斗总览", Icon: "DataAnalysis", Path: "/geo-tools/funnel-dashboard"},
+					{Key: "geoIndexTracking", Title: "收录与引用", Icon: "CircleCheck", Path: "/geo-tools/index-tracking"},
+					{Key: "geoVisibilityBoard", Title: "可见性观测", Icon: "TrendCharts", Path: "/geo-tools/visibility"},
+					{Key: "geoSovBoard", Title: "竞品 SOV", Icon: "DataLine", Path: "/geo-tools/sov-board"},
+					{Key: "geoCrawlerStats", Title: "UA 探测记录", Icon: "Monitor", Path: "/geo-tools/crawler-stats"},
+					{Key: "geoVerification", Title: "多模型验证", Icon: "CircleCheck", Path: "/geo-tools/verification"},
+					{Key: "geoAlerts", Title: "预警中心", Icon: "Bell", Path: "/geo-tools/alerts"},
+					{Key: "geoReports", Title: "数据报表", Icon: "DataAnalysis", Path: "/geo-tools/reports"},
+					{Key: "geoDualEngine", Title: "双端监测", Icon: "DataBoard", Path: "/geo-tools/dual-engine"},
+				},
+			},
+		},
+	},
+	{
 		Key: "analytics", Title: "数据分析", Icon: "DataAnalysis",
 		Roles: []string{"admin", "viewer", "staff"},
 		Children: []SystemMenuNode{
 			{Key: "dashboardScreen", Title: "数据大屏", Icon: "DataBoard", Path: "/dashboardScreen/list"},
 			{Key: "conversionFunnel", Title: "转化漏斗", Icon: "Filter", Path: "/conversionFunnel/list"},
-			// T3 LLM 观测报表（src/views/reports/LlmUsageDashboard.vue，/api/reports/llm/*）：
-			// llm_usage_daily 日聚合 + 当日明细兜底。交付时只有深链无菜单，同轮审计补上。
 			{Key: "llmUsageReport", Title: "LLM 用量报表", Icon: "TrendCharts", Path: "/reports/llm", Roles: []string{"admin", "viewer"}},
 			{Key: "aiProductivity", Title: "AI 产能分析", Icon: "DataAnalysis", Path: "/aiProductivity/list", Roles: []string{"admin", "viewer"}},
 			{Key: "customReport", Title: "自定义报表", Icon: "Document", Path: "/customReport/list"},
@@ -376,9 +381,68 @@ var SystemMenuTree = []SystemMenuNode{
 			{Key: "churnPrediction", Title: "流失预警", Icon: "Warning", Path: "/churnPrediction/list", Roles: []string{"admin", "viewer"}},
 			{Key: "customerJourney", Title: "客户旅程大屏", Icon: "TrendCharts", Path: "/customerJourney/dashboard", Roles: []string{"admin", "viewer"}},
 			{Key: "cohortPath", Title: "同期群路径分析", Icon: "Guide", Path: "/analytics/cohort-path", Roles: []string{"admin", "viewer"}},
-			{Key: "confidencePanel", Title: "置信度看板", Icon: "CircleCheck", Path: "/confidence/panel", Roles: []string{"admin", "viewer"}},
-			{Key: "humanizePanel", Title: "拟人度看板", Icon: "MagicStick", Path: "/humanize/panel", Roles: []string{"admin", "viewer"}},
-			{Key: "feedbackLoopPanel", Title: "反馈闭环", Icon: "Refresh", Path: "/feedbackLoop/panel", Roles: []string{"admin", "viewer"}},
+		},
+	},
+	{
+		Key: "system", Title: "系统管理", Icon: "Setting",
+		Roles: []string{"admin", "viewer", "staff"},
+		Children: []SystemMenuNode{
+			{
+				Key: "siteConfig", Title: "系统配置与运维", Icon: "Tools",
+				Roles: []string{"admin"},
+				Children: []SystemMenuNode{
+					{Key: "systemConfig", Title: "站点设置", Icon: "Tools", Path: "/system/config"},
+					{Key: "systemObsConfig", Title: "存储配置", Icon: "Box", Path: "/system/obs-config"},
+					{Key: "systemMonitor", Title: "监控", Icon: "Cpu", Path: "/system/monitor"},
+					{Key: "systemTrace", Title: "链路追踪", Icon: "Connection", Path: "/system/trace"},
+					{Key: "systemGuide", Title: "系统使用指南", Icon: "Document", Path: "/system/guide"},
+					{Key: "domainPool", Title: "域名池", Icon: "Link", Path: "/domainPool"},
+					{Key: "backupList", Title: "备份恢复", Icon: "FolderOpened", Path: "/backup/list"},
+					{Key: "dynamicThreshold", Title: "动态阈值参数", Icon: "DataLine", Path: "/system/config-params", Roles: []string{"admin"}},
+					{Key: "systemDictionaries", Title: "业务字典", Icon: "Collection", Path: "/system/dictionaries", Roles: []string{"admin"}},
+					{Key: "systemFeatureFlags", Title: "功能开关", Icon: "Switch", Path: "/system/feature-flags", Roles: []string{"admin"}},
+					{Key: "ltcConfig", Title: "LTC 运营开关", Icon: "Open", Path: "/system/ltc-config", Roles: []string{"admin"}},
+					{Key: "opsOverview", Title: "运维总览", Icon: "Monitor", Path: "/ops-overview", Roles: []string{"admin"}},
+					{Key: "observabilityDashboard", Title: "AI 观测与渠道健康", Icon: "Odometer", Path: "/observability-dashboard", Roles: []string{"admin"}},
+					{Key: "capabilityMatrix", Title: "能力矩阵", Icon: "Grid", Path: "/cap/matrix", Roles: []string{"admin"}},
+					{Key: "messageHub", Title: "消息中台 MQ", Icon: "MessageBox", Path: "/messageHub/list", Roles: []string{"admin"}},
+					{Key: "messageHubDashboard", Title: "消息中台看板", Icon: "DataBoard", Path: "/messageHub/dashboard", Roles: []string{"admin"}},
+					{Key: "operationLog", Title: "操作日志", Icon: "Tickets", Path: "/operationLog/list"},
+					{Key: "securityAudit", Title: "安全审计", Icon: "Lock", Path: "/securityAudit/list"},
+				},
+			},
+			{
+				Key: "teamGroup", Title: "团队与权限", Icon: "UserFilled",
+				Roles: []string{"admin"},
+				Children: []SystemMenuNode{
+					{Key: "systemUser", Title: "人员管理", Icon: "UserFilled", Path: "/system/users"},
+					{Key: "roleManage", Title: "角色管理", Icon: "UserFilled", Path: "/system/roles"},
+					{Key: "permissionManage", Title: "授权管理", Icon: "Lock", Path: "/system/permissions"},
+					{Key: "businessAccountAuth", Title: "业务账号授权", Icon: "Lock", Path: "/businessAccountAuth/list", Roles: []string{"admin"}},
+				},
+			},
+			{
+				Key: "permissionGroup", Title: "渠道与集成", Icon: "Connection",
+				Roles: []string{"admin"},
+				Children: []SystemMenuNode{
+					{Key: "platformAccount", Title: "平台账号", Icon: "Platform", Path: "/platformAccount/list"},
+					{Key: "integration", Title: "第三方对接", Icon: "Connection", Path: "/integration/list"},
+					{Key: "channelIdentifyCode", Title: "渠道识别码", Icon: "Key", Path: "/channels/identify-codes"},
+					{Key: "channelManage", Title: "渠道管理", Icon: "SetUp", Path: "/channels/manage", Roles: []string{"admin"}},
+					{Key: "channelAccount", Title: "渠道账号管理", Icon: "Connection", Path: "/channels/accounts", Roles: []string{"admin"}},
+					{Key: "bridgeExtension", Title: "扩展安装包", Icon: "Download", Path: "/bridge/extension"},
+					{Key: "wecomAccount", Title: "多账号聚合", Icon: "Connection", Path: "/wecomAccount/list", Roles: []string{"admin"}},
+					{
+						Key: "agentChannel", Title: "客服渠道", Icon: "Connection",
+						Roles: []string{"admin"},
+						Children: []SystemMenuNode{
+							{Key: "chatChannelList", Title: "网页客服渠道", Icon: "Connection", Path: "/chatChannel/list"},
+							{Key: "whatsappCloud", Title: "WhatsApp Cloud", Icon: "Connection", Path: "/whatsapp-cloud"},
+							{Key: "dingtalkApp", Title: "钉钉应用账号", Icon: "Connection", Path: "/dingtalk-app"},
+						},
+					},
+				},
+			},
 			{
 				Key: "browserAutomation", Title: "浏览器自动化", Icon: "Monitor", Path: "/browser-automation/tasks",
 				Roles: []string{"admin"},
@@ -387,169 +451,17 @@ var SystemMenuTree = []SystemMenuNode{
 					{Key: "baCreate", Title: "新建任务", Icon: "Plus", Path: "/browser-automation/tasks/create"},
 					{Key: "baCron", Title: "定时触发器", Icon: "Timer", Path: "/browser-automation/cron"},
 					{Key: "baStatus", Title: "Host 状态", Icon: "CircleCheck", Path: "/browser-automation/status"},
-					// ego-lite 腿（调研决策 2：双腿并存；同一付费能力下的第二种执行腿）
 					{Key: "egoFlows", Title: "我的流程", Icon: "Document", Path: "/browser-automation/ego/flows"},
 					{Key: "egoSessions", Title: "通用会话", Icon: "Connection", Path: "/browser-automation/ego/sessions"},
 					{Key: "egoExecutions", Title: "执行监控", Icon: "DataLine", Path: "/browser-automation/ego/executions"},
 					{Key: "egoRunner", Title: "Runner 状态", Icon: "Cpu", Path: "/browser-automation/ego/runner"},
-					// 资产目录（自包含：发布 = 往本实例 egolite_assets 写一行，不经任何外部平台）
 					{Key: "egoAssets", Title: "资产中心", Icon: "Shop", Path: "/browser-automation/ego/assets"},
-					// 平台端 = 本实例管理端；Roles 收窄到 admin（用户端橱窗是 egoAssets）
 					{Key: "egoAssetAdmin", Title: "资产发布台", Icon: "Upload", Path: "/browser-automation/ego/assets/admin", Roles: []string{"admin"}},
-					// 遥测看板（S-9，src/views/browserAutomation/ego/Telemetry.vue）：
-					// 只回聚合桶（count/成功率/p95），与路由 meta 的 admin 限定一致。
 					{Key: "egoTelemetry", Title: "遥测看板", Icon: "DataBoard", Path: "/browser-automation/ego/telemetry", Roles: []string{"admin"}},
 				},
 			},
-			{
-				Key: "geoTools", Title: "GEO 智能优化", Icon: "MagicStick", Path: "/geo-tools/keyword-mining",
-				Roles: []string{"admin"},
-				Children: []SystemMenuNode{
-					{
-						Key: "geoDiagnose", Title: "诊断", Icon: "Aim", Path: "/geo-tools/audit-center",
-						Children: []SystemMenuNode{
-							{Key: "geoAuditCenter", Title: "审计中心", Icon: "Aim", Path: "/geo-tools/audit-center"},
-						},
-					},
-					{
-						Key: "geoConfigGroup", Title: "配置", Icon: "Setting",
-						Children: []SystemMenuNode{
-							{Key: "geoBrandConfig", Title: "品牌与域名", Icon: "OfficeBuilding", Path: "/geo-tools/brand-config"},
-							{Key: "geoSeoInfra", Title: "SEO 基础设施", Icon: "DocumentChecked", Path: "/geo-tools/seo-infra"},
-							{Key: "geoPusherConfig", Title: "蜘蛛推送配置", Icon: "Key", Path: "/geo-tools/pusher-config"},
-							{Key: "geoSiteConfig", Title: "静态站部署", Icon: "Monitor", Path: "/geo-tools/site-config"},
-							{Key: "geoSchemaTemplates", Title: "Schema 模板", Icon: "Collection", Path: "/geo-tools/schema-templates"},
-							{Key: "geoCompetitors", Title: "竞品管理", Icon: "UserFilled", Path: "/geo-tools/competitors"},
-							{Key: "geoConfig", Title: "配置优化", Icon: "Setting", Path: "/geo-tools/config"},
-						},
-					},
-					{
-						Key: "geoProd", Title: "生产", Icon: "EditPen",
-						Children: []SystemMenuNode{
-							{Key: "geoAutopilot", Title: "一键自动驾驶", Icon: "MagicStick", Path: "/geo-tools/autopilot"},
-							{Key: "geoKeywordMining", Title: "关键词蒸馏", Icon: "Search", Path: "/geo-tools/keyword-mining"},
-							{Key: "geoContentCreation", Title: "内容创作", Icon: "EditPen", Path: "/geo-tools/content-creation"},
-							{Key: "geoContentOptimize", Title: "文章优化", Icon: "Document", Path: "/geo-tools/content-optimize"},
-							{Key: "geoKnowledgeBase", Title: "GEO 知识库", Icon: "FolderOpened", Path: "/geo-tools/knowledge-base"},
-							{Key: "geoEntityGraph", Title: "实体图谱", Icon: "Share", Path: "/geo-tools/entity-graph"},
-						},
-					},
-					{
-						Key: "geoPublish", Title: "发布", Icon: "Connection",
-						Children: []SystemMenuNode{
-							{Key: "geoSitePublish", Title: "发布到官网", Icon: "Upload", Path: "/geo-tools/site-publish"},
-							{Key: "geoPushCenter", Title: "蜘蛛推送", Icon: "Promotion", Path: "/geo-tools/push-center"},
-							{Key: "geoPlatformPublish", Title: "平台发布", Icon: "Connection", Path: "/geo-tools/platform-publish"},
-							{Key: "geoWorkflow", Title: "工作流", Icon: "Setting", Path: "/geo-tools/workflow"},
-						},
-					},
-					{
-						Key: "geoCapture", Title: "承接", Icon: "ChatDotRound", Path: "/geo-tools/capture-links",
-						Children: []SystemMenuNode{
-							{Key: "geoCaptureLinks", Title: "承接链接", Icon: "Link", Path: "/geo-tools/capture-links"},
-						},
-					},
-					{
-						Key: "geoMonitor", Title: "监控", Icon: "Monitor",
-						Children: []SystemMenuNode{
-							{Key: "geoFunnelDashboard", Title: "漏斗总览", Icon: "DataAnalysis", Path: "/geo-tools/funnel-dashboard"},
-							{Key: "geoIndexTracking", Title: "收录与引用", Icon: "CircleCheck", Path: "/geo-tools/index-tracking"},
-							{Key: "geoVisibilityBoard", Title: "可见性观测", Icon: "TrendCharts", Path: "/geo-tools/visibility"},
-							{Key: "geoSovBoard", Title: "竞品 SOV", Icon: "DataLine", Path: "/geo-tools/sov-board"},
-							{Key: "geoCrawlerStats", Title: "爬虫统计", Icon: "Monitor", Path: "/geo-tools/crawler-stats"},
-							{Key: "geoVerification", Title: "多模型验证", Icon: "CircleCheck", Path: "/geo-tools/verification"},
-							{Key: "geoAlerts", Title: "预警中心", Icon: "Bell", Path: "/geo-tools/alerts"},
-							{Key: "geoReports", Title: "数据报表", Icon: "DataAnalysis", Path: "/geo-tools/reports"},
-							{Key: "geoDualEngine", Title: "双端监测", Icon: "DataBoard", Path: "/geo-tools/dual-engine"},
-							{Key: "geoDecisionReport", Title: "决策报告", Icon: "Document", Path: "/geo/decision-report"},
-						},
-					},
-				},
-			},
-		},
-	},
-	{
-		Key: "system", Title: "系统设置", Icon: "Setting",
-		Roles: []string{"admin", "viewer", "staff"},
-		Children: []SystemMenuNode{
-			{
-				Key: "siteConfig", Title: "站点配置", Icon: "Tools",
-				Roles: []string{"admin"},
-				Children: []SystemMenuNode{
-					{Key: "systemConfig", Title: "站点设置", Icon: "Tools", Path: "/system/config"},
-					{Key: "systemObsConfig", Title: "存储配置", Icon: "Box", Path: "/system/obs-config"},
-					{Key: "systemMaterialLibrary", Title: "素材库", Icon: "Picture", Path: "/system/material-library"},
-					{Key: "systemMonitor", Title: "监控", Icon: "Cpu", Path: "/system/monitor"},
-					{Key: "systemTrace", Title: "链路追踪", Icon: "Connection", Path: "/system/trace"},
-					{Key: "systemGuide", Title: "系统使用指南", Icon: "Document", Path: "/system/guide"},
-					{Key: "domainPool", Title: "域名池", Icon: "Link", Path: "/domainPool"},
-					{Key: "backupList", Title: "备份恢复", Icon: "FolderOpened", Path: "/backup/list"},
-					// backupEnhanced（备份高级版，/backup/enhanced）已于 2026-11-10 除名：
-					// 与「备份恢复」打的是同一组后端端点（/api/backup/* 别名组与
-					// /api/backups 权威组包同一个 BackupService/RestoreService），
-					// 两页=同一服务的两个皮。Enhanced 独有的备份策略编辑与恢复影响
-					// 预览已并入备份恢复页（views/backup/List.vue），能力面
-					// /api/backup/* 的 MenuKeys 同步改指 backupList。
-					{Key: "automationCenter", Title: "自动化中心", Icon: "Operation", Path: "/system/automation-hub", Roles: []string{"admin"}},
-					{Key: "dynamicThreshold", Title: "动态阈值参数", Icon: "DataLine", Path: "/system/config-params", Roles: []string{"admin"}},
-					// 下面两项与动态阈值参数是同一族配置治理界面，放在它后面而不是塞到别的分组，
-					// 是因为运维调这三页时的心理模型是同一个：「这个系统有哪些可配置的东西」。
-					{Key: "systemDictionaries", Title: "业务字典", Icon: "Collection", Path: "/system/dictionaries", Roles: []string{"admin"}},
-					{Key: "systemFeatureFlags", Title: "功能开关", Icon: "Switch", Path: "/system/feature-flags", Roles: []string{"admin"}},
-					{Key: "ltcConfig", Title: "LTC 运营开关", Icon: "Open", Path: "/system/ltc-config", Roles: []string{"admin"}},
-					{Key: "opsOverview", Title: "运维总览", Icon: "Monitor", Path: "/ops-overview", Roles: []string{"admin"}},
-					// AI 全链路可观测性 + 渠道健康（D2+B2，specs/007）：只读聚合看板，
-					// 与 systemMonitor/systemTrace 同族但归属独立的 admin 页。
-					{Key: "observabilityDashboard", Title: "AI 观测与渠道健康", Icon: "Odometer", Path: "/observability-dashboard", Roles: []string{"admin"}},
-					// 2026-11-24 菜单重整：能力矩阵（注册表声明的渠道×能力）与上面的
-					// capabilityDiagnostics（运行态 implemented/configured/ready）是一对——
-					// 一个看"声明了什么"，一个看"真正能跑什么"。原先只有 /cap/matrix 深链。
-					{Key: "capabilityMatrix", Title: "能力矩阵", Icon: "Grid", Path: "/cap/matrix", Roles: []string{"admin"}},
-				},
-			},
-			{
-				Key: "teamGroup", Title: "团队", Icon: "UserFilled",
-				Roles: []string{"admin"},
-				Children: []SystemMenuNode{
-					{Key: "systemUser", Title: "人员管理", Icon: "UserFilled", Path: "/system/users"},
-					{Key: "roleManage", Title: "角色管理", Icon: "UserFilled", Path: "/system/roles"},
-					{Key: "permissionManage", Title: "授权管理", Icon: "Lock", Path: "/system/permissions"},
-				},
-			},
-			{
-				Key: "permissionGroup", Title: "权限设置", Icon: "Lock",
-				Roles: []string{"admin"},
-				Children: []SystemMenuNode{
-					{Key: "platformAccount", Title: "平台账号", Icon: "Platform", Path: "/platformAccount/list"},
-					{Key: "integration", Title: "第三方对接", Icon: "Connection", Path: "/integration/list"},
-					// T057/T063：旧「桥接凭证」入口已收敛到渠道识别码管理（一次性替换）。
-					{Key: "channelIdentifyCode", Title: "渠道识别码", Icon: "Key", Path: "/channels/identify-codes"},
-					// 2026-11-24 菜单重整：渠道统一治理（渠道预设 + 渠道账号）是今日新增的
-					// 数据表驱动管理面。与渠道识别码同属「渠道接入」这一摊，故同组补齐——
-					// 旧的散落账号配置入口已按 T057 收敛到渠道账号管理。
-					{Key: "channelManage", Title: "渠道管理", Icon: "SetUp", Path: "/channels/manage", Roles: []string{"admin"}},
-					{Key: "channelAccount", Title: "渠道账号管理", Icon: "Connection", Path: "/channels/accounts", Roles: []string{"admin"}},
-					// 桥接扩展安装包（浏览器扩展不上架商店，平台上传、租户下载）。
-					// 放在权限设置组下：它与桥接凭证同属"渠道接入"这一摊，
-					// 而非租户日常经营入口。
-					{Key: "bridgeExtension", Title: "扩展安装包", Icon: "Download", Path: "/bridge/extension"},
-					{Key: "operationLog", Title: "操作日志", Icon: "Tickets", Path: "/operationLog/list"},
-					{Key: "securityAudit", Title: "安全审计", Icon: "Lock", Path: "/securityAudit/list"},
-				},
-			},
-			// D01：能力运行诊断（implemented/configured/ready 三层，注册表声明≠实现）。
-			// 与「功能模块/模板市场」同类：开店前先看"这台机器到底能干什么"，
-			// 所以放在 system 顶级下的直接子位，而不是藏进 siteConfig。
 			{Key: "capabilityDiagnostics", Title: "能力运行诊断", Icon: "DataAnalysis", Path: "/cap/diagnostics", Roles: []string{"admin"}},
-			// 功能模块市场：付费能力的**购买入口**。
-			//
-			// 放在 system 顶级下的直接子位（与团队/权限设置/资产包平级），而不是
-			// 塞进 siteConfig —— 后者是「站点配置」，admin-only 且语义上属于
-			// 部署级设置；而「去开通功能」是租户管理员的日常动作，位置越浅越好。
-			//
-			// 为什么**不按付费模块的闸关闭**（详见 module_bindings.go 里 platform-link
-			// 的说明）：它一被关，用户就再也找不到「去开通」的地方 —— 而未开通
-			// 模块的人恰恰最需要这个入口。
+			// 开通入口归基础模块，不能被待购买能力的开关关闭。
 			{
 				Key: "moduleCenterGroup", Title: "功能模块", Icon: "Shop",
 				Roles: []string{"admin"},
@@ -559,17 +471,6 @@ var SystemMenuTree = []SystemMenuNode{
 					{Key: "moduleOrders", Title: "模块订单", Icon: "Tickets", Path: "/module-market/orders"},
 				},
 			},
-			// 模板/技能市场（F2，specs/013）：只读目录橱窗（模板 + 技能），
-			// 与「功能模块」平级 —— 同属「去哪找现成能力」这一族入口，
-			// 而不是站点部署设置（故不塞进 siteConfig）。角色口径沿用
-			// specs/013/delivery.md §4 的建议（admin/manager）。
-			//
-			// S-22 收口：发布-审核-支付闭环接线后，同组补两个工作台节点——
-			//   - 我的发布/订单：提审记录、购买订单与「已获得」都在 /template-market/my；
-			//   - 发布审核台：审核队列/下架/复架/收款确认在 /template-market/review，
-			//     admin-only（审核是公开橱窗的唯一写通道，不能开放给坐席）。
-			// 两个 path 都是 src/router/modules/templateMarket.js 里的真实路由
-			//（menuRegistry_routes.test.js 逐条对账：菜单 path 不在前端路由表 = 点进 NotFound）。
 			{
 				Key: "templateMarketGroup", Title: "模板/技能", Icon: "Shop",
 				Roles: []string{"admin"},

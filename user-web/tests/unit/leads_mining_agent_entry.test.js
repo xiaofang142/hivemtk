@@ -2,6 +2,8 @@ import { expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import ElementPlus from 'element-plus'
+import { createPinia } from 'pinia'
+import i18n from '@/i18n'
 import Rules from '@/views/leads/Rules.vue'
 import { settle } from './settle-helper'
 
@@ -25,7 +27,7 @@ it('线索规则页提供进入线索发现智能体的入口', async () => {
     ]
   })
   await router.push('/leads/rules')
-  const wrapper = mount(Rules, { global: { plugins: [router, ElementPlus] } })
+  const wrapper = mount(Rules, { global: { plugins: [createPinia(), i18n, router, ElementPlus] } })
   try {
     await settle(wrapper)
     const entry = wrapper.findAll('button').find(button => button.text() === '线索发现智能体')

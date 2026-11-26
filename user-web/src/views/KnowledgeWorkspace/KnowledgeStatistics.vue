@@ -1,10 +1,11 @@
 <template>
   <div class="knowledge-statistics">
+    <p>{{ t('businessCopy.knowledge.description') }}</p>
     <el-card class="filter-card">
       <div class="filter-bar">
         <el-select
           v-model="filter.product_id"
-          :placeholder="$t('选择产品(可选)')"
+          :placeholder="t('businessCopy.knowledge.optionalSelect')"
           clearable
           style="width: 220px"
           @change="loadAll"
@@ -589,6 +590,9 @@
 
 <script setup>
 import _i18n from '@/i18n'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 import { ref, reactive, computed, onMounted } from 'vue'
 import { Document, Files, Coin, Search, Refresh } from '@element-plus/icons-vue'

@@ -1,5 +1,6 @@
 <template>
   <div class="batch-import-page">
+    <p>{{ t('businessCopy.knowledge.description') }}</p>
     <el-alert
       :title="$t('批量导入知识库文档')"
       type="info"
@@ -33,12 +34,12 @@
                 :model="uploadForm"
               >
                 <el-form-item
-                  label="产品"
+                  :label="t('businessCopy.knowledge.label')"
                   required
                 >
                   <el-select
                     v-model="uploadForm.product_id"
-                    placeholder="选择产品"
+                    :placeholder="t('businessCopy.knowledge.select')"
                     style="width: 100%"
                     @change="loadPreview"
                   >
@@ -109,12 +110,12 @@
             >
               <el-form label-width="100px">
                 <el-form-item
-                  label="产品"
+                  :label="t('businessCopy.knowledge.label')"
                   required
                 >
                   <el-select
                     v-model="pasteForm.product_id"
-                    placeholder="选择产品"
+                    :placeholder="t('businessCopy.knowledge.select')"
                     style="width: 100%"
                   >
                     <el-option
@@ -171,7 +172,7 @@
             :data="preview"
             max-height="320"
             size="small"
-            empty-text="先选择产品和文件(或粘贴 JSON),点击「预览解析结果」"
+            :empty-text="t('businessCopy.knowledge.previewEmpty')"
           >
             <el-table-column
               prop="title"
@@ -425,6 +426,9 @@ title,content,category,tags
 
 <script setup>
 import i18n from '@/i18n'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useListEditorChange } from '@/composables/useListEditor'
@@ -699,7 +703,7 @@ const handleBatchImport = async () => {
   // 后端要求 product_id 必填：在这里先拦，别让用户看完确认框才吃到「product_id 不能为空」
   const targetProduct = activeTab.value === 'upload' ? uploadForm.product_id : pasteForm.product_id
   if (!targetProduct) {
-    ElMessage.warning('请选择目标知识库（产品）后再导入')
+    ElMessage.warning(t('businessCopy.knowledge.required'))
     return
   }
   try {

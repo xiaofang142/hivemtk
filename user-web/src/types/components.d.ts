@@ -132,6 +132,7 @@ declare module 'vue' {
     Warning: typeof import('@element-plus/icons-vue')['Warning']
     WarningFilled: typeof import('@element-plus/icons-vue')['WarningFilled']
     WeComSendDialog: typeof import('./../components/WeComSendDialog.vue')['default']
+    WorkflowNavigation: typeof import('./../components/WorkflowNavigation.vue')['default']
     XiaohongshuCardPreview: typeof import('./../components/XiaohongshuCardPreview.vue')['default']
   }
   export interface GlobalDirectives {

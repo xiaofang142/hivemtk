@@ -26,6 +26,9 @@ func TestStatsByDomainFlagsSelfSite(t *testing.T) {
 		{Keyword: "别人的项目", Engine: "GPTBot", Path: "https://xiaofang142.github.io/someone-else/"},
 		{Keyword: "竞品", Engine: "GPTBot", Path: "https://weibanzhushou.com/product"},
 	}
+	for _, visit := range visits {
+		visit.Source = model.CrawlerSourceActiveUAProbe
+	}
 	if err := repo.BulkCreate(ctx, visits); err != nil {
 		t.Fatalf("写入爬虫访问失败: %v", err)
 	}
@@ -100,6 +103,7 @@ func TestSelfSiteNotKeyedByHost(t *testing.T) {
 
 	if err := repo.Create(ctx, &model.GeoCrawlerVisit{
 		Keyword: "历史数据", Engine: "ClaudeBot", Path: "https://hive.xapptool.cn/docs",
+		Source: model.CrawlerSourceActiveUAProbe,
 	}); err != nil {
 		t.Fatalf("写入历史访问失败: %v", err)
 	}

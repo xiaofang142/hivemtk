@@ -1,5 +1,34 @@
 <template>
   <div class="geo-page p-4">
+    <el-alert
+      :title="t('crawlerSource.title')"
+      type="info"
+      :closable="false"
+      show-icon
+      class="mb-4"
+    >
+      <p>{{ t('crawlerSource.sourceDescription') }}</p>
+      <p>{{ t('crawlerSource.historyNote') }}</p>
+      <p>{{ t('crawlerSource.allocationNote') }}</p>
+      <p v-if="sourceMeta">
+        {{ t('crawlerSource.configuration', { uas: sourceMeta.configured_ua_count, groups: sourceMeta.configured_engine_groups }) }}
+        {{ t('crawlerSource.window', { days: sourceMeta.window_days }) }}
+      </p>
+    </el-alert>
+    <el-alert
+      v-if="unattributed"
+      :title="t('crawlerSource.unattributed')"
+      type="warning"
+      :closable="false"
+      class="mb-4"
+    />
+    <el-alert
+      v-if="loadFailed"
+      :title="t('crawlerSource.loadFailed')"
+      type="error"
+      :closable="false"
+      class="mb-4"
+    />
     <el-row
       :gutter="12"
       class="mb-4"
@@ -11,7 +40,7 @@
         >
           <div class="text-center py-2">
             <div class="text-xs text-gray-500 mb-1">
-              🔥 HiveMTK AI Bot 覆盖度
+              {{ t('crawlerSource.selfShare') }}
             </div>
             <div
               class="text-3xl font-bold"
@@ -31,31 +60,31 @@
       <el-col :span="3">
         <el-card shadow="hover">
           <el-statistic
-            title="今日访问"
-            :value="s.today_visits || 0"
+            :title="t('crawlerSource.last24Hours')"
+            :value="s.last_24h_probes || 0"
           />
         </el-card>
       </el-col>
       <el-col :span="3">
         <el-card shadow="hover">
           <el-statistic
-            title="HiveMTK"
-            :value="s.hivemtk_visits || 0"
+            :title="t('crawlerSource.selfProbes')"
+            :value="s.self_site_probes || 0"
           />
         </el-card>
       </el-col>
       <el-col :span="3">
         <el-card shadow="hover">
           <el-statistic
-            title="竞品合计"
-            :value="s.competitor_visits || 0"
+            :title="t('crawlerSource.competitorProbes')"
+            :value="s.competitor_probes || 0"
           />
         </el-card>
       </el-col>
       <el-col :span="3">
         <el-card shadow="hover">
           <el-statistic
-            title="活跃关键词"
+            :title="t('crawlerSource.keywords')"
             :value="s.active_keywords || 0"
           />
         </el-card>
@@ -63,7 +92,7 @@
       <el-col :span="3">
         <el-card shadow="hover">
           <el-statistic
-            title="AI Bot 引擎"
+            :title="t('crawlerSource.engineGroups')"
             :value="s.active_engines || 0"
           />
         </el-card>
@@ -71,7 +100,7 @@
       <el-col :span="3">
         <el-card shadow="hover">
           <el-statistic
-            title="监控域名"
+            :title="t('crawlerSource.domains')"
             :value="s.active_domains || 0"
           />
         </el-card>
@@ -82,22 +111,25 @@
     <el-card class="mb-4">
       <template #header>
         <div class="flex items-center justify-between">
-          <span class="font-bold">HiveMTK vs 竞品 — AI Bot 声量排名</span>
+          <span class="font-bold">{{ t('crawlerSource.domainTitle') }}</span>
           <div class="flex items-center gap-2">
             <el-button
               size="small"
               type="primary"
+              data-testid="crawler-refresh"
+              :loading="loading"
               @click="loadAll"
             >
-              刷新
+              {{ t('crawlerSource.refresh') }}
             </el-button>
             <el-button
               size="small"
               type="success"
               :loading="running"
+              data-testid="crawler-run"
               @click="triggerCrawl"
             >
-              跑一轮爬虫
+              {{ t('crawlerSource.run') }}
             </el-button>
           </div>
         </div>
@@ -106,10 +138,10 @@
         v-loading="loading"
         :data="domainCompare"
         size="default"
-        :default-sort="{prop:'visits', order:'descending'}"
+        :default-sort="{prop:'probe_count', order:'descending'}"
       >
         <el-table-column
-          label="排名"
+          :label="t('crawlerSource.rank')"
           width="60"
         >
           <template #default="{ $index }">
@@ -117,19 +149,19 @@
           </template>
         </el-table-column>
         <el-table-column
-          label="域名"
+          :label="t('crawlerSource.domain')"
           min-width="240"
         >
           <template #default="{ row }">
             <div class="flex items-center gap-2">
               <el-tag
-                v-if="row.is_hivemtk"
+                v-if="isSelfSite(row)"
                 type="success"
                 size="small"
                 effect="dark"
                 round
               >
-                🔥 HiveMTK
+                {{ t('crawlerSource.selfSite') }}
               </el-tag>
               <el-tag
                 v-else
@@ -138,60 +170,61 @@
                 effect="plain"
                 round
               >
-                竞品
+                {{ t('crawlerSource.competitor') }}
               </el-tag>
               <span
                 class="font-mono"
-                :class="row.is_hivemtk ? 'font-bold' : ''"
+                :class="isSelfSite(row) ? 'font-bold' : ''"
               >{{ row.domain }}</span>
             </div>
           </template>
         </el-table-column>
         <el-table-column
-          prop="visits"
-          label="AI Bot 访问"
+          prop="probe_count"
+          :label="t('crawlerSource.probeCount')"
           width="120"
           sortable
         >
           <template #default="{ row }">
-            <span class="font-mono font-bold text-lg">{{ row.visits }}</span>
+            <span class="font-mono font-bold text-lg">{{ row.probe_count }}</span>
           </template>
         </el-table-column>
         <el-table-column
           prop="engines"
-          label="覆盖引擎数"
+          :label="t('crawlerSource.engineGroups')"
           width="120"
         >
           <template #default="{ row }">
             <el-progress
-              :percentage="Math.round(row.engines / 8 * 100)"
+              v-if="configuredGroups > 0"
+              :percentage="Math.min(100, Math.round(row.engines / configuredGroups * 100))"
               :stroke-width="10"
               :color="row.engines >= 6 ? '#22c55e' : row.engines >= 4 ? '#eab308' : '#ef4444'"
             />
             <div class="text-xs text-gray-500 mt-1">
-              {{ row.engines }} / 8
+              {{ row.engines }} / {{ configuredGroups }}
             </div>
           </template>
         </el-table-column>
         <el-table-column
-          label="声量占比"
+          :label="t('crawlerSource.probeShare')"
           width="200"
         >
           <template #default="{ row }">
             <div class="flex items-center gap-2">
               <el-progress
-                :percentage="Math.round(row.share_pct)"
+                :percentage="Math.round(row.probe_share_pct || 0)"
                 :stroke-width="12"
-                :color="row.is_hivemtk ? '#10b981' : '#6366f1'"
+                :color="isSelfSite(row) ? '#10b981' : '#6366f1'"
                 style="flex:1"
               />
-              <span class="font-mono font-bold w-14 text-right">{{ row.share_pct.toFixed(1) }}%</span>
+              <span class="font-mono font-bold w-14 text-right">{{ Number(row.probe_share_pct || 0).toFixed(1) }}%</span>
             </div>
           </template>
         </el-table-column>
         <el-table-column
           prop="source_level"
-          label="信源等级"
+          :label="t('crawlerSource.configuredLevel')"
           width="100"
         >
           <template #default="{ row }">
@@ -203,22 +236,23 @@
             </el-tag>
           </template>
         </el-table-column>
+        <template #empty>
+          <div class="py-8 text-gray-400">
+            {{ t('crawlerSource.empty') }}
+          </div>
+        </template>
       </el-table>
-      <template #empty>
-        <div class="py-8 text-gray-400">
-          暂无数据，点右上角「跑一轮爬虫」触发真实 AI Bot 访问
-        </div>
-      </template>
     </el-card>
 
     
     <el-card class="mb-4">
       <template #header>
         <div class="flex items-center justify-between">
-          <span class="font-bold">关键词 × AI Bot 引擎 — 热力排名</span>
+          <span class="font-bold">{{ t('crawlerSource.keywordTitle') }}</span>
           <el-input
             v-model="kwFilter"
-            placeholder="过滤关键词"
+            :placeholder="t('crawlerSource.keywordFilter')"
+            :aria-label="t('crawlerSource.keywordFilter')"
             size="small"
             style="width:160px"
             clearable
@@ -229,11 +263,11 @@
         v-loading="loading"
         :data="pagedKeywordStats"
         size="small"
-        :default-sort="{prop:'visit_count', order:'descending'}"
+        :default-sort="{prop:'probe_count', order:'descending'}"
       >
         <el-table-column
           prop="keyword"
-          label="关键词"
+          :label="t('crawlerSource.keyword')"
           min-width="220"
         >
           <template #default="{ row }">
@@ -242,7 +276,7 @@
         </el-table-column>
         <el-table-column
           prop="engine"
-          label="AI Bot 引擎"
+          :label="t('crawlerSource.engine')"
           width="160"
         >
           <template #default="{ row }">
@@ -255,23 +289,23 @@
           </template>
         </el-table-column>
         <el-table-column
-          prop="visit_count"
-          label="访问次数"
+          prop="probe_count"
+          :label="t('crawlerSource.probeCount')"
           width="100"
           sortable
         >
           <template #default="{ row }">
-            <span class="font-mono font-bold">{{ row.visit_count }}</span>
+            <span class="font-mono font-bold">{{ row.probe_count }}</span>
           </template>
         </el-table-column>
         <el-table-column
-          label="热力条"
+          :label="t('crawlerSource.relativeCount')"
           min-width="240"
         >
           <template #default="{ row }">
             <div
               class="heat-bar"
-              :style="{ width: heatWidth(row.visit_count) + '%', background: heatColor(row.visit_count) }"
+              :style="{ width: heatWidth(row.probe_count) + '%', background: heatColor(row.probe_count) }"
             />
           </template>
         </el-table-column>
@@ -290,12 +324,12 @@
     <el-card>
       <template #header>
         <div class="flex items-center justify-between">
-          <span class="font-bold">原始明细：域名 × AI Bot 引擎</span>
+          <span class="font-bold">{{ t('crawlerSource.detailTitle') }}</span>
           <el-tag
             size="small"
             type="info"
           >
-            供排查用
+            {{ t('crawlerSource.debugOnly') }}
           </el-tag>
         </div>
       </template>
@@ -303,11 +337,11 @@
         v-loading="loading"
         :data="domainStats"
         size="small"
-        :default-sort="{prop:'visit_count', order:'descending'}"
+        :default-sort="{prop:'probe_count', order:'descending'}"
       >
         <el-table-column
           prop="domain"
-          label="域名"
+          :label="t('crawlerSource.domain')"
           min-width="200"
         >
           <template #default="{ row }">
@@ -316,18 +350,18 @@
         </el-table-column>
         <el-table-column
           prop="engine"
-          label="引擎"
+          :label="t('crawlerSource.engine')"
           width="160"
         />
         <el-table-column
-          prop="visit_count"
-          label="访问次数"
+          prop="probe_count"
+          :label="t('crawlerSource.probeCount')"
           width="100"
           sortable
         />
         <el-table-column
           prop="source_level"
-          label="信源等级"
+          :label="t('crawlerSource.configuredLevel')"
           width="100"
         >
           <template #default="{ row }">
@@ -346,9 +380,11 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { getCrawlerStats, runCrawler as runCrawlerApi } from '@/api/geoProbe.js'
 
+const { t } = useI18n()
 const loading = ref(false)
 const running = ref(false)
 const keywordStats = ref([])
@@ -357,6 +393,12 @@ const domainCompare = ref([])
 const coverageScore = ref(0)
 const s = ref({})
 const kwFilter = ref('')
+const sourceMeta = ref(null)
+const unattributed = ref(false)
+const loadFailed = ref(false)
+const configuredGroups = computed(() => Number(sourceMeta.value?.configured_engine_groups) || 0)
+// 规范字段优先；只在 API 已确认来源为主动探测后兼容旧站点标记。
+const isSelfSite = (row) => (row.is_self_site ?? row.is_hivemtk) === true
 
 const filteredKeywordStats = computed(() => {
   if (!kwFilter.value) return keywordStats.value
@@ -381,7 +423,7 @@ const coverageColor = computed(() => {
 })
 
 const maxCount = computed(() => {
-  const all = [...keywordStats.value, ...domainStats.value].map(d => d.visit_count || 0)
+  const all = [...keywordStats.value, ...domainStats.value].map(d => d.probe_count || 0)
   return Math.max(1, ...all)
 })
 const heatWidth = (c) => Math.min(100, Math.round(((c || 0) / maxCount.value) * 100))
@@ -402,33 +444,46 @@ const engineTagType = (e) => {
 }
 
 const loadAll = async () => {
+  if (loading.value) return
   loading.value = true
+  loadFailed.value = false
+  unattributed.value = false
+  s.value = {}
+  sourceMeta.value = null
+  keywordStats.value = []
+  domainStats.value = []
+  domainCompare.value = []
+  coverageScore.value = 0
   try {
     const data = await getCrawlerStats()
+    if (data?.data_source?.kind !== 'active_ua_probe') {
+      unattributed.value = true
+      return
+    }
+    sourceMeta.value = data.data_source
     s.value = data?.summary || {}
     keywordStats.value = data?.keyword_stats || []
     domainStats.value = data?.domain_stats || []
     domainCompare.value = data?.domain_compare || []
-    coverageScore.value = data?.coverage_score || 0
+    coverageScore.value = data?.self_site_probe_share_pct || 0
   } catch {
-    keywordStats.value = []
-    domainStats.value = []
-    domainCompare.value = []
-    coverageScore.value = 0
+    loadFailed.value = true
+  } finally {
+    loading.value = false
   }
-  loading.value = false
 }
 
 const triggerCrawl = async () => {
+  if (running.value) return
   running.value = true
   try {
-    const d = await runCrawlerApi()
-    ElMessage.success(d?.message || '爬虫已启动，约 30-60s 完成，自动刷新')
-    setTimeout(loadAll, 35000)
-  } catch (e) {
-    ElMessage.error('触发失败: ' + (e?.data?.message || e?.message || e))
+    await runCrawlerApi()
+    ElMessage.success(t('crawlerSource.accepted'))
+  } catch {
+    ElMessage.error(t('crawlerSource.runFailed'))
+  } finally {
+    running.value = false
   }
-  running.value = false
 }
 
 onMounted(loadAll)

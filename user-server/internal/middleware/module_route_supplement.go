@@ -3,11 +3,12 @@ package middleware
 // ModuleRouteSupplement 手写补充的路径模式（**不在生成件里**）
 //
 // 生成件（module_route_patterns.go）覆盖「人工审过的能力面 → 模块」。
-// 这里补的是**那张表天然覆盖不到**的几类：
+// 这里补的是生成表尚未覆盖的几类：
 //
 //  1. 没有菜单页面的能力——没有菜单就没有菜单键，
 //     能力面表里自然也不会有它。
 //  2. 不属于任何页面、纯控制面的接口（模块同步、订单查询）。
+//  3. 能力面补充件中的业务接口（CRM、线索治理与电商）。
 //
 // 口径：**只加"必须拦"的，不加"不该拦"的**。
 // 特别是下面刻意**没有**的三类，它们是买模块的入口，拦了就永远买不了：
@@ -19,6 +20,14 @@ package middleware
 // 否则三个月后没人分得清它为什么不生成。
 
 var ModuleRouteSupplement = []ModuleRouteRule{
+	// CRM / 线索治理 / 电商的菜单能力面在手写补充件中，生成的模块路径表未收录。
+	// 与业务叶子 ModuleMenuBindings 保持一致，目录移动不能让接口变成未标注放行。
+	{Pattern: "/api/manage/crm/**", ModuleKey: "customer"},
+	{Pattern: "/api/manage/leads/**", ModuleKey: "customer"},
+	{Pattern: "/api/manage/lead-mining-agents/**", ModuleKey: "customer"},
+	{Pattern: "/api/lead-mining/**", ModuleKey: "customer"},
+	{Pattern: "/api/v1/commerce/**", ModuleKey: "reach-social"},
+
 	// ---- llm-cloud：平台模型算力（计量型收费模块）----
 	// 为什么不生成：llm-cloud 没有独立菜单页，入口是 LLM 页面的「平台套餐」Tab
 	// 与顶部余额条，能力面表按"菜单页消费的口"收录，收不到它。
@@ -37,10 +46,10 @@ var ModuleRouteSupplement = []ModuleRouteRule{
 	{Pattern: "/api/modules/sync-logs", ModuleKey: "platform-link"},
 	{Pattern: "/api/manage/modules/*", ModuleKey: "platform-link"},
 
-	// ---- browser-automation：浏览器自动化双腿（¥99 买断）----
+	// ---- browser-automation：浏览器自动化双腿 ----
 	// 为什么不生成：能力面表未收录 /api/browser-automation 与 /api/egolite 的形状
-	// （生成口径的历史缺口），但模块归属早已登记（module_bindings browser-automation
-	// 10 节点，含 ego 五页）。不补路径闸 = 多租户模式下双腿免费——买断模块必须拦。
+	// （生成口径的历史缺口），但模块归属已在 ModuleMenuBindings 登记。
+	// 不补路径闸 = 多租户模式下双腿免费——买断模块必须拦。
 	// 免 JWT 的通道不在本闸射程（GuardModulePath 只挂 auth 组）：
 	//   /api/browser/host-ws、/api/egolite/runner-ws、/api/egolite/assets/pull
 	//   —— 准入由各自的 bh_/eg_ token 门负责，与模块闸互补。

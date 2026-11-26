@@ -1,5 +1,6 @@
 <template>
   <div class="api-token-page">
+    <p>{{ t('businessCopy.knowledge.description') }}</p>
     <el-alert
       :title="$t('API Token 管理')"
       type="info"
@@ -24,7 +25,7 @@
               <div>
                 <el-select
                   v-model="filterProductId"
-                  placeholder="按产品筛选"
+                  :placeholder="t('businessCopy.knowledge.filter')"
                   clearable
                   style="width: 180px"
                   @change="loadTokens"
@@ -63,7 +64,7 @@
               show-overflow-tooltip
             />
             <el-table-column
-              label="产品"
+              :label="t('businessCopy.knowledge.label')"
               width="160"
               show-overflow-tooltip
             >
@@ -187,12 +188,12 @@
               />
             </el-form-item>
             <el-form-item
-              label="产品"
+              :label="t('businessCopy.knowledge.label')"
               prop="product_id"
             >
               <el-select
                 v-model="form.product_id"
-                placeholder="选择产品"
+                :placeholder="t('businessCopy.knowledge.select')"
                 style="width: 100%"
               >
                 <el-option
@@ -291,7 +292,7 @@ curl -X POST \
         <el-form-item label="名称">
           <el-text>{{ createdToken.name }}</el-text>
         </el-form-item>
-        <el-form-item label="产品">
+        <el-form-item :label="t('businessCopy.knowledge.label')">
           <el-text>{{ getProductName(createdToken.product_id) }}</el-text>
         </el-form-item>
         <el-form-item label="Token">
@@ -324,6 +325,9 @@ curl -X POST \
 
 <script setup>
 import i18n from '@/i18n'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -350,7 +354,7 @@ const form = reactive({
 
 const rules = {
   name: [{ required: true, message: i18n.global.t('请输入名称'), trigger: 'blur' }],
-  product_id: [{ required: true, message: i18n.global.t('请选择产品'), trigger: 'change' }]
+  product_id: [{ required: true, message: t('businessCopy.knowledge.required'), trigger: 'change' }]
 }
 
 const showTokenDialog = ref(false)

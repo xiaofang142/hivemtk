@@ -1,0 +1,13 @@
+{
+  "label": "Related management tools",
+  "dedupe": "Deduplicate and merge",
+  "importExport": "Import and export",
+  "contacts": "Contacts",
+  "suppliers": "Suppliers",
+  "serviceProviders": "Service providers",
+  "companies": "Companies",
+  "notifyRoutes": "Notification routing",
+  "evidence": "Decision evidence",
+  "archive": "Lead archive",
+  "scopedList": "Leads within your access scope"
+}

@@ -73,7 +73,7 @@
         :closable="false"
         show-icon
       >
-        <p>完成上述 5 步后,即可开始正式营销活动。如需技术支持,请联系客服:support@example.com</p>
+        <p>{{ t('businessCopy.guide.support') }}</p>
       </el-alert>
     </el-card>
   </div>
@@ -81,6 +81,9 @@
 
 <script setup>
 import i18n from '@/i18n'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'

@@ -6,8 +6,8 @@
       type="info"
       show-icon
       :closable="false"
-      title="登录态里没有 user id"
-      description="确认/取消/改价都要求操作者身份，所以这一页此刻只能看不能改。重新登录通常就能拿回身份。"
+      :title="t('businessCopy.identity.title')"
+      :description="t('businessCopy.identity.orderDraftDescription')"
     />
     <el-alert
       v-if="loadError"
@@ -82,7 +82,7 @@
           <el-descriptions-item label="客户">
             <span class="mono">{{ draft.customer_id }}</span>
           </el-descriptions-item>
-          <el-descriptions-item label="归属 owner_id">
+          <el-descriptions-item :label="t('businessCopy.orderDraft.owner')">
             <span class="mono">{{ draft.owner_id || '—' }}</span>
           </el-descriptions-item>
           <el-descriptions-item label="产品">
@@ -185,7 +185,7 @@
               <el-input
                 v-model="form.product_name"
                 maxlength="200"
-                placeholder="与池子里同客户的同名产品会撞唯一索引（409）"
+                :placeholder="t('businessCopy.orderDraft.productNameHint')"
               />
             </el-form-item>
             <el-form-item label="数量">
@@ -214,8 +214,7 @@
             </el-form-item>
           </el-form>
           <p class="hint">
-            只把你动过的字段发给后端（没给=不改）；数量至少 1、单价不能为负 —— 要废单请走上方「取消草稿」，不是把数量改成 0。
-            保存成功后回读整条草稿，总额会在这里重算刷新。
+            {{ t('businessCopy.orderDraft.editHint') }}
           </p>
         </el-card>
       </template>
@@ -229,6 +228,9 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { orderDraftApi } from '@/api/orderDraft'
 import { useUserStore } from '@/stores/user'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 // 草稿详情 + 确认/取消/改价三个人工动作。深链 /dashboard/drafts/:id 就是
 // 工作台聚合待办生成的那个 URL（sales_workbench.go），本页存在之前它是死链。
@@ -257,12 +259,12 @@ const draftId = computed(() => String(route.params.id || ''))
 // 深链正是工作台待办的落点，用户从这里看到的第一句必须是能行动的那句。
 const errorTitle = computed(() => {
   if (loadError.value === 404) return '这条草稿不存在（或已被清扫）'
-  if (loadError.value === 503) return '订单草稿底座不可用'
+  if (loadError.value === 503) return t('businessCopy.orderDraft.unavailableTitle')
   return '草稿读取失败'
 })
 const errorDescription = computed(() => {
   if (loadError.value === 404) return '它可能刚被别人确认/取消，或已过期被清扫器收口。'
-  if (loadError.value === 503) return '本进程没装配草稿运行时（FF_LTC_ORDER_DRAFT_DB 为 off 或值无法识别）。这不是「草稿没了」，稍后重试也不会好 —— 档位只在装配期读一次，改完须重启服务。'
+  if (loadError.value === 503) return t('businessCopy.orderDraft.detailUnavailableDescription')
   return `${loadErrorMsg.value || '后端回了非 404 的错误'}；不要当成草稿没了。`
 })
 
@@ -364,7 +366,7 @@ async function doConfirm() {
     const result = await orderDraftApi.confirm(draftId.value)
     if (result?.order_provisional) {
       ElMessage.warning(
-        `草稿已确认，但未拿到订单服务 ⇒ 订单号 ${result.order_id || '（空）'} 是本进程临时生成的，orders 表里没有这一行（需人工补建）`
+        t('businessCopy.orderDraft.provisionalOrderWarning', { orderId: result.order_id || '—' })
       )
     } else {
       ElMessage.success(`已确认成单${result?.order_id ? `：订单 ${result.order_id}` : ''}`)

@@ -22,6 +22,12 @@
 - **故障恢复证据**：首轮 `20261126-083437` 内网健康通过，但服务器旧版 curl 的公网 TLS 校验报 `Certificate key usage inadequate`；失败分支已恢复旧镜像和旧二进制，并回读验证恢复成功。随后将公网校验放在本机，以正常 TLS 校验重试发布，两个公网域名均成功；未使用跳过证书校验的选项。
 - **范围与边界**：未同步 env/config/migrations，未执行实际 Seed 导入或客户业务操作。数据库提交原子性、真实业务端到端验收及既有架构门禁问题仍开放；此次未发布前端、扩展或 Android 包。
 
+## 2026-11-26 · 用户端导航对应的平台模块目录同步
+
+- **实际来源**：运行平台读取内嵌 seed，覆盖 250 个菜单节点、无重复；没有环境变量或磁盘文件覆盖。
+- **执行与验收**：备份后通过管理员会话调用 `POST /platform/module-catalog/seed`，HTTP 200、`目录已同步`、24 模块。只读查库确认 24 模块、250 对绑定、53 条依赖；移除四条废弃绑定 `core → backupEnhanced`、`core → bridgeToken`、`customer → unifiedMessage`、`knowledge → ragMainConfig`，无新增绑定。目录（含价格）、依赖和 589 条已购授权与备份逐行一致。
+- **备份**：`/www/wwwroot/hivemtk/platform-server/backups/navigation-20261126-084141/module-catalog-before.sql`，SHA-256 `04a5170cf8c13b15ea73d6fa46e5dc4d6d0c01b0cf45be2bfbbaf9bf87950189`；同目录保留 `before.json`、`after.json`。未更改平台源码、部署配置或 seed 来源。API 与 SPA 发布另行登记。
+
 ## 2026-11-26 · 链 D 二次同步（面包屑/多语言文案 85eb12eeb）
 
 - **背景**：二次审核发现本地 dist 构建于 00:20，不含 00:27 `e1e0a6298`、00:35 `c509fe955` 的 i18n 与 Breadcrumb 文案修正（企微账号面包屑「多账号聚合」→「企微账号管理」）；线上 `version.json` 仍为 `4dcf21698`。

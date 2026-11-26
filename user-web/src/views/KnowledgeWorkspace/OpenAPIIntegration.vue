@@ -1,5 +1,6 @@
 <template>
   <div class="openapi-integration">
+    <p>{{ t('businessCopy.knowledge.description') }}</p>
     <el-alert
       :title="$t('OpenAPI 数据源集成')"
       type="info"
@@ -16,7 +17,7 @@
       <div class="filter-bar">
         <el-select
           v-model="filter.product_id"
-          placeholder="选择产品(可选)"
+          :placeholder="t('businessCopy.knowledge.optionalSelect')"
           clearable
           style="width: 220px"
           @change="loadSources"
@@ -208,12 +209,12 @@
           />
         </el-form-item>
         <el-form-item
-          label="关联产品"
+          :label="t('businessCopy.knowledge.label')"
           prop="product_id"
         >
           <el-select
             v-model="form.product_id"
-            placeholder="选择产品"
+            :placeholder="t('businessCopy.knowledge.select')"
             style="width: 100%"
           >
             <el-option
@@ -483,6 +484,9 @@
 
 <script setup>
 import i18n from '@/i18n'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 import { computed, ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -540,7 +544,7 @@ const form = reactive({
 
 const rules = {
   name: [{ required: true, message: i18n.global.t('请输入名称'), trigger: 'blur' }],
-  product_id: [{ required: true, message: i18n.global.t('请选择产品'), trigger: 'change' }],
+  product_id: [{ required: true, message: t('businessCopy.knowledge.required'), trigger: 'change' }],
   endpoint: [{ required: true, message: i18n.global.t('请输入端点 URL'), trigger: 'blur' }]
 }
 

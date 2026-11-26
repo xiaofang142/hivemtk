@@ -3,6 +3,8 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { backendMenuItems, backendLeafMenuItems } from './menuRegistry-helper'
 import { routeIconMap } from '@/utils/iconMap'
+import resources from '@/i18n/resources.json'
+import { messages } from '@/i18n/catalog'
 
 // 后端菜单注册表 ↔ 前端路由 ↔ 图标表 三者的一致性。
 //
@@ -134,7 +136,7 @@ describe('菜单标题 i18n 覆盖', () => {
   // 九语种（zh/en/ja/de/ru/pt/fr/es/ar）是产品承诺的语言矩阵，不是「恰好有九个
   // JSON 文件」：临时调试文件忘删、某语言包被误删、某语言缺新菜单的 key——
   // 这些都不会让页面崩，只会让某语言用户看到裸 key 或英文兜底。所以这里
-  // 三道闸一起上：文件集合精确等于九个、每个后端菜单 key 都有非空标题、
+  // 三道闸一起上：基础语言包与运行时语种精确等于九个、每个后端菜单 key 都有非空标题、
   // 标题不许是占位符（值等于裸 key 说明根本没翻译）。
   const EXPECTED_LOCALES = ['ar', 'de', 'en', 'es', 'fr', 'ja', 'pt', 'ru', 'zh']
   const localesDir = resolve(process.cwd(), 'src/i18n/locales')
@@ -154,17 +156,19 @@ describe('菜单标题 i18n 覆盖', () => {
   // 注意这里返回的是语言代码（去掉 .json 后缀），与 EXPECTED_LOCALES 直接可比。
   const localeFiles = () =>
     readdirSync(localesDir)
-      .filter((f) => f.endsWith('.json'))
+      .filter((f) => /^[a-z]{2}\.json$/.test(f))
       .map((f) => f.replace(/\.json$/, ''))
       .sort()
 
-  it('语言包文件集合精确等于九语种 zh/en/ja/de/ru/pt/fr/es/ar（多一个少一个都是矩阵破损）', () => {
+  it('基础语言包、资源清单与运行时均精确提供九语种', () => {
     const actual = localeFiles()
     expect(
       actual,
       `语言包必须是精确的九个：${EXPECTED_LOCALES.join('、')}。\n` +
         `多出来的通常是临时调试文件忘了删；少掉的那个语言会在页面上静默退回兜底文案。`
     ).toEqual(EXPECTED_LOCALES)
+    expect([...resources.locales].sort()).toEqual(EXPECTED_LOCALES)
+    expect(Object.keys(messages).sort()).toEqual(EXPECTED_LOCALES)
   })
 
   it('注册表里每个菜单 key 在全部语言包都有非空标题（缺一个就渲染成裸 key）', () => {

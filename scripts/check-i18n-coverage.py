@@ -72,6 +72,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -140,15 +141,24 @@ def leaf_keys(node, prefix: str = "") -> list[str]:
     return out
 
 
-def locale_keys(name: str) -> list[str]:
-    p = REPO_ROOT / LOCALES_DIR / f"{name}.json"
-    if not p.is_file():
-        fail(f"语言包缺失: {p}")
+def locale_messages() -> dict:
+    """复用前端资源清单与装配器，分包不另算语言，兜底与运行时一致。"""
     try:
-        data = json.loads(p.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as e:
-        fail(f"语言包解析失败 {name}.json: {e}")
-    return leaf_keys(data)
+        result = subprocess.run([
+            "node", "--input-type=module", "-e", """
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+const root = resolve(process.argv[1], 'user-web/src/i18n');
+const resources = JSON.parse(readFileSync(resolve(root, 'resources.json'), 'utf8'));
+const { assembleResources } = await import(pathToFileURL(resolve(root, 'assembleResources.js')));
+console.log(JSON.stringify(assembleResources(resources,
+  file => JSON.parse(readFileSync(resolve(root, 'locales', file), 'utf8')))));
+""", str(REPO_ROOT)], capture_output=True, text=True, check=True)
+        return json.loads(result.stdout)
+    except (OSError, subprocess.CalledProcessError, json.JSONDecodeError) as e:
+        detail = e.stderr if isinstance(e, subprocess.CalledProcessError) else str(e)
+        fail(f"语言资源装配失败: {detail}")
 
 
 def backend_menu_keys() -> set[str]:
@@ -297,8 +307,9 @@ def main() -> int:
     dotted = {k for k in t_keys if DOTTED_KEY.match(k)}
     raw = t_keys - dotted
 
-    locales = sorted(p.stem for p in (REPO_ROOT / LOCALES_DIR).glob("*.json"))
-    keys_per_locale = {lc: set(locale_keys(lc)) for lc in locales}
+    messages = locale_messages()
+    locales = sorted(messages)
+    keys_per_locale = {lc: set(leaf_keys(messages[lc])) for lc in locales}
     base_keys = keys_per_locale[BASE_LOCALE]
 
     # 点分键是否真能在词条库里解析到 —— 解析不到的话写了 i18n 也等于没写

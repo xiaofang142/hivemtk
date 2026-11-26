@@ -1,13 +1,13 @@
 package controller
 
 import (
+	"context"
+	"errors"
 	"net/http"
-	"runtime/debug"
 	"strconv"
 	"time"
 
 	"hivemtk-user/internal/geo/service"
-	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/reporting"
@@ -19,11 +19,12 @@ import (
 type ReportController struct {
 	svc          *service.ReportService
 	analyticsSvc *service.GeoDecisionAnalyticsService
+	startCrawler func(context.Context) error
 }
 
 // NewReportController 构造报表控制器。
 func NewReportController(svc *service.ReportService, analyticsSvc *service.GeoDecisionAnalyticsService) *ReportController {
-	return &ReportController{svc: svc, analyticsSvc: analyticsSvc}
+	return &ReportController{svc: svc, analyticsSvc: analyticsSvc, startCrawler: service.StartCrawlerProbe}
 }
 
 // @Summary 获取 GEO 汇总报表
@@ -151,7 +152,7 @@ func (c *ReportController) ShareOfVoiceTrend(ctx *gin.Context) {
 	}, "ok")
 }
 
-// @Summary      爬虫统计
+// @Summary      主动 UA 探测成功统计（不证明外部抓取或收录）
 // @Tags      report
 // @Router    /api/geo/crawler-stats [get]
 // CrawlerStats 爬虫统计
@@ -163,7 +164,12 @@ func (c *ReportController) CrawlerStats(ctx *gin.Context) {
 	}
 	result, err := c.analyticsSvc.GetCrawlerStats(ctx.Request.Context())
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, "爬虫统计失败: "+err.Error())
+		if errors.Is(err, service.ErrCrawlerTenantRequired) {
+			response.Error(ctx, http.StatusUnauthorized, response.ErrUnauthorized)
+			return
+		}
+		logger.Errorf("[GEO UA Probe] 读取统计失败: %v", err)
+		response.Error(ctx, http.StatusInternalServerError, "读取主动 UA 探测统计失败")
 		return
 	}
 	response.Success(ctx, result, "ok")
@@ -193,24 +199,26 @@ func (c *ReportController) InaccurateClaims(ctx *gin.Context) {
 	response.Success(ctx, result, "ok")
 }
 
-// @Summary      爬虫已启动
+// @Summary      受理主动 UA 探测（不触发外部 AI 引擎抓取）
 // @Tags      report
 // @Router    /api/geo/crawler/run [post]
-// RunCrawler 手动触发竞品监控爬虫
+// RunCrawler 202 表示当前租户的主动 HTTP UA 探测已受理，结论尚未产生。
 // POST /geo/crawler/run
 func (c *ReportController) RunCrawler(ctx *gin.Context) {
-	// 只跑当前租户：普通用户点「立即执行」不能触发全租户扇出。
-	// 请求返回后 ctx 会被取消，执行体用 BackgroundWithTenant 脱离生命周期。
-	runCtx := tenant.BackgroundWithTenant(ctx.Request.Context())
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				logger.Errorf("[GEO Crawler] panic: %v\n%s", r, debug.Stack())
-			}
-		}()
-		if _, err := service.CrawlerMonitorCronWithContext(runCtx); err != nil {
-			logger.Errorf("[GEO Crawler] 竞品监控同步失败: %v", err)
+	if err := c.startCrawler(ctx.Request.Context()); err != nil {
+		if errors.Is(err, service.ErrCrawlerTenantRequired) {
+			response.Error(ctx, http.StatusUnauthorized, response.ErrUnauthorized)
+			return
 		}
-	}()
-	response.Success(ctx, map[string]string{"status": "started"}, "爬虫已启动")
+		logger.Errorf("[GEO UA Probe] 受理失败: %v", err)
+		response.Error(ctx, http.StatusInternalServerError, "主动 UA 探测受理失败")
+		return
+	}
+	response.Accepted(ctx, map[string]any{
+		"status": "accepted",
+		"data_source": map[string]any{
+			"kind": "active_ua_probe", "success_criteria": "http_2xx_3xx",
+			"external_crawl_verified": false, "indexing_verified": false,
+		},
+	}, "主动 UA 探测已受理，不代表外部引擎抓取或收录")
 }

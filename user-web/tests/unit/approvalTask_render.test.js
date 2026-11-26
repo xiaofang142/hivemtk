@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import { settle } from './settle-helper'
 import { createPinia } from 'pinia'
+import i18n from '@/i18n'
 
 // 组件渲染用例：证明"审批类待办没有裸完成"这条红线**穿过了模板**，而不只是活在 actions.js 里。
 //
@@ -84,13 +85,14 @@ const countButtons = (wrapper, text) =>
 async function mountPage(rows = ROWS) {
   api.list.mockResolvedValue({ list: rows, total: rows.length })
   api.counts.mockResolvedValue({ at: '2026-09-20T09:00:00Z', total_open: rows.length, by_kind: [] })
-  const wrapper = mount(List, { attachTo: document.body, global: { plugins: [createPinia(), ElementPlus] } })
+  const wrapper = mount(List, { attachTo: document.body, global: { plugins: [createPinia(), ElementPlus, i18n] } })
   await settle(wrapper)
   return wrapper
 }
 
 beforeEach(() => {
   vi.clearAllMocks()
+  i18n.global.locale.value = 'zh'
 })
 
 describe('待办中心渲染：三类一起列，按钮按类分', () => {
