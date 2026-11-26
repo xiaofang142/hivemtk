@@ -63,9 +63,6 @@ var SystemMenuTree = []SystemMenuNode{
 		Key: "customer", Title: "客户与销售", Icon: "UserFilled",
 		Roles: []string{"admin", "viewer", "staff"},
 		Children: []SystemMenuNode{
-			{Key: "clueList", Title: "线索列表", Icon: "Document", Path: "/clue/list"},
-			{Key: "clueStatistics", Title: "线索统计", Icon: "DataAnalysis", Path: "/clue/statistics"},
-			{Key: "leadMining", Title: "线索挖掘", Icon: "Search", Path: "/lead-mining/index"},
 			{Key: "customer360", Title: "客户 360", Icon: "UserFilled", Path: "/customer360/list"},
 			{Key: "customerConsents", Title: "客户同意与偏好", Icon: "DocumentChecked", Path: "/customer360/consents"},
 			{Key: "customerImportJob", Title: "客户导入任务", Icon: "UploadFilled", Path: "/customerImportJob/list", Roles: []string{"admin"}},
@@ -75,7 +72,6 @@ var SystemMenuTree = []SystemMenuNode{
 			{Key: "tagSegmentation", Title: "标签分层", Icon: "PriceTag", Path: "/tagSegmentation/list", Roles: []string{"admin", "viewer"}},
 			{Key: "userSegment", Title: "用户分层 RFM", Icon: "PieChart", Path: "/userSegment/list", Roles: []string{"admin", "viewer"}},
 			{Key: "crmMaster", Title: "客户主数据", Icon: "User", Path: "/crm/list", Roles: []string{"admin"}},
-			{Key: "leadGovernance", Title: "线索治理", Icon: "Aim", Path: "/leads/rules", Roles: []string{"admin"}},
 			{Key: "salesCockpit", Title: "销售驾驶舱", Icon: "DataLine", Path: "/sales-cockpit", Roles: []string{"admin"}},
 			{Key: "orderDraft", Title: "订单草稿", Icon: "Document", Path: "/dashboard/drafts", Roles: []string{"admin"}},
 			{Key: "salesWorkbench", Title: "销售工作台", Icon: "Notebook", Path: "/sales-workbench", Roles: []string{"admin"}},
@@ -98,6 +94,24 @@ var SystemMenuTree = []SystemMenuNode{
 					{Key: "oneidMergeRules", Title: "合并规则配置", Icon: "Setting", Path: "/oneid/merge-rules"},
 				},
 			},
+		},
+	},
+	{
+		// 线索发现：2026-11-26 从「客户与销售」抽出为独立顶级模块，统一收口
+		// 线索发掘、判定、归档、规则、智能体与通知路由。key 与深链保持不变，
+		// 仅变更父分组，避免已有角色授权行失效。
+		Key: "leadDiscovery", Title: "线索发现", Icon: "Search",
+		Roles: []string{"admin", "viewer", "staff"},
+		Children: []SystemMenuNode{
+			{Key: "leadMining", Title: "线索挖掘", Icon: "Search", Path: "/lead-mining/index"},
+			{Key: "clueList", Title: "线索列表", Icon: "Document", Path: "/clue/list"},
+			{Key: "clueStatistics", Title: "线索统计", Icon: "DataAnalysis", Path: "/clue/statistics"},
+			{Key: "leadGovernance", Title: "线索治理", Icon: "Aim", Path: "/leads/rules", Roles: []string{"admin"}},
+			{Key: "leadMiningAgents", Title: "线索发现智能体", Icon: "Cpu", Path: "/leads/mining-agents", Roles: []string{"admin"}},
+			{Key: "leadNotifyRoutes", Title: "线索通知路由", Icon: "Bell", Path: "/leads/notify-routes", Roles: []string{"admin"}},
+			{Key: "leadEvidence", Title: "判定与证据", Icon: "Document", Path: "/leads/evidence", Roles: []string{"admin"}},
+			{Key: "leadArchive", Title: "线索归档", Icon: "FolderChecked", Path: "/leads/archive", Roles: []string{"admin"}},
+			{Key: "leadScopedList", Title: "权限内客户与消息", Icon: "List", Path: "/leads/scoped-list", Roles: []string{"admin"}},
 		},
 	},
 	{

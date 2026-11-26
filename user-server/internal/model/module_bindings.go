@@ -241,6 +241,9 @@ var ModuleMenuBindings = map[string][]string{
 		"customerIdentity", "oneidList", "oneidConflicts", "oneidMergeRules",
 		// 2026-11-24：客户主数据 + 线索治理（今日新增的两个独立业务面，各一个菜单入口）。
 		"crmMaster", "leadGovernance",
+		// 2026-11-26：线索发现抽为独立顶级模块；容器与新增深链仍属客户数据面，
+		// 不新增收费模块条目，模块闭包与裁剪规则保持不变。
+		"leadDiscovery", "leadMiningAgents", "leadNotifyRoutes", "leadEvidence", "leadArchive", "leadScopedList",
 	},
 
 	// ========== inbox：会话工作台（12 节点）==========

@@ -28,15 +28,17 @@ func TestMenuNavigation_AllLeafKeysAndPathsPreserved(t *testing.T) {
 	walk(SystemMenuTree)
 	sort.Strings(leaves)
 	got := fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(leaves, "\n"))))
-	const want = "91063c0197b374f4af50b3845060bb99cdc81894fae5d0688405b539806c83c5"
-	if len(leaves) != 206 || got != want {
-		t.Fatalf("206 个业务叶子的 key/Path 必须完整保留，实际 %d 个 / %s；清单:\n%s", len(leaves), got, strings.Join(leaves, "\n"))
+	// 2026-11-26：线索发现独立顶级模块，新增 5 个深链叶子 + 1 个带页容器，
+	// 原有 206/212 个 key/Path 全部保留（仅改父分组），此处上调计数与指纹。
+	const want = "c64f72c68445c9707f50f8263b6e2e905e62a6270806d38639793a86a26ea9f1"
+	if len(leaves) != 211 || got != want {
+		t.Fatalf("211 个业务叶子的 key/Path 必须完整保留，实际 %d 个 / %s；清单:\n%s", len(leaves), got, strings.Join(leaves, "\n"))
 	}
 	sort.Strings(paths)
 	got = fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(paths, "\n"))))
-	const wantPaths = "d2ebdb07c746cb5307667249dc3aec4cf6a5a3103ef3d0254352c4c9e20d8e49"
-	if len(paths) != 212 || got != wantPaths {
-		t.Fatalf("含带页目录的 212 个 key/Path 必须完整保留，实际 %d 个 / %s", len(paths), got)
+	const wantPaths = "9c76592c240f7703781f1db9a21178698820d08f9f430202aa00b5c7a505e19b"
+	if len(paths) != 217 || got != wantPaths {
+		t.Fatalf("含带页目录的 217 个 key/Path 必须完整保留，实际 %d 个 / %s", len(paths), got)
 	}
 }
 
@@ -47,9 +49,9 @@ func TestMenuNavigation_AllRoleCeilingsPreserved(t *testing.T) {
 		count  int
 		digest string
 	}{
-		{SystemRoleCodeAdmin, 250, "5bc5bccdf69856ea800cff323593d8aa2e9caecd6548048382fb2ed234445ae6"},
-		{SystemRoleCodeCustomerService, 60, "7c9a953a104e2734102d4fe7834c2a313fc41d0e87886f469cf6eb8fd065297a"},
-		{SystemRoleCodeStaff, 65, "5da0c1b34358f782c4bcbeaa88ae43d3cd7a489c3f4c18f3ec7a658921378621"},
+		{SystemRoleCodeAdmin, 256, "58076cae3ecdedd3966f5426a98718a61d1096dcd9c1ffba748c9897926a1a14"},
+		{SystemRoleCodeCustomerService, 61, "403ab24619ac9dacaa90b356e1626792465228e38cd2842c2f416f1b8ff811e0"},
+		{SystemRoleCodeStaff, 66, "1afdff6f983f29759c8fc52a14fe2cc3aec2b5e1b4d52d1798b3e74a7f9dc55f"},
 	}
 	for _, tc := range cases {
 		var keys []string
@@ -74,7 +76,7 @@ func TestMenuNavigation_AllRoleCeilingsPreserved(t *testing.T) {
 
 // 渠道入口与原八个业务入口必须直接来自后端注册表。
 func TestMenuNavigation_AuthoritativeGroups(t *testing.T) {
-	want := []string{"channels", "workspace", "customer", "aiAgent", "reach", "knowledge", "geoTools", "analytics", "system"}
+	want := []string{"channels", "workspace", "customer", "leadDiscovery", "aiAgent", "reach", "knowledge", "geoTools", "analytics", "system"}
 	got := make([]string, 0, len(SystemMenuTree))
 	for _, n := range SystemMenuTree {
 		got = append(got, n.Key)
