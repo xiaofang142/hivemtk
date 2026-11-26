@@ -1035,3 +1035,18 @@ follow_user_channels 扩为八渠道（生产库实值已更新）。链 B 从�
 - `GET /platform/module-catalog/seed/coverage` 200 `{covered:257,duplicated:0,menu_key_total:257,ok:true}`；`POST /platform/module-catalog/seed` 200「目录已同步」`modules=24`。
 - platform_db `module_menu_bindings` 250→257；新 key `channels`→core，`leadArchive/leadDiscovery/leadEvidence/leadMiningAgents/leadNotifyRoutes/leadScopedList`→customer。user_db tenant18 `tenant_modules.customer.menu_keys` 已含 6 个新 key、`core` 含 `channels`（activated_at 18:05:02）⇒ 模块闸下发正常。
 - 用户侧 RBAC：`FilterMenuTree` 按「自身 key 或任一后代命中即保留」⇒ 移动父分组不破坏 viewer/staff 可见性（两档均已授予 clueList/clueStatistics/leadMining）；新增 5 叶子 admin-only 无需 DB 行；`menu_capability_routes.go` 无 lead/clue 规则无需补；前端 `routeOwners` 仅面包屑展示非授权规则。`/api/menus` 实测含 `leadDiscovery` 及 9 子项，面包屑「线索发现 / 线索通知路由」正确。
+
+## 2026-11-26 18:42 链 A + 链 D — 线索发现账号级配置与智能体快照生效（HEAD `3edd01b7c`）
+
+**背景**：二次审核三项问题：①「线索发现智能体」页空白（5 个线索智能体 agent_type 仍是 sales，被列表过滤）；②线索智能体 persona/system_prompt/model 是死配置（生产 Resolve 未传 agentID）；③头脑风暴 P0 未落地（工作台仍写 legacy 全局配置，改它不影响真实命中）。
+
+**修复**：
+- 数据：tenant18 五个线索智能体（id49/51-54）`agent_type` 修正为 `lead_mining`（SQL 单事务，回读 5 行均为 lead_mining/active/status1）。
+- 后端：`leadHistoryScope` 带出账号绑定的 `lead_mining_agent_id`；`lead_mining.go` 生产路径 `configResolver.Resolve(ctx, target, processLeadAgentID(ctx,hub))`，快照写入判定上下文 `AgentSnapshot`；`LeadMiningConfigSnapshot` 增 `LeadAgentPersona` 并纳入指纹；`buildLeadJudgeSystemPrompt` 输出智能体人设/系统提示；`dispatcher_judge.go` 按 agentID 做 LLM 用量归因。新增 `lead_agent_snapshot_test.go`。
+- 前端：新建 `views/leadMining/AccountMatrix.vue` 账号级配置矩阵（4 账号的自动回复/线索智能体、关键词、语义词、规则优先级来源，编辑同时 PUT 账号与 POST account 级规则，PUT 前读详情以保留 owner_user_ids/data_scope 等字段）；`Index.vue` 把它作为首 tab、旧「发掘设置」改名「全局默认（兜底）」并加警示；`Rules.vue` 加优先级说明+scope 徽标；`MiningAgents.vue` 加「绑定账号」列。
+- 注：判定反馈已在 `Index.vue` 判定记录 tab 实现（误报/有效按钮），无需重做。LLM 模型仍由 scenario 路由选择（`llm.DispatchRequest` 无 Model 字段），agent 的 model 未直接覆盖，仅 persona/system_prompt/agentID 生效。
+
+**验证与发布**：`go build ./...` PASS；定向单测 `TestLeadMiningConfigResolver_AgentConfigIsLive`/`TestLeadJudgePromptIncludesAgentConfig` 与既有 lead 相关测试 PASS；前端 `npx vitest run` 菜单/路由子集 24 用例通过，`npm run build` 成功。
+- commit `3edd01b7c`，push `gitee-upstream`+`upstream`。链 A 线上二进制 sha256 `2052b0cc4094cf17…`，运行镜像 `05f19f4a731008e59e4`，容器启动 `2026-11-26T10:42:28Z`，回滚点镜像 `mtk-user-server:rollback-20261126-184123` / 二进制 `user-server.bak-20261126-184123`，容器内+公网 health 200，默认口令探针 GREEN。
+- 链 D 用户前端 `index-CJM9zHeV.js`，备份 `user-web.snapshot-20261126-183938.tgz` 后 rsync 到 `/www/wwwroot/hivemtk/user-web/`，公网指纹一致。
+- 发布前 stash 3 个并行会话文件过 preflight，发布后已 `git stash pop` 恢复（stash 已 drop），并行文件未丢失。
