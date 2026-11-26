@@ -5,7 +5,7 @@
         <h2 class="page-title">
           {{ typeMeta.title }}
         </h2>
-        <span class="page-sub">{{ typeMeta.subtitle }}（US1 补缺实体）</span>
+        <span class="page-sub">{{ typeMeta.subtitle }}</span>
       </div>
       <el-button
         type="primary"
@@ -169,13 +169,16 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRoute } from 'vue-router'
 import { crmApi } from '@/api/crm'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const route = useRoute()
 const type = computed(() => (route.meta.entityType || 'contact'))
 const typeMeta = computed(() => ({
-  contact: { title: '联系人', subtitle: '客户联系人', list: crmApi.listContacts, create: crmApi.createContact, update: crmApi.updateContact, del: crmApi.deleteContact },
-  supplier: { title: '供应商', subtitle: '客户供应商', list: crmApi.listSuppliers, create: crmApi.createSupplier, update: crmApi.updateSupplier, del: crmApi.deleteSupplier },
-  serviceProvider: { title: '服务商', subtitle: '客户服务商', list: crmApi.listServiceProviders, create: crmApi.createServiceProvider, update: crmApi.updateServiceProvider, del: crmApi.deleteServiceProvider },
+  contact: { title: '联系人', subtitle: t('businessCopy.crm.contactsSubtitle'), list: crmApi.listContacts, create: crmApi.createContact, update: crmApi.updateContact, del: crmApi.deleteContact },
+  supplier: { title: '供应商', subtitle: t('businessCopy.crm.suppliersSubtitle'), list: crmApi.listSuppliers, create: crmApi.createSupplier, update: crmApi.updateSupplier, del: crmApi.deleteSupplier },
+  serviceProvider: { title: '服务商', subtitle: t('businessCopy.crm.serviceProvidersSubtitle'), list: crmApi.listServiceProviders, create: crmApi.createServiceProvider, update: crmApi.updateServiceProvider, del: crmApi.deleteServiceProvider },
 }[type.value]))
 
 const loading = ref(false)

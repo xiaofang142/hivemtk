@@ -1,5 +1,6 @@
 <template>
   <div class="knowledge-v2-management">
+    <p>{{ t('businessCopy.knowledge.description') }}</p>
     <el-row
       :gutter="16"
       class="overview-row"
@@ -123,7 +124,7 @@
         <div class="toolbar-left">
           <el-select
             v-model="filter.product_id"
-            :placeholder="$t('选择知识库')"
+            :placeholder="t('businessCopy.knowledge.select')"
             clearable
             style="width: 200px"
             @change="handleSearch"
@@ -244,7 +245,7 @@
           </template>
         </el-table-column>
         <el-table-column
-          label="所属知识库"
+          :label="t('businessCopy.knowledge.belongsTo')"
           min-width="180"
           show-overflow-tooltip
         >
@@ -395,12 +396,12 @@
         >
           <el-form label-width="80px">
             <el-form-item
-              label="产品"
+              :label="t('businessCopy.knowledge.label')"
               required
             >
               <el-select
                 v-model="importForm.product_id"
-                placeholder="选择产品"
+                :placeholder="t('businessCopy.knowledge.select')"
                 style="width: 100%"
               >
                 <el-option
@@ -459,12 +460,12 @@
         >
           <el-form label-width="80px">
             <el-form-item
-              label="产品"
+              :label="t('businessCopy.knowledge.label')"
               required
             >
               <el-select
                 v-model="importForm.product_id"
-                placeholder="选择产品"
+                :placeholder="t('businessCopy.knowledge.select')"
                 style="width: 100%"
               >
                 <el-option
@@ -502,12 +503,12 @@
         >
           <el-form label-width="80px">
             <el-form-item
-              label="产品"
+              :label="t('businessCopy.knowledge.label')"
               required
             >
               <el-select
                 v-model="importForm.product_id"
-                placeholder="选择产品"
+                :placeholder="t('businessCopy.knowledge.select')"
                 style="width: 100%"
               >
                 <el-option
@@ -707,6 +708,9 @@
 
 <script setup>
 import i18n from '@/i18n'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -874,7 +878,7 @@ const handleExceed = () => {
 
 const handleImport = async () => {
   if (!importForm.product_id) {
-    ElMessage.error(i18n.global.t('请选择产品'))
+    ElMessage.error(t('businessCopy.knowledge.required'))
     return
   }
   importing.value = true

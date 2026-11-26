@@ -5,7 +5,7 @@
         type="primary"
         @click="handleAdd"
       >
-        <el-icon-plus /> {{ $t('新增邮件代理') }}
+        <el-icon-plus /> {{ t('businessCopy.email.addSender') }}
       </el-button>
     </div>
 
@@ -18,7 +18,7 @@
     >
       <el-table-column
         prop="name"
-        :label="$t('代理名称')"
+        :label="t('businessCopy.email.senderName')"
         width="300"
       />
       <el-table-column
@@ -33,7 +33,7 @@
       />
       <el-table-column
         prop="limit"
-        :label="$t('代理日限制')"
+        :label="t('businessCopy.email.dailyLimit')"
         width="100"
       />
       <el-table-column
@@ -80,12 +80,12 @@
         label-width="120px"
       >
         <el-form-item
-          label="代理名称"
+          :label="t('businessCopy.email.senderName')"
           prop="name"
         >
           <el-input
             v-model="form.name"
-            placeholder="请输入代理名称"
+            :placeholder="t('businessCopy.email.senderNamePlaceholder')"
           />
         </el-form-item>
         <el-form-item
@@ -129,12 +129,12 @@
           />
         </el-form-item>
         <el-form-item
-          label="代理日限制"
+          :label="t('businessCopy.email.dailyLimit')"
           prop="limit"
         >
           <el-input
             v-model="form.limit"
-            placeholder="请输入代理日限制"
+            :placeholder="t('businessCopy.email.dailyLimitPlaceholder')"
             type="number"
           />
         </el-form-item>
@@ -157,12 +157,14 @@
 <script setup>
 import i18n from '@/i18n'
 
-import { ref, reactive, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Plus as _Plus } from '@element-plus/icons-vue';
 
 import { emailApi } from '@/api/email';
 
+const { t } = useI18n();
 const tableData = ref([]);
 
 const fetchEmailSmtp = async () => {
@@ -176,7 +178,8 @@ onMounted(() => {
 
 
 const dialogVisible = ref(false);
-const dialogTitle = ref('新增邮件代理');
+const dialogTitleKey = ref('businessCopy.email.addSender');
+const dialogTitle = computed(() => t(dialogTitleKey.value));
 const formRef = ref(null);
 
 const form = reactive({
@@ -189,8 +192,8 @@ const form = reactive({
   limit: 50
 });
 
-const rules = {
-  name: [{ required: true, message: i18n.global.t('请输入代理名称'), trigger: 'blur' }],
+const rules = computed(() => ({
+  name: [{ required: true, message: t('businessCopy.email.senderNamePlaceholder'), trigger: 'blur' }],
   server: [{ required: true, message: i18n.global.t('请输入服务器地址'), trigger: 'blur' }],
   port: [
     { required: true, message: i18n.global.t('请输入端口号'), trigger: 'blur' },
@@ -198,23 +201,23 @@ const rules = {
   ],
   username: [{ required: true, message: i18n.global.t('请输入用户名'), trigger: 'blur' }],
   password: [{ required: true, message: i18n.global.t('请输入密码'), trigger: 'blur' }],
-  limit: [{ required: true, message: i18n.global.t('请输入代理日限制'), trigger: 'blur' }],
-};
+  limit: [{ required: true, message: t('businessCopy.email.dailyLimitPlaceholder'), trigger: 'blur' }],
+}));
 
 const handleAdd = () => {
-  dialogTitle.value = '新增邮件代理';
+  dialogTitleKey.value = 'businessCopy.email.addSender';
   Object.assign(form, { id: '', name: '', server: '', port: '', username: '', password: '', limit: 50 });
   dialogVisible.value = true;
 };
 
 const handleEdit = (row) => {
-  dialogTitle.value = '编辑邮件代理';
+  dialogTitleKey.value = 'businessCopy.email.editSender';
   Object.assign(form, { ...row });
   dialogVisible.value = true;
 };
 
 const handleDelete = (id) => {
-  ElMessageBox.confirm('确定要删除该邮件代理吗？', '警告', {
+  ElMessageBox.confirm(t('businessCopy.email.deleteSenderConfirm'), i18n.global.t('警告'), {
     confirmButtonText: '确定',
     cancelButtonText: '取消',
     type: 'warning'

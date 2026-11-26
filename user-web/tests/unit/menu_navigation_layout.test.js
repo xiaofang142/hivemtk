@@ -16,7 +16,7 @@ vi.mock('@/utils/request', () => ({
   default: {}
 }))
 vi.mock('@/composables/useOnboarding', () => ({
-  useOnboarding: () => ({ destroy: vi.fn() }),
+  useOnboarding: () => ({ destroy: vi.fn(), destroyModuleTour: vi.fn() }),
   resolveRoutePattern: () => ''
 }))
 
@@ -28,7 +28,10 @@ describe('Layout 菜单展开', () => {
     permission.menusLoaded = true
     permission.menus = [
       { key: 'aiAgent', children: [{ key: 'agentManage', children: [{ key: 'aiAgentList', path: '/aiAgent/list' }] }] },
-      { key: 'system', children: [{ key: 'assetBundle', children: [{ key: 'assetBundleList', path: '/asset-bundle/list' }] }] }
+      { key: 'system', children: [{ key: 'assetBundle', children: [
+        { key: 'assetBundleList', path: '/asset-bundle/list' },
+        { key: 'assetBundlePlayground', path: '/asset-bundle/playground' }
+      ] }] }
     ]
     const paths = ['/aiAgent/list', '/asset-bundle/list', '/asset-bundle/merchant-new', '/aiAgent/edit/:id']
     const emptyPage = { render: () => null }
@@ -54,6 +57,8 @@ describe('Layout 菜单展开', () => {
 
     try {
       await settle(wrapper)
+      expect(wrapper.find('.app-aside .el-sub-menu').exists()).toBe(false)
+      expect(errorHandler).not.toHaveBeenCalled()
       await router.push(paths[1])
       await settle(wrapper)
       expect(errorHandler).not.toHaveBeenCalled()
@@ -65,6 +70,8 @@ describe('Layout 菜单展开', () => {
       expect(errorHandler).not.toHaveBeenCalled()
       await router.push('/aiAgent/edit/42')
       await settle(wrapper)
+      expect(wrapper.find('.app-aside .el-sub-menu').exists()).toBe(false)
+      expect(errorHandler).not.toHaveBeenCalled()
       expect(wrapper.get('.breadcrumb-wrap [aria-current="page"]').text()).toBe(i18n.global.t('navigation.editAgent'))
       const backLink = wrapper.get('.breadcrumb-wrap a[href="/aiAgent/list"]')
       await backLink.trigger('click')

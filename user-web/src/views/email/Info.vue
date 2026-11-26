@@ -1,5 +1,7 @@
 <template>
   <div class="email-providers-container">
+    <h2>{{ t('businessCopy.email.providerReferenceTitle') }}</h2>
+    <p>{{ t('businessCopy.email.providerReferenceDescription') }}</p>
     <el-table
       :data="filteredProviders"
       border
@@ -108,6 +110,9 @@
 
 <script setup>
 import _i18n from '@/i18n'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 import { ref, computed } from 'vue'
 import { Search as _Search, InfoFilled } from '@element-plus/icons-vue'

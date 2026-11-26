@@ -6,8 +6,8 @@
       type="warning"
       show-icon
       :closable="false"
-      title="Bad Case 底座不可用"
-      description="后端回的是 503（这一竖未装配或缺 DB 句柄）。下面的空列表与全 0 读数不是「队列清完了」，是一次都没读到。"
+      :title="t('businessCopy.badCase.unavailableTitle')"
+      :description="t('businessCopy.badCase.unavailableDescription')"
     />
     <el-alert
       v-if="!me"
@@ -15,8 +15,8 @@
       type="info"
       show-icon
       :closable="false"
-      title="登录态里没有 user id"
-      description="打标与撤销都要落到人（labeler_id 是这条结论谁下的的唯一出处），所以这一页此刻只能看不能点。重新登录通常就能拿回身份。"
+      :title="t('businessCopy.identity.title')"
+      :description="t('businessCopy.identity.badCaseDescription')"
     />
 
     <el-card shadow="never">
@@ -484,6 +484,9 @@
 </template>
 
 <script setup>
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 import { rtStr as _rtStr, rtNum as _rtNum, rtDur, rtBool as _rtBool } from '@/utils/runtimeConfig'
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'

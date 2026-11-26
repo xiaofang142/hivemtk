@@ -5,7 +5,7 @@
         <h2 class="page-title">
           客户 360 视图
         </h2>
-        <span class="page-sub">跨账号行业检索 + 证据化 AI 建议 + 标签与跟进</span>
+        <span class="page-sub">{{ t('businessCopy.crm.profileSubtitle') }}</span>
       </div>
       <el-button
         type="primary"
@@ -230,6 +230,9 @@ import { onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { crmApi } from '@/api/crm'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const route = useRoute()
 const customerId = ref(String(route.params.id || ''))

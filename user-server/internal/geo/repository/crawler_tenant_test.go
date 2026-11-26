@@ -38,13 +38,13 @@ func TestGeoCrawlerVisitRepository_BulkCreateFillsTenantAndStatsScoped(t *testin
 	ctxB := tenant.WithTenantID(context.Background(), gcvTenantB)
 
 	if err := repo.BulkCreate(ctxA, []*model.GeoCrawlerVisit{
-		{Keyword: "a", Engine: "GPTBot", Path: "/a"},
-		{Keyword: "a", Engine: "ClaudeBot", Path: "/a"},
+		{Keyword: "a", Engine: "GPTBot", Path: "/a", Source: model.CrawlerSourceActiveUAProbe},
+		{Keyword: "a", Engine: "ClaudeBot", Path: "/a", Source: model.CrawlerSourceActiveUAProbe},
 	}); err != nil {
 		t.Fatalf("租户 A 批量写入失败: %v", err)
 	}
 	if err := repo.BulkCreate(ctxB, []*model.GeoCrawlerVisit{
-		{Keyword: "b", Engine: "GPTBot", Path: "/b"},
+		{Keyword: "b", Engine: "GPTBot", Path: "/b", Source: model.CrawlerSourceActiveUAProbe},
 	}); err != nil {
 		t.Fatalf("租户 B 批量写入失败: %v", err)
 	}

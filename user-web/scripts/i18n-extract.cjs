@@ -102,18 +102,8 @@ function flattenKeys(obj, prefix = '', out = new Set()) {
   return out;
 }
 
-function loadLocaleKeys(file) {
-  if (!fs.existsSync(file)) return null;
-  const raw = fs.readFileSync(file, 'utf8');
-  try {
-    return flattenKeys(JSON.parse(raw));
-  } catch (e) {
-    return { error: e.message };
-  }
-}
-
 // ---- 主流程 ----
-function main() {
+async function main() {
   _print('============================================================');
   _print('  i18n 翻译完整性提取 (OPT-FE-EXT-1)');
   _print('  基准 locale:', FLAGS.base);
@@ -140,18 +130,18 @@ function main() {
   // 2) 加载 locales
   _print('[2/3] 加载 locale 文件 ...');
   const locales = {};
-  const localeFiles = fs.existsSync(LOCALES_DIR)
-    ? fs.readdirSync(LOCALES_DIR).filter((f) => f.endsWith('.json'))
-    : [];
-  for (const f of localeFiles) {
-    const code = path.basename(f, '.json');
-    const ks = loadLocaleKeys(path.join(LOCALES_DIR, f));
-    if (ks && !ks.error) {
-      locales[code] = ks;
-      _print(`      ${code}.json: ${ks.size} keys`);
-    } else if (ks && ks.error) {
-      _print(`      ${code}.json: ❌ 解析失败: ${ks.error}`);
+  const resources = JSON.parse(fs.readFileSync(path.join(SRC_DIR, 'i18n/resources.json'), 'utf8'));
+  const { assembleResources } = await import('../src/i18n/assembleResources.js');
+  const messages = assembleResources(resources, file => {
+    try {
+      return JSON.parse(fs.readFileSync(path.join(LOCALES_DIR, file), 'utf8'));
+    } catch (err) {
+      throw new Error(`${file} 读取或解析失败: ${err.message}`, { cause: err });
     }
+  });
+  for (const [code, message] of Object.entries(messages)) {
+    locales[code] = flattenKeys(message);
+    _print(`      ${code}: ${locales[code].size} keys`);
   }
   _print();
 
@@ -217,10 +207,8 @@ function main() {
   process.exit(0);
 }
 
-try {
-  main();
-} catch (e) {
+main().catch(e => {
   console.error('❌ 未捕获错误:', e.message);
   console.error(e.stack);
   process.exit(2);
-}
+});

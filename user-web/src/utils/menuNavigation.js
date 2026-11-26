@@ -45,6 +45,7 @@ const routeOwners = new Map([
   ['/sop-template/editor', ['/sop-template/list']],
   ['/sop-template/editor/:id', ['/sop-template/list']],
   ['/telegram', ['/telegram/account']],
+  ['/tiktok-card-stats/:id', ['/tiktok/list']],
   ['/userSegment/builder', ['/userSegment/list']],
   ['/userSegment/rfm-matrix', ['/userSegment/list']],
   ['/wecomAccount/data', ['/wecomAccount/list']],
@@ -80,22 +81,7 @@ export function projectNavigation(menus) {
     })
   }
 
-  const navigation = prune(menus)
-  const analytics = navigation.find(node => node.key === 'analytics')
-  const browser = analytics?.children?.find(node => node.key === 'browserAutomation')
-  if (!browser) return navigation
-
-  analytics.children = analytics.children.filter(node => node !== browser)
-  const system = navigation.find(node => node.key === 'system')
-  if (system?.children) {
-    system.children.push(browser)
-  } else if (system?.path) {
-    // 当前授权树里的 system 是分组；保留任何未来的可点击顶级入口。
-    analytics.children.push(browser)
-  } else {
-    navigation.push({ key: 'system', icon: 'Setting', children: [browser] })
-  }
-  return navigation.filter(node => node !== analytics || node.children.length)
+  return prune(menus)
 }
 
 export function getMenuLanding(menu, excludedPath) {

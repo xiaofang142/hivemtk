@@ -33,9 +33,11 @@ describe('用户端菜单展示与路由上下文', () => {
     const playground = item('assetBundlePlayground', '/asset-bundle/playground')
     permission.menus = [
       agentMenus(newAgent, agents),
-      group('analytics', [group('browserAutomation', [newTask, tasks], tasks.path)]),
       group('knowledge', [batchImport, documents]),
-      group('system', [group('assetBundle', [assetBundles, playground, newMerchantBundle])])
+      group('system', [
+        group('assetBundle', [assetBundles, playground, newMerchantBundle]),
+        group('browserAutomation', [newTask, tasks], tasks.path)
+      ])
     ]
     const authorization = JSON.parse(JSON.stringify(permission.menus))
 
@@ -59,10 +61,10 @@ describe('用户端菜单展示与路由上下文', () => {
     expect(permission.canAccessPath(documents.path)).toBe(false)
   })
 
-  it('浏览器自动化转到系统设置；不会给只获数据分析权限的角色添加系统入口', () => {
+  it('服从权威菜单分组，不给只获数据分析权限的角色添加系统入口', () => {
     const analysis = item('dashboardScreen', '/dashboardScreen/list')
     const browser = group('browserAutomation', [tasks], tasks.path)
-    permission.menus = [group('analytics', [analysis, browser])]
+    permission.menus = [group('analytics', [analysis]), group('system', [browser])]
 
     expect(permission.navigationMenus.map(node => node.key)).toEqual(['analytics', 'system'])
     expect(permission.navigationMenus[0].children).toEqual([analysis])
@@ -75,15 +77,13 @@ describe('用户端菜单展示与路由上下文', () => {
     const keywordMining = item('geoKeywordMining', '/geo-tools/keyword-mining')
     permission.menus = [
       agentMenus(agents, newAgent),
-      group('analytics', [
-        group('browserAutomation', [tasks, newTask], tasks.path),
-        group('geoTools', [group('geoProd', [keywordMining])], keywordMining.path)
-      ])
+      group('geoTools', [group('geoProd', [keywordMining])], keywordMining.path),
+      group('system', [group('browserAutomation', [tasks, newTask], tasks.path)])
     ]
     const trail = (path, pattern = path) => permission.getNavigationTrail({ path, matched: [{ path: pattern }] })
       .map(node => node.key)
 
-    expect(trail(keywordMining.path)).toEqual(['analytics', 'geoTools', 'geoProd', 'geoKeywordMining'])
+    expect(trail(keywordMining.path)).toEqual(['geoTools', 'geoProd', 'geoKeywordMining'])
     expect(trail(tasks.path)).toEqual(['system', 'browserAutomation', 'baTasks'])
     expect(trail(newTask.path)).toEqual(['system', 'browserAutomation', 'baTasks'])
     expect(trail('/browser-automation/tasks/12/edit')).toEqual(['system', 'browserAutomation', 'baTasks'])

@@ -297,7 +297,7 @@
     "messageHub": "Message Hub (MQ)",
     "inbox": "Unified Inbox",
     "wecomAccount": "Enterprise Micro Account Management",
-    "customer": "Customer Center",
+    "customer": "Customers & Sales",
     "clueList": "Lead List",
     "clueStatistics": "Lead Statistics",
     "customer360": "Customer 360",
@@ -310,7 +310,7 @@
     "customerIdentity": "Customer Identity",
     "oneidList": "OneID List",
     "oneidConflicts": "Identity Conflict Resolution",
-    "aiAgent": "AI Agent",
+    "aiAgent": "Agents & Customer Service",
     "agentManage": "AI Agent Management",
     "aiAgentList": "AI Agent List",
     "aiAgentCreate": "Create AI Agent",
@@ -326,7 +326,7 @@
     "marketingFlow": "Marketing Flow",
     "workflowOrchestrator": "Workflow Orchestration",
     "batchOperation": "Batch Operations",
-    "agentSupport": "Capability Support",
+    "agentSupport": "Tools & SOP",
     "sopAgent": "SOP Agent",
     "scriptTemplate": "Top Sales Script Library",
     "knowledgeBase": "Knowledge Base Management",
@@ -346,8 +346,8 @@
     "emailList": "Email List",
     "emailDrafts": "My Drafts",
     "emailJobs": "My Tasks",
-    "emailSmtp": "Email Account",
-    "emailInfo": "Email Proxy",
+    "emailSmtp": "Sender Accounts",
+    "emailInfo": "Email Provider Reference",
     "emailGuide": "Usage Guide",
     "emailSubject": "Subject",
     "emailTo": "Recipient",
@@ -416,15 +416,15 @@
     "abExperiment": "A/B Testing",
     "churnPrediction": "Churn Warning",
     "customerJourney": "Customer Journey Dashboard",
-    "geoTools": "GEO Optimization",
+    "geoTools": "GEO Growth",
     "geoAutopilot": "One-Click Autopilot",
     "geoKeywordMining": "Keyword Mining",
     "geoContentCreation": "Content Creation",
     "geoContentOptimize": "Article Optimization",
     "geoVerification": "Multi-Model Verification",
     "geoReports": "Data Reports",
-    "geoConfig": "Configuration",
-    "system": "System Settings",
+    "geoConfig": "Brand & Site Details",
+    "system": "System Administration",
     "systemConfig": "Site Settings",
     "systemObsConfig": "Storage Config",
     "systemMaterialLibrary": "Asset Library",
@@ -436,13 +436,13 @@
     "operationLog": "Operation Logs",
     "backupList": "Backup & Restore",
     "securityAudit": "Security Audit",
-    "siteConfig": "Site Config",
-    "teamGroup": "Team",
+    "siteConfig": "System Configuration & Operations",
+    "teamGroup": "Team & Permissions",
     "systemUser": "Personnel",
     "roleManage": "Roles",
     "permissionManage": "Permissions",
     "channelIdentifyCode": "Channel Identify Codes",
-    "permissionGroup": "Access Control",
+    "permissionGroup": "Channels & Integrations",
     "assetBundle": "Asset Bundles",
     "assetBundleList": "Bundle Management",
     "assetBundlePlayground": "Developer Playground",
@@ -472,13 +472,13 @@
     "geoAlertCenter": "Alert Center",
     "geoSovBoard": "Competitor SOV",
     "geoCompetitors": "Competitor Mgmt",
-    "geoCrawlerStats": "Crawler Stats",
+    "geoCrawlerStats": "UA Probe Records",
     "geoEntityGraph": "Entity Graph",
     "csatDashboard": "CSAT Dashboard",
     "confidencePanel": "Confidence Panel",
     "humanizePanel": "Humanization Panel",
     "feedbackLoopPanel": "Feedback Loop",
-    "automationCenter": "Automation Hub",
+    "automationCenter": "Service Automation",
     "dynamicThreshold": "Dynamic Thresholds",
     "systemDictionaries": "Business Dictionary",
     "systemFeatureFlags": "Feature Flags",
@@ -508,7 +508,7 @@
     "cohortPath": "Cohort Path",
     "geoAlerts": "Alert Center",
     "knowledgeConnectors": "Connectors",
-    "geoDecisionReport": "Decision Report",
+    "geoDecisionReport": "Source Gap Tasks",
     "emailDragEditor": "Drag Editor",
     "reachPipelineEditor": "Pipeline Editor",
     "userSegmentBuilder": "Segment Builder",
@@ -531,7 +531,7 @@
     "followups": "Today's Follow-ups",
     "qq": "QQ Bot",
     "geoConfigGroup": "Configuration",
-    "geoBrandConfig": "Brand & Domains",
+    "geoBrandConfig": "AI Crawler Access Files",
     "geoSeoInfra": "SEO Infrastructure",
     "geoPusherConfig": "Crawler Push Config",
     "geoSiteConfig": "Static Site Deploy",
@@ -706,7 +706,6 @@
   "请输入新密码": "Please enter a new password",
   "密码长度 8-64 位": "Password length 8-64 digits",
   "API Token 管理": "API Token Management",
-  "请选择产品": "Please, select a product.",
   "Token 已创建": "Token created",
   "已吊销": "Revoked",
   "已复制到剪贴板": "Copied to clipboard",
@@ -732,7 +731,6 @@
   "检索反馈管理": "Retrieve feedback management",
   "关联 AI 工具": "Related AI Tools",
   "管理工具": "Manage Tools",
-  "选择知识库": "Select Knowledge Base",
   "文档总数": "Total Documents",
   "分段总数": "Total Segments",
   "今日导入": "Import today",
@@ -764,12 +762,10 @@
   "状态信息": "Status details",
   "暂无数据": "No data",
   "重建任务已启动": "Reconstruction task started",
-  "选择产品(可选)": "Select a product (optional)",
   "总检索次数": "Total searches",
   "索引健康度": "Indexed Health",
   "OpenAPI 数据源集成": "OpenAPI Data Source Integration",
   "请输入端点 URL": "Please enter endpoint URL",
-  "请选择产品并输入查询文本": "Please select a product and enter the query text",
   "页面不存在": "Page Does not Exist",
   "返回上一页": "Return to previous",
   "查看来自平台的系统通知、版本公告与重要提醒": "View system notifications, release announcements, and important reminders from the platform",
@@ -1059,14 +1055,10 @@
   "已读条数": "Number of read entries",
   "未读条数": "Number of unread entries",
   "获取任务列表失败": "Failed to get task list",
-  "新增邮件代理": "Add Mail Agent",
   "服务器地址": "Server address",
-  "代理日限制": "Proxy Day Limit",
-  "请输入代理名称": "Please enter agent name",
   "请输入服务器地址": "Please Enter A Server Address",
   "请输入端口号": "Please enter the port number",
   "端口号必须为数字": "Port number must be numeric",
-  "请输入代理日限制": "Please enter agent day limit",
   "删除账号失败": "Account deletion failed",
   "新增成功": "Added",
   "反馈学习闭环": "Feedback Learning Closed Loop",
@@ -1391,7 +1383,6 @@
   "基本信息": "Basic Info",
   "基础信息": "Basic Information",
   "域名": "Domain",
-  "代理名称": "Agent Name",
   "坐席总数": "Total Seats",
   "事件类型": "Event Type",
   "事件列表": "Event List",
@@ -1572,7 +1563,6 @@
   "主动触达": "Active Outreach",
   "人员管理": "User Management",
   "域名池": "Domain Pool",
-  "多账号聚合": "Multi-Account Aggregation",
   "客户事件": "Customer Events",
   "客服会话": "Customer Service Sessions",
   "平台账号": "Platform Accounts",
@@ -1937,15 +1927,15 @@
       "global": {
         "step1": {
           "title": "Brand mark",
-          "description": "The product logo. Click it to go back to the landing page (message hub by default)."
+          "description": "The current site's brand mark. Use the top navigation to choose a business area."
         },
         "step2": {
           "title": "Top navigation",
-          "description": "Switch modules by business domain: message hub, customer center, AI agents, outreach, knowledge base, analytics, system settings. The menu is served by the backend RBAC — what you do not see means your role is not authorized for it."
+          "description": "Find tools under Workspace, Customers & Sales, Agents & Customer Service, Outreach Operations, Knowledge Center, GEO Growth, Data Analytics and System Administration. Visible entries depend on enabled site modules and your role permissions."
         },
         "step3": {
           "title": "Sidebar",
-          "description": "Sub-pages of the current module. Click a title to collapse or expand it; collapsed mode shows icons only to free horizontal space. Items with children need expanding before their pages appear."
+          "description": "Page links for the current business area. Expand groups with several pages; a group with one accessible page shows that page directly. Use the top button to collapse the sidebar."
         },
         "step4": {
           "title": "Notification bell",
@@ -1953,7 +1943,7 @@
         },
         "step5": {
           "title": "User menu",
-          "description": "Profile, help centre, logout. You can also replay the tours here: the global tour explains the overall layout, while \"tour of this page\" explains the page you are currently on."
+          "description": "Open your profile or the help centre and replay the guides: the global tour explains the layout, the module tour explains the business area, and the page tour explains the current page and its actions."
         },
         "step6": {
           "title": "Content area",
@@ -2238,17 +2228,17 @@
           }
         },
         "emailSmtp": {
-          "summary": "The SMTP page manages \"which mail server the system sends through\". The table lists each relay with its name, server address, port, account and status; \"Add relay\" lets you configure several (say Tencent Cloud as primary and Alibaba Cloud as backup), and sending picks among them in order.",
+          "summary": "Sender accounts manage the SMTP connections used to send email. Review each account's name, server, port and status, add accounts, edit connection settings or disable an account. The provider reference explains common settings.",
           "step2": {
-            "title": "Relay configuration and switching",
-            "description": "Server address, port, account, password and encryption must match the provider console exactly; a wrong port or encryption mode shows up as \"cannot connect\" rather than \"cannot send\", which is easy to misread. After changing a relay, send one test mail to confirm connectivity before enabling it. Relays can be disabled but should not be deleted — deleting loses the delivery history stored with them."
+            "title": "Configure a sender account",
+            "description": "Use your provider's current server, port, authentication and encryption requirements. Some accounts require a separate authorization code. After saving, verify sending permissions and delivery results; reference settings alone do not establish a working connection."
           }
         },
         "emailInfo": {
-          "summary": "The provider reference page is a lookup table for filling in SMTP settings: for each provider (Tencent Cloud, Alibaba Cloud, Huawei Cloud, SendGrid and others) it lists the host, port, whether an authorisation code is required instead of a password, and the authentication caveats, so you fill the form correctly the first time.",
+          "summary": "The email provider reference lists common SMTP servers, ports and authentication requirements to help configure sender accounts. It does not create accounts, relay mail or test connections. Check your provider's current console and documentation.",
           "step2": {
             "title": "Parameter reference and the usual traps",
-            "description": "Two traps cause most failures: treating the authorisation code as the account password (providers issue a separate code in the console), and getting the port and encryption mode wrong (465 wants SSL, 587 wants STARTTLS, and swapping them means it cannot connect). The port badges and the authentication notes on the page exist for exactly these two traps."
+            "description": "Check whether the account requires an authorization code and pair its port with the provider's required encryption mode. Reference information can change. Create, configure or disable connections on the sender accounts page and verify actual delivery."
           }
         },
         "emailDeliverability": {
@@ -2427,9 +2417,9 @@
           }
         },
         "geoBrandConfig": {
-          "summary": "The brand config page covers \"how AI crawlers get to know your brand\": llms.txt v2 is the content navigation file handed to AI crawlers, stating the site name, summary, key page links and brand wording; there is a live preview and the describedby response header settings alongside. Brand facts and the phrases you forbid are defined here, and AI citations follow them.",
+          "summary": "AI crawler access files preview this site's generated llms.txt and robots.txt for content navigation and access rules. Maintain brand and product facts in Brand & Site Details. A preview does not prove an external engine has read or indexed the files.",
           "step2": {
-            "description": "llms.txt is the first manual an AI engine reads when pulling content: the more structured it is, the more likely the engine takes what you want it to take. The preview renders live for the current domain, so you see the result as you type. Write brand wording as two lines — facts and forbidden phrasing — because facts alone still leave the old wording in play, and only naming what must not be said actually blocks it."
+            "description": "Switch files to inspect the generated output. Retry failed loads; empty output is not marked successful. A successful preview only confirms content generation. Verify deployed access, rule enforcement and external engine behavior separately."
           }
         },
         "geoSeoInfra": {
@@ -2463,9 +2453,9 @@
           }
         },
         "geoConfigOptimizer": {
-          "summary": "The GEO config page is the master switch for the whole GEO capability set: model choice, API endpoint, generation parameters and which sub-features are on are all set here. Save to apply, or use \"optimize config\" to get a recommended set of parameters for your current workload.",
+          "summary": "Brand & Site Details maintains the brand name, website, description, advantages, competitors and negative seed keywords. Product narrative fields supply factual context for content generation, rewriting and structured data. Save after editing.",
           "step2": {
-            "description": "This is the global default; each sub-page (keyword mining, content generation, push) also has its own override, and the sub-page wins when they conflict. Check cost when changing models: keyword mining is high volume and does not deserve an expensive model, whereas generating the body copy does. The recommendation is computed from your current usage, so re-run it when usage changes."
+            "description": "Enter verifiable product categories, audiences, features and version facts, then save. Add or remove advantages, competitors and negative keywords individually. Model connections and permissions are configured in their own administration tools."
           }
         },
         "geoKeywordMining": {
@@ -2547,9 +2537,9 @@
           }
         },
         "geoCrawlerStats": {
-          "summary": "The crawler statistics page shows \"how much each AI engine's crawler visited your site\": today's visits, pages covered, HiveMTK and the competitor total on top, broken down by engine and page below. It is the upstream metric behind indexing and citations.",
+          "summary": "UA Probe Records counts successful responses to requests made by this system using different AI User-Agent strings. Compare sampled results by UA group, site and keyword. These records do not establish external crawler visits, citations or indexing.",
           "step2": {
-            "description": "Low crawl volume with the page already indexed means the content came in through another path; normal crawl volume without indexing usually means robots or a response header blocked it. The pages-covered figure shows how many pages the crawler actually reached — a site with hundreds of articles but only dozens crawled means it is not following the links, so the site structure or the navigation in llms.txt is unclear."
+            "description": "Only explicitly attributed active UA probes with HTTP 2xx/3xx responses are counted. Older records with unknown sources are excluded. Counts and shares depend on task sampling and configuration. Manual execution means the task was accepted; refresh later for results."
           }
         },
         "geoVerification": {
@@ -2559,9 +2549,9 @@
           }
         },
         "geoDecisionReport": {
-          "summary": "The decision report reviews \"what GEO actually brought in\": captured leads, open gap tasks and completed backfills on top, with the report detail below. A backfill is the content task produced when AI was found to answer wrongly or to omit you.",
+          "summary": "Source Gap Tasks summarizes captured leads, pending gaps and completed content work. Each task includes its keyword, intent, gap type and details. These totals track work and do not establish acquisition attribution.",
           "step2": {
-            "description": "Captured leads have to line up with a time window and a source channel, otherwise you cannot tell GEO apart from any other campaign. The gap tasks are the core output of this page: they turn \"AI answered wrong or missed us\" into executable content work, and only when the task is done does \"completed backfills\" go up. A report that counts but does not close the loop will not get any better."
+            "description": "Read the gap details and mark the task complete after finishing the corresponding content work. This records human progress; it does not confirm external adoption, indexing or improved AI answers."
           }
         },
         "geoReports": {
@@ -2921,7 +2911,6 @@
     "merchantEditorFriendlyLegacy": "Friendly (legacy config compatible)"
   },
   "dashboardScreenPage": {
-    "componentAdded": "Component added"
   },
   "assetMarketPage": {
     "notFound": "Asset not found, or this deployment is not connected to the asset market"

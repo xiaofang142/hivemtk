@@ -28,6 +28,7 @@
           v-for="menu in permissionStore.navigationMenus"
           :key="menu.key"
           :index="menu.key"
+          :data-module="menu.key"
         >
           <el-icon><component :is="resolveRouteIcon(menu.icon)" /></el-icon>
           <span>{{ t('menu.' + menu.key) }}</span>
@@ -115,6 +116,12 @@
               </el-dropdown-item>
               <el-dropdown-item command="page-tour">
                 <el-icon><Guide /></el-icon>{{ t('layout.pageTour') }}
+              </el-dropdown-item>
+              <el-dropdown-item
+                v-if="activeTopMenu"
+                command="module-tour"
+              >
+                <el-icon><Guide /></el-icon>{{ t('navigationGuide.moduleTour') }}
               </el-dropdown-item>
               <el-dropdown-item
                 command="logout"
@@ -243,7 +250,7 @@ import { resolveRouteIcon } from '@/utils/iconMap'
 import { getMenuActionKey, getMenuLanding, getNavigationPath } from '@/utils/menuNavigation'
 void Bell; void Warning; void Menu; void SwitchButton; void Fold; void Expand; void Refresh; void Compass; void Guide
 
-const { startGlobalTour, startPageTour, getPageTourState, destroyPageTour, destroy: destroyTour, isTourActive, isPageSeen } = useOnboarding()
+const { startGlobalTour, startModuleTour, startPageTour, getPageTourState, destroyPageTour, destroyModuleTour, destroy: destroyTour, isTourActive, isPageSeen } = useOnboarding()
 
 const route = useRoute()
 const router = useRouter()
@@ -313,6 +320,8 @@ const currentTopMenu = computed(() => navigationTrail.value[0])
 const activeTopMenu = computed(() => currentTopMenu.value?.key || '')
 const activeSubMenu = computed(() => navigationTrail.value.at(-1)?.path || '')
 
+watch(activeTopMenu, () => destroyModuleTour())
+
 const breadcrumb = computed(() => {
   const onChildPage = activeSubMenu.value && activeSubMenu.value !== getNavigationPath(route)
   const crumbs = navigationTrail.value.map((node, index, trail) => ({
@@ -329,7 +338,8 @@ const breadcrumb = computed(() => {
 })
 
 watch([sidebarMenu, navigationTrail, sidebarCollapsed], async ([menu, trail, collapsed], _, onCleanup) => {
-  const groups = trail.slice(1, -1)
+  // 单子目录直接渲染为叶子，只有多个子项的分组会注册为 Element Plus 子菜单。
+  const groups = trail.slice(1, -1).filter(group => group.children?.length > 1)
   if (!menu || collapsed || groups.length === 0) return
   let stale = false
   onCleanup(() => { stale = true })
@@ -440,6 +450,11 @@ const handleUserCommand = (command) => {
       break
     case 'global-tour':
       startGlobalTour()
+      break
+    case 'module-tour':
+      if (!startModuleTour(activeTopMenu.value)) {
+        ElMessage.info(t('navigationGuide.moduleUnavailable'))
+      }
       break
     case 'page-tour':
       // 重看当前页的导览：force=true 忽略「这一页已看过」的标记。

@@ -5,6 +5,38 @@
       subtitle="ReAct 智能体、SOP、RAG、触达四大核心能力全景"
     />
 
+    <el-alert
+      :title="t('navigationContent.salesCockpit.metricsNote')"
+      type="info"
+      :closable="false"
+      show-icon
+      class="metrics-notice"
+    />
+    <p
+      v-if="cockpitLoading"
+      role="status"
+    >
+      {{ t('navigationContent.salesCockpit.loading') }}
+    </p>
+    <div
+      v-if="cockpitLoadError"
+      class="metrics-notice"
+    >
+      <el-alert
+        :title="t('navigationContent.salesCockpit.loadError')"
+        type="error"
+        :closable="false"
+        show-icon
+      />
+      <el-button
+        :loading="cockpitLoading"
+        class="retry-button"
+        @click="loadCockpit"
+      >
+        {{ t('navigationContent.salesCockpit.retry') }}
+      </el-button>
+    </div>
+
     
     <el-row :gutter="20">
       <el-col :span="6">
@@ -158,30 +190,22 @@
         </el-card>
       </el-col>
       <el-col :span="12">
-        <el-card header="LLM 路由（6 厂商 / 8 场景）">
+        <el-card :header="t('navigationContent.salesCockpit.routesTitle')">
           <el-table
             :data="cockpit.llmRoutes"
             stripe
           >
             <el-table-column
               prop="scenario"
-              label="场景"
+              :label="t('navigationContent.salesCockpit.scenario')"
             />
             <el-table-column
-              prop="primary"
-              label="首选"
+              prop="provider"
+              :label="t('navigationContent.salesCockpit.provider')"
             />
             <el-table-column
-              prop="fallback"
-              label="备选"
-            />
-            <el-table-column
-              prop="qps"
-              label="QPS"
-            />
-            <el-table-column
-              prop="errorRate"
-              label="错误率"
+              prop="callsToday"
+              :label="t('navigationContent.salesCockpit.callsToday')"
             />
           </el-table>
         </el-card>
@@ -194,34 +218,26 @@
       class="mt-20"
     >
       <el-col :span="12">
-        <el-card header="9 触达渠道健康度">
+        <el-card :header="t('navigationContent.salesCockpit.channelsTitle')">
           <el-table
             :data="cockpit.channelHealth"
             stripe
           >
             <el-table-column
               prop="channel"
-              label="渠道"
+              :label="t('navigationContent.salesCockpit.channel')"
             />
             <el-table-column
-              prop="qpsLimit"
-              label="QPS 限"
+              prop="accountCount"
+              :label="t('navigationContent.salesCockpit.accountCount')"
             />
-            <el-table-column
-              prop="qpsUsed"
-              label="已用"
-            />
-            <el-table-column label="状态">
+            <el-table-column :label="t('navigationContent.salesCockpit.status')">
               <template #default="{ row }">
-                <el-tag :type="row.qpsUsed / row.qpsLimit > 0.8 ? 'warning' : 'success'">
-                  {{ row.qpsUsed / row.qpsLimit > 0.8 ? '繁忙' : '正常' }}
+                <el-tag :type="getAccountStatusTagType(row.status) || 'info'">
+                  {{ accountStatusText(row.status) }}
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column
-              prop="errorRate"
-              label="错误率"
-            />
           </el-table>
         </el-card>
       </el-col>
@@ -261,18 +277,23 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
 import PageHeader from '@/components/PageHeader.vue'
 import { getSalesCockpit } from '@/api/cockpit'
 import LtcRatesApi from '@/api/ltcRates'
 import * as _echarts from 'echarts'
 import { safeInit } from '@/utils/echarts'
+import { getAccountStatusTagType } from '@/constants/accountType'
 
+const { t } = useI18n()
 const intentChart = ref(null)
+const cockpitLoading = ref(false)
+const cockpitLoadError = ref(false)
 const cockpit = ref({
-  react: { totalRuns: 0 },
-  sop: { executions: 0 },
-  rag: { queries: 0 },
-  reach: { sentToday: 0 },
+  react: { totalRuns: '—' },
+  sop: { executions: '—' },
+  rag: { queries: '—' },
+  reach: { sentToday: '—' },
   llmRoutes: [],
   channelHealth: [],
   topTools: [],
@@ -336,23 +357,18 @@ function adaptCockpit(src) {
   const rag = s.rag || {}
   const reach = s.reach || {}
 
-  // LLM 路由：后端 {scenario, provider, calls, avg_latency, total_cost}
-  //          → 前端 {scenario, primary, fallback, qps, errorRate}
+  // calls 是业务日累计次数；接口没有 QPS、限额或错误率，不能从计数推算。
   const llmRoutes = (s.llmRoutes || []).map(r => ({
     scenario: r.scenario || '—',
-    primary: r.provider || '—',
-    fallback: '—',
-    qps: Number(r.calls || 0).toLocaleString(),
-    errorRate: '0.0%'
+    provider: r.provider || '—',
+    callsToday: Number(r.calls || 0).toLocaleString()
   }))
 
-  // 渠道健康：后端 {platform, status, cnt}
-  //          → 前端 {channel, qpsLimit, qpsUsed, errorRate}
+  // cnt 是同一 platform/status 下的账号数量，保留真实状态，不解释为吞吐负载。
   const channelHealth = (s.channelHealth || []).map(r => ({
     channel: r.platform || '—',
-    qpsLimit: 100,
-    qpsUsed: Number(r.cnt || 0),
-    errorRate: '0.0%'
+    accountCount: Number(r.cnt || 0).toLocaleString(),
+    status: r.status
   }))
 
   // 意图分布 → echarts pie [{name, value}]
@@ -382,17 +398,37 @@ function adaptCockpit(src) {
   }
 }
 
+function accountStatusText(status) {
+  const labels = {
+    1: 'normal', 2: 'abnormal', 3: 'notLoggedIn',
+    active: 'normal', normal: 'normal', online: 'online', offline: 'offline',
+    banned: 'banned', warning: 'warning', critical: 'critical'
+  }
+  const label = Object.hasOwn(labels, status) ? labels[status] : null
+  if (label) return t('navigationContent.salesCockpit.' + label)
+  const unknown = t('navigationContent.salesCockpit.unknownStatus')
+  return status === undefined || status === null || status === '' ? unknown : `${unknown} (${status})`
+}
+
 let chartInstance = null
 let timer = null
+let disposed = false
 
 async function loadCockpit() {
+  if (disposed || cockpitLoading.value) return
+  cockpitLoading.value = true
+  cockpitLoadError.value = false
   try {
     const res = await getSalesCockpit()
+    if (disposed) return
     cockpit.value = adaptCockpit(res.data || res)
     await nextTick()
-    renderIntentChart()
+    if (!disposed) renderIntentChart()
   } catch (err) {
     console.error('load cockpit failed:', err)
+    if (!disposed) cockpitLoadError.value = true
+  } finally {
+    if (!disposed) cockpitLoading.value = false
   }
 }
 
@@ -421,6 +457,7 @@ onMounted(() => {
   timer = setInterval(() => { loadCockpit(); loadLtcRates() }, 60000)
 })
 onUnmounted(() => {
+  disposed = true
   if (timer) clearInterval(timer)
   if (chartInstance) {
     chartInstance.dispose()
@@ -431,6 +468,8 @@ onUnmounted(() => {
 
 <style scoped>
 .sales-cockpit { padding: 20px; }
+.metrics-notice { margin-bottom: 20px; }
+.retry-button { margin-top: 12px; }
 .capability-card { text-align: center; padding: 24px 0; }
 .capability-icon { font-size: 48px; margin-bottom: 12px; }
 .capability-name { font-size: 16px; font-weight: 500; color: #303133; }

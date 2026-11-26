@@ -305,71 +305,118 @@ func (s *GeoDecisionAnalyticsService) selfBrandSOV(ctx context.Context) float64 
 	return 0
 }
 
-// RecordCrawlerVisit 记录 AI 引擎爬虫访问（关键词维度）
+// RecordCrawlerVisit 调用方未提供来源证据，保留 unknown，不能凭关键词或 UA 认作真实流量。
 func (s *GeoDecisionAnalyticsService) RecordCrawlerVisit(ctx context.Context, keyword, userAgent, path, engine string) error {
 	return s.crawler.Create(ctx, &model.GeoCrawlerVisit{
-		Keyword: keyword, UserAgent: userAgent, Path: path, Engine: engine,
+		Keyword: keyword, UserAgent: userAgent, Path: path, Engine: engine, Source: model.CrawlerSourceUnknown,
 	})
 }
 
 // CrawlerStatsResponse 爬虫统计前端友好返回
 type CrawlerStatsResponse struct {
+	DataSource     CrawlerDataSource           `json:"data_source"`
 	Summary        CrawlerStatsSummary         `json:"summary"`
 	KeywordStats   []repository.KeywordStatRow `json:"keyword_stats"`
 	DomainStats    []repository.DomainStatRow  `json:"domain_stats"`
 	KeywordCompare []KeywordCompareRow         `json:"keyword_compare"`
 	DomainCompare  []DomainCompareRow          `json:"domain_compare"`
-	CoverageScore  float64                     `json:"coverage_score"`
+	CoverageScore  float64                     `json:"self_site_probe_share_pct"`
+}
+
+// CrawlerDataSource 报表证据边界。UA 条目可多对一归组，组数不是 UA 数。
+type CrawlerDataSource struct {
+	Kind                   string `json:"kind"`
+	SuccessCriteria        string `json:"success_criteria"`
+	ExternalCrawlVerified  bool   `json:"external_crawl_verified"`
+	IndexingVerified       bool   `json:"indexing_verified"`
+	UnattributedRecords    string `json:"unattributed_records"`
+	WindowDays             int    `json:"window_days"`
+	ConfiguredUACount      int    `json:"configured_ua_count"`
+	ConfiguredEngineGroups int    `json:"configured_engine_groups"`
+}
+
+func crawlerDataSource(ctx context.Context) CrawlerDataSource {
+	uas := activeCrawlerUAs(ctx)
+	groups := make(map[string]bool)
+	for _, ua := range uas {
+		groups[extractEngineFromUA(ua)] = true
+	}
+	return CrawlerDataSource{
+		Kind: model.CrawlerSourceActiveUAProbe, SuccessCriteria: "http_2xx_3xx",
+		UnattributedRecords: "excluded", WindowDays: 30,
+		ConfiguredUACount: len(uas), ConfiguredEngineGroups: len(groups),
+	}
 }
 
 type CrawlerStatsSummary struct {
-	TodayVisits      int64   `json:"today_visits"`
+	TodayVisits      int64   `json:"last_24h_probes"`
 	ActiveKeywords   int64   `json:"active_keywords"`
 	ActiveEngines    int64   `json:"active_engines"`
 	ActiveDomains    int64   `json:"active_domains"`
 	ALevelCount      int64   `json:"a_level_count"`
 	AvgSOV           float64 `json:"avg_sov"`
-	HiveMTKVisits    int64   `json:"hivemtk_visits"`
-	CompetitorVisits int64   `json:"competitor_visits"`
+	HiveMTKVisits    int64   `json:"self_site_probes"`
+	CompetitorVisits int64   `json:"competitor_probes"`
 }
 
-// KeywordCompareRow 关键词维度 HiveMTK vs 竞品 对比
+// KeywordCompareRow 关键词标签的主动探测聚合，不区分本站和竞品。
 type KeywordCompareRow struct {
-	Keyword          string           `json:"keyword"`
-	HiveMTKVisits    int64            `json:"hivemtk_visits"`
-	CompetitorVisits map[string]int64 `json:"competitor_visits"`
-	HiveMTKEngines   int              `json:"hivemtk_engines"`
-	TotalEngines     int              `json:"total_engines"`
+	Keyword        string `json:"keyword"`
+	HiveMTKVisits  int64  `json:"probe_count"`
+	HiveMTKEngines int    `json:"probed_engine_groups"`
+	TotalEngines   int    `json:"configured_engine_groups"`
 }
 
 // DomainCompareRow 域名维度 自家站 vs 竞品 排名
 //
-// IsHiveMTK 取自仓储按"官网基址 + 路径边界"算出的 IsSelfSite，
-// 不再等于"host 撞上某个写死域名"；JSON 键名保留 is_hivemtk 以兼容前端。
+// IsSelfSite 来自当前租户官网基址与路径边界；is_hivemtk 仅为旧字段别名。
 type DomainCompareRow struct {
 	Domain      string  `json:"domain"`
+	IsSelfSite  bool    `json:"is_self_site"`
 	IsHiveMTK   bool    `json:"is_hivemtk"`
-	Visits      int64   `json:"visits"`
+	Visits      int64   `json:"probe_count"`
 	Engines     int     `json:"engines"`
-	SharePct    float64 `json:"share_pct"`
+	SharePct    float64 `json:"probe_share_pct"`
 	SourceLevel string  `json:"source_level"`
 }
 
 // GetCrawlerStats 返回关键词 + 域名 + 对比 三维度
 func (s *GeoDecisionAnalyticsService) GetCrawlerStats(ctx context.Context) (*CrawlerStatsResponse, error) {
+	var err error
+	ctx, err = crawlerTenantContext(ctx)
+	if err != nil {
+		return nil, err
+	}
 	// 信源站点等级 DB 优先（geo_dicts/source_levels.map），缺行自动播种；
 	// 失败时不注入，repository 回退内置表（fail-open）。
 	var levelMap map[string]string
 	if err := DictJSON(ctx, model.DictCategorySourceLevels, "map", `{"weibanzhushou.com":"B","tanmascrm.com":"C","fengchenscrm.com":"C","hubspot.com":"A","producthunt.com":"A","techcrunch.com":"A","intercom.com":"A","baidu.com":"A","google.com":"A","bing.com":"A"}`, &levelMap); err == nil && len(levelMap) > 0 {
 		repository.SetDomainSourceLevel(levelMap)
 	}
-	keywordRows, _ := s.crawler.StatsByKeyword(ctx, 30)
-	domainRows, _ := s.crawler.StatsByDomain(ctx, 30)
-
-	totalVisits, _ := s.crawler.TotalVisits(ctx, 1)
-	activeKws, _ := s.crawler.ActiveKeywords(ctx, 30)
-	activeEngines, _ := s.crawler.ActiveEngines(ctx, 30)
-	activeDomains, _ := s.crawler.ActiveDomains(ctx, 30)
+	keywordRows, err := s.crawler.StatsByKeyword(ctx, 30)
+	if err != nil {
+		return nil, fmt.Errorf("读取关键词探测统计: %w", err)
+	}
+	domainRows, err := s.crawler.StatsByDomain(ctx, 30)
+	if err != nil {
+		return nil, fmt.Errorf("读取站点探测统计: %w", err)
+	}
+	totalVisits, err := s.crawler.TotalVisits(ctx, 1)
+	if err != nil {
+		return nil, fmt.Errorf("读取近期探测数: %w", err)
+	}
+	activeKws, err := s.crawler.ActiveKeywords(ctx, 30)
+	if err != nil {
+		return nil, fmt.Errorf("读取探测关键词数: %w", err)
+	}
+	activeEngines, err := s.crawler.ActiveEngines(ctx, 30)
+	if err != nil {
+		return nil, fmt.Errorf("读取探测分组数: %w", err)
+	}
+	activeDomains, err := s.crawler.ActiveDomains(ctx, 30)
+	if err != nil {
+		return nil, fmt.Errorf("读取探测站点数: %w", err)
+	}
 
 	var aLevelCount int64
 	for _, r := range domainRows {
@@ -378,11 +425,13 @@ func (s *GeoDecisionAnalyticsService) GetCrawlerStats(ctx context.Context) (*Cra
 		}
 	}
 
-	kwCompare := computeKeywordCompare(keywordRows)
+	source := crawlerDataSource(ctx)
+	kwCompare := computeKeywordCompare(keywordRows, source.ConfiguredEngineGroups)
 	domainCompare, hivemtkVisits, compVisits, coverage := computeDomainCompare(domainRows)
 	avgSOV := s.selfBrandSOV(ctx)
 
 	return &CrawlerStatsResponse{
+		DataSource: source,
 		Summary: CrawlerStatsSummary{
 			TodayVisits:      totalVisits,
 			ActiveKeywords:   activeKws,
@@ -401,7 +450,7 @@ func (s *GeoDecisionAnalyticsService) GetCrawlerStats(ctx context.Context) (*Cra
 	}, nil
 }
 
-func computeKeywordCompare(keywordRows []repository.KeywordStatRow) []KeywordCompareRow {
+func computeKeywordCompare(keywordRows []repository.KeywordStatRow, configuredGroups int) []KeywordCompareRow {
 
 	type key struct{ kw, engine string }
 	perEngine := map[key]int64{}
@@ -424,11 +473,10 @@ func computeKeywordCompare(keywordRows []repository.KeywordStatRow) []KeywordCom
 			}
 		}
 		out = append(out, KeywordCompareRow{
-			Keyword:          kw,
-			HiveMTKVisits:    total,
-			HiveMTKEngines:   len(engines),
-			TotalEngines:     8,
-			CompetitorVisits: map[string]int64{},
+			Keyword:        kw,
+			HiveMTKVisits:  total,
+			HiveMTKEngines: len(engines),
+			TotalEngines:   configuredGroups,
 		})
 	}
 	return out
@@ -463,7 +511,7 @@ func computeDomainCompare(domainRows []repository.DomainStatRow) ([]DomainCompar
 	for domain, d := range bucket {
 		isHive := d.self
 		if isHive {
-			hivemtkVisits = d.visits
+			hivemtkVisits += d.visits
 		} else {
 			compVisits += d.visits
 		}
@@ -473,6 +521,7 @@ func computeDomainCompare(domainRows []repository.DomainStatRow) ([]DomainCompar
 		}
 		out = append(out, DomainCompareRow{
 			Domain:      domain,
+			IsSelfSite:  isHive,
 			IsHiveMTK:   isHive,
 			Visits:      d.visits,
 			Engines:     len(d.engines),

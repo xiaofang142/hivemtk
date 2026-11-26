@@ -364,6 +364,11 @@ jobs:
         # 那里 syft 已装、产物已在。
         run: python3 scripts/check-sbom-artifacts.py --self-check && python3 scripts/check-sbom-artifacts.py --workflow
 
+      - name: Set up Node for shared i18n resources
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '22'
+
       - name: i18n 真接入占比只许涨不许跌（阻断）
         # 2026-10-11（阶段五 G6）：三条棘轮（真 i18n 键占比 / 中文字面量直传数 /
         # 词条库孤儿数）+ 各语言包齐整。注意本门必须认 $t() 形态——实测 918 个去重键里

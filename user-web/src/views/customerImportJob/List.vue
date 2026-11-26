@@ -5,7 +5,7 @@
         <h2 class="page-title">
           客户导入任务
         </h2>
-        <span class="page-sub">上传 CSV → 预检 → 确认执行 → 查看错误报告（PR-6）</span>
+        <span class="page-sub">{{ t('businessCopy.customerImport.subtitle') }}</span>
       </div>
       <div class="head-actions">
         <el-button
@@ -516,6 +516,9 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { customerImportJobApi } from '@/api/customerImportJob'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const loading = ref(false)
 const prechecking = ref(false)

@@ -5,7 +5,7 @@
         <h2 class="page-title">
           客户统一主数据
         </h2>
-        <span class="page-sub">列表按账号 / 行业 / 负责人数据权限自动过滤（US1）</span>
+        <span class="page-sub">列表按账号 / 行业 / 负责人数据权限自动过滤</span>
       </div>
       <el-button
         type="primary"
@@ -15,6 +15,10 @@
       </el-button>
     </div>
 
+    <WorkflowNavigation
+      owner="/crm/list"
+      :links="workflowLinks"
+    />
     <el-card shadow="never">
       <el-form
         inline
@@ -210,6 +214,16 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { crmApi } from '@/api/crm'
+import WorkflowNavigation from '@/components/WorkflowNavigation.vue'
+
+const workflowLinks = [
+  { key: 'dedupe', path: '/crm/dedupe' },
+  { key: 'importExport', path: '/crm/import-export' },
+  { key: 'contacts', path: '/crm/contacts' },
+  { key: 'suppliers', path: '/crm/suppliers' },
+  { key: 'serviceProviders', path: '/crm/service-providers' },
+  { key: 'companies', path: '/crm/companies' }
+]
 
 const emit = defineEmits(['view-360'])
 const router = useRouter()
