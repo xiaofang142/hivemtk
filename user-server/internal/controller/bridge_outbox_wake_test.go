@@ -92,7 +92,9 @@ func TestBridgeOutboxWakeController_RealBridgeAuthentication(t *testing.T) {
 		{name: "错误凭证不得开流", token: "invalid-identify-code", tenantID: 18, account: accountID, status: http.StatusUnauthorized},
 		{name: "有效凭证且租户账号一致", token: wakeIdentifyCode, tenantID: 18, account: accountID, status: http.StatusOK},
 		{name: "凭证租户不符不得开流", token: wakeIdentifyCode, tenantID: 19, account: accountID, status: http.StatusBadRequest},
-		{name: "凭证账号不符不得开流", token: wakeIdentifyCode, tenantID: 18, account: "other-account", status: http.StatusBadRequest},
+		// 内部行 ID 与识别码解析结果冲突必须拒绝；第三方平台的不透明会话 ID
+		// 只是客户端提示，不会覆盖识别码解析出的内部账号（另见 bridge 包测试）。
+		{name: "凭证账号不符不得开流", token: wakeIdentifyCode, tenantID: 18, account: "999999", status: http.StatusBadRequest},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			requestCtx, cancel := context.WithCancel(edition.WithContext(tenant.OnlyTenant(context.Background(), tc.tenantID), edition.TypeCustom))

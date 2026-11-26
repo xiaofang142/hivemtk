@@ -151,6 +151,25 @@ func TestBindBridgeTenant_AccountMismatchRejected(t *testing.T) {
 	}
 }
 
+func TestBindBridgeTenant_ExternalAccountHintDoesNotOverrideIdentifyCode(t *testing.T) {
+	db := testutil.NewTestDBOrSkip(t, &model.Channel{}, &model.ChannelAccount{}, &model.ChannelIdentifyCode{})
+	modeOn(t)
+	fixture := seedCanonicalBridgeFixture(t, db, 11, "douyin", "owned")
+	// 桥接扩展上报的是第三方平台账号 ID，不是 channel_accounts 行 ID。
+	c := bindingCtxWithIdentifyCode(t, "channel=douyin&account_id=69c62722000000003203b0fe", fixture.Code)
+	ctx, err := bindBridgeTenant(c, "douyin", "69c62722000000003203b0fe")
+	if err != nil {
+		t.Fatalf("第三方账号标识不应触发租户歧义: %v", err)
+	}
+	identity, ok := BridgeIdentityFromContext(c)
+	if !ok || identity.TenantID != 11 || identity.AccountID != fixture.AccountID {
+		t.Fatalf("内部账号必须仍取识别码解析结果: identity=%+v ok=%v", identity, ok)
+	}
+	if tid, bound := tenant.FromContext(ctx); !bound || tid != 11 {
+		t.Fatalf("必须绑定识别码租户: tid=%d bound=%v", tid, bound)
+	}
+}
+
 func TestBindBridgeTenant_ChannelHintDoesNotOverrideIdentifyCode(t *testing.T) {
 	db := testutil.NewTestDBOrSkip(t, &model.Channel{}, &model.ChannelAccount{}, &model.ChannelIdentifyCode{})
 	modeOn(t)

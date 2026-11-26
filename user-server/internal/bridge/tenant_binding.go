@@ -190,11 +190,17 @@ func resolveBridgeIdentity(rctx context.Context, channel, accountID, _codeHint, 
 			}
 		}
 	}
-	if accountID != "" && resolvedAccountID != "" && accountID != resolvedAccountID {
-		return rctx, false, nil, ErrBridgeTenantAmbiguous
-	}
 	if accountID != "" {
-		resolvedAccountID = accountID
+		// 桥接扩展上报的 account_id 是第三方平台账号/会话标识（如小红书用户 ID），
+		// 不是本系统 channel_accounts 行 ID。identify_code 已解析出内部账号时，
+		// 外部标识只作为客户端提示，不能覆盖内部账号，也不能因格式不同判歧义。
+		// 仅当调用方显式传了本系统行 ID（纯数字）且与识别码结果冲突时才拒绝。
+		if _, numeric := strconv.ParseUint(accountID, 10, 64); numeric == nil && resolvedAccountID != "" && accountID != resolvedAccountID {
+			return rctx, false, nil, ErrBridgeTenantAmbiguous
+		}
+		if resolvedAccountID == "" {
+			resolvedAccountID = accountID
+		}
 	}
 	id := &BridgeResolvedIdentity{TenantID: resolved.TenantID, Channel: resolvedChannel, AccountID: resolvedAccountID, IdentifyCode: resolved.IdentifyCode}
 	if !tenant.IsMultiTenant() {
