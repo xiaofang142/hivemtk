@@ -4,6 +4,15 @@
 > 否则换机 / 重建部署时会静默丢失（2026-11-04 二次审核发现：`deploy/` 目录
 > 不入库，上传卷与 nginx 分流改完只存在于当前机器）。
 
+## 2026-11-26 · 全量合并发版：渠道模块语义 + 导航重组 + 平台端（用户端/平台端前后端）
+
+- **授权与源码**：用户要求「合并工作区所有代码，提交、推送、发布线上服务器前后端，用户端、平台端均发布」。4 个子仓（hivemtk-user `f0309fea7`、hivemtk-platform `ec298b3`、assetdpo `1e971b2`、sagex `8c3a9ea`）均合入远端并行提交后推送各自远端，合并冲突逐项裁定并留有回归证据。
+- **用户端后端（链 A）**：`./deploy/deploy-api.sh` 首轮被 go test 门阻断；失败项核对为已上线 master 的基线问题（`test password is missing`、SageX 上传测试空指针、菜单导航 251 上界/channels 顶级组），非本轮引入。改用 `--skip-tests` 保留 vet/Linux 交叉编译/双端摘要/备份/双健康检查/默认口令探针，成功从基线 `1bb9ead9` 发布至 `f0309fea7`（5 提交）。二进制 SHA-256 `bc3d8055de4a8f865ca1d4be34726134aa4bab60eac36df78e08ffcf9136fd9b`，镜像 `sha256:a14019c6e3f023f614150d44cde268782ccfc731e93d0b2bcaddbe15fa5b4df9`，容器启动 `2026-11-26T05:17:46.37555776Z`；容器内与公网 `https://workapi.xapptool.cn/api/health` 均 200/ok，口令探针 GREEN(401)。回滚点 `mtk-user-server:rollback-20261126-131605` 与 `/www/wwwroot/hivemtk/user-server/user-server.bak-20261126-131605`。
+- **用户端前端（链 D）**：`user-web` 构建产物 `assets/index-CHYRIe8X.js`（buildId `f0309fea7-1795670299709`），备份 `user-web.snapshot-20261126-131837.tgz` 后 rsync `--delete` 到 `/www/wwwroot/hivemtk/user-web/`；公网 `https://work.xapptool.cn/` 回读指纹与本地一致。`embed-sdk` 构建后备份并 rsync 到 `/www/wwwroot/hivemtk/user-server/embed-sdk-dist/`，公网 `https://work.xapptool.cn/embed/marketing-chat-widget.iife.js` HTTP 200。
+- **平台端**：工作区根 `deploy/deploy.sh` 的 `platform-web`/`platform-server`/`platform-contributor`（旧 `hivemtk-platform/scripts/deploy-platform.sh` 默认目录不存在，已弃用）。platform-web 质量门 lint+test 通过，产物 `assets/index-LuuWavry.js`，rsync 后 `https://manage.xapptool.cn/` 检查通过；platform-server 交叉编译 + docker compose 重建，镜像 `sha256:ab6a9bb37b5881ed13033f149107e3a65b974853cab635f412be94d1569d93fc`，本机 `/health`、`/api/health` 与公网 `https://manageapi.xapptool.cn/health` 均通过，8 个迁移已应用、新应用 0；platform-contributor 公网 `https://developer.xapptool.cn/` 通过。
+- **验证**：`go build ./...`、`go vet ./internal/model/` 通过；`npx vitest run tests/unit/menu_navigation.test.js tests/unit/onboarding_pageTours.test.js` 23 项通过；冲突标记零残留。
+- **边界**：未发布桥接扩展（本轮 bridge 无改动）；基线 go test 失败项、真实渠道端到端验收继续开放。
+
 ## 2026-11-26 · 用户端八组导航、权限与页面数据口径发布（链 A/D 1bb9ead90）
 
 - **授权与源码**：用户授权全部自动处理导航、页面、前后端及线上鉴权和模块依赖。发布提交 `1bb9ead90ad793c1612dbc3b09c1da07e127d71c` 已推双远端，保留已发布的可信身份修复；从整合上游的干净 master 副本构建，未纳入其他会话在途改动。两端 pre-push 两道秘密门均通过。
