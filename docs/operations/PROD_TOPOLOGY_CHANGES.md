@@ -4,6 +4,14 @@
 > 否则换机 / 重建部署时会静默丢失（2026-11-04 二次审核发现：`deploy/` 目录
 > 不入库，上传卷与 nginx 分流改完只存在于当前机器）。
 
+## 2026-11-26 · T05 线索通知配置员工语义收口正式发布
+
+- **范围/裁决**：线索通知配置属于系统配置——命中线索后通过 `notify_user_ids` 通知本系统员工（系统用户 id）；`channel_account_id`/`channel` 仅为三级路由作用域键，`target` 为 TG/飞书机器人或群聊投递目标（accountID:chatID）。配置内无智能体字段，用户所称「智能体」为误称；客服智能体（`channel_accounts.auto_reply_agent_id`）/线索智能体（`lead_mining_agent_id` + `/api/manage/lead-mining-agents` 注册表）在另一套表/API/页面维护，与本配置无关，禁止绑定化。不拆字段、不迁移、不新增 `agent_id`；菜单归属、key/path（T02/T04 验收态）全部保留，唯一可写页仍 `/leads/notify-routes`。
+- **源码**：用户端 `hivemtk-user@190556761`（13 files，+312/-18，短 SHA `190556761` / 全 `19055676165bd83df388faa5e0158bbdc196c517`）已推 `gitee-upstream/master` + `upstream/master`。后端模型补语义注释 + 写入前契约校验（收件人须正整数系统用户 ID、`notify_types` 白名单，违者 `utils.ErrInvalidInput`→400）+ 新增契约测试 2 组 6 子用例；前端「通知人ID」自由文本改系统用户员工多选下拉（`/api/system/users`，值=员工 ID 字符串，历史值原样回显），文案明确非智能体，9 语种同步 `leadNotifyConfig` 词条。
+- **API 链 A**：`./deploy/deploy-api.sh --skip-tests`（存量债 `TestFullMigrationChainUpThenRollback` / v3.116.0 xhs_web enum 在 T01 前基线即失败，非本任务范围）退出码 0；`deployed_at=2026-11-26T23:40:37+08:00`；镜像 `sha256:ea37c07b6b28263687ee92647561b05e7f238a20e3854ac34d19d20d07f28461`；二进制 SHA-256 `7fc046a994adfc5e998eed4e327383481d17b1558b266c53cd98239cc2e3aa61`；容器启动 `2026-11-26T15:40:27.009120698Z`；回滚点 `mtk-user-server:rollback-20261126-233949`，二进制备份 `user-server.bak-20261126-233949`；容器内 + 公网 `/health` 200/ok，默认口令探针 ok。
+- **SPA 链 D**：buildId `190556761-1795707647831`，主资源 `assets/index-C42Ggjql.js`；备份 `user-web.snapshot-20261126-234053.tgz`；本地 dist 与公网入口 hash 一致。首屏缓存命中旧 `index-C35CJ0JQ.js`，禁缓存刷新后确认加载 `index-C42Ggjql.js`。
+- **线上验证**：`GET` 路由/系统用户/线索智能体注册表均 200（`t18_default` 收件人 `["18"]`=员工 admin；线索智能体 id=54 独立注册表）；`POST` 携 `notify_user_ids:["agent_54"]` → 400 `INVALID_PARAM_1001`（证明智能体 ID 被拒）。UI 逐元素操作：新副标题、`接收员工` / `投递目标（TG/飞书）` 表头；员工下拉仅 `四川同咨科技有限公司（#18）` 无智能体项；选中后取消，未写库，列表仍 1 行。ego space `hivemtk-online`(90) 以 `keep:[]` 收尾。
+
 ## 2026-11-26 · T02 线索智能体族菜单去重与统一布局正式发布
 
 - **范围/裁决**：仅做菜单分组、去重与事实源统一，不实现 T05 的「线索通知配置 vs 系统通知员工」语义分离。三必答结论：①「线索发现智能体」= AI 智能体注册表/CRUD（FR-026，`/api/manage/lead-mining-agents`，线上页 `线索智能体 / 线索配置 / 线索发现智能体`，含「新增智能体」，页注「独立管理线索发现智能体，与自动回复智能体剥离（FR-026）」）；「线索挖掘」= 发掘工作台（`线索智能体 / 线索挖掘`，5 个 tab，`/lead-mining/index`）；「线索列表」= clues 表管理页（`/clue/list`）。②能力不同，不做页面硬合并；合并的是菜单分组、统一命名与重复可写入口——工作台「通知路由」tab 与独立页曾对同一张 `lead_mining_notify_routes` 各有一套 CRUD（同显 `t18_default`），现改为 tab 仅入口跳转，唯一可写页 `/leads/notify-routes`。③族下改为「线索挖掘」直达 + 两个子目录：「线索配置」（线索发现智能体 / 线索治理 / 线索通知路由）、「判定与线索」（判定与证据 / 线索列表 / 线索统计 / 线索归档 / 权限内客户与消息）；所有原 key / Path / Roles 保留，旧路由不 404。
