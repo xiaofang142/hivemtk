@@ -22,7 +22,7 @@
         </div>
         <div class="profile-row">
           <span class="label">渠道</span>
-          <span class="value">{{ getChannelLabel(currentSession.channel) }}</span>
+          <span class="value">{{ catalog.channelLabel(currentSession.channel) }}</span>
         </div>
         <div class="profile-row">
           <span class="label">首次接入</span>
@@ -167,8 +167,12 @@
 <script setup>
 // 客户 360° 侧栏(由 List.vue 原样迁出,纯展示组件,操作通过事件上抛)
 import { UserFilled, Ticket, Goods, CircleClose, SwitchButton, MagicStick, Download, Clock, Top } from '@element-plus/icons-vue'
-import { getChannelLabel } from '@/constants/channel'
+import { onMounted } from 'vue'
+import { useChannelCatalogStore } from '@/stores/channelCatalog'
 import { formatTime } from '../composables/useSessionFilters'
+
+const catalog = useChannelCatalogStore()
+onMounted(() => { catalog.ensure() })
 
 defineProps({
   currentSession: { type: Object, required: true },

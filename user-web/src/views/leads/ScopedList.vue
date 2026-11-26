@@ -96,11 +96,10 @@
             @submit.prevent
           >
             <el-form-item label="平台">
-              <el-input
+              <ChannelSelect
                 v-model="messageFilters.platform"
                 placeholder="渠道平台"
                 clearable
-                style="width: 160px"
               />
             </el-form-item>
             <el-form-item label="线索角色">
@@ -152,10 +151,13 @@
               show-overflow-tooltip
             />
             <el-table-column
-              prop="platform"
               label="平台"
-              min-width="100"
-            />
+              min-width="120"
+            >
+              <template #default="{ row }">
+                {{ catalog.channelLabel(row.platform) }}
+              </template>
+            </el-table-column>
             <el-table-column
               prop="lead_role"
               label="角色"
@@ -214,8 +216,11 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { leadsApi } from '@/api/leads'
 import { useI18n } from 'vue-i18n'
+import ChannelSelect from '@/components/ChannelSelect.vue'
+import { useChannelCatalogStore } from '@/stores/channelCatalog'
 
 const { t } = useI18n()
+const catalog = useChannelCatalogStore()
 
 const activeTab = ref('customers')
 const loading = ref(false)
@@ -275,7 +280,10 @@ function reload() {
   }
 }
 
-onMounted(fetchCustomers)
+onMounted(async () => {
+  await catalog.ensure()
+  await fetchCustomers()
+})
 </script>
 
 <style scoped>

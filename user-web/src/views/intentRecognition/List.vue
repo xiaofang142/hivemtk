@@ -90,37 +90,11 @@
           </el-col>
           <el-col :span="12">
             <el-form-item label="平台">
-              <el-select
+              <ChannelSelect
                 v-model="testForm.platform"
-                placeholder="可选，消息来源平台"
-                clearable
+                placeholder="可选，消息来源渠道"
                 style="width: 100%"
-              >
-                <el-option
-                  label="微信"
-                  value="wechat"
-                />
-                <el-option
-                  label="抖音"
-                  value="douyin"
-                />
-                <el-option
-                  label="小红书"
-                  value="xiaohongshu"
-                />
-                <el-option
-                  label="快手"
-                  value="kuaishou"
-                />
-                <el-option
-                  label="WhatsApp"
-                  value="whatsapp"
-                />
-                <el-option
-                  label="Telegram"
-                  value="telegram"
-                />
-              </el-select>
+              />
             </el-form-item>
           </el-col>
         </el-row>
@@ -507,7 +481,7 @@
                   size="small"
                   effect="plain"
                 >
-                  {{ getChannelLabel(row.platform) }}
+                  {{ catalog.channelLabel(row.platform) }}
                 </el-tag>
                 <span v-else>-</span>
               </template>
@@ -1029,7 +1003,10 @@ import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Aim, MagicStick, Refresh, Loading, EditPen } from '@element-plus/icons-vue'
 import { intentApi } from '@/api/intentRecognition.js'
-import { getChannelLabel } from '@/constants/channel'
+import ChannelSelect from '@/components/ChannelSelect.vue'
+import { useChannelCatalogStore } from '@/stores/channelCatalog'
+
+const catalog = useChannelCatalogStore()
 // disabled = 意图识别功能开关关闭时后端返回的 method（原样展示会变成「方法: disabled」）
 const RECOGNIZE_METHOD = { llm: 'LLM', rule: '规则', keyword: '关键词', bert: 'BERT', hybrid: '混合', disabled: '未启用' };
 const RECOGNIZE_METHOD_TAG = { llm: 'danger', rule: 'info', keyword: 'success', bert: 'warning', hybrid: 'primary', disabled: 'warning' }
@@ -1496,6 +1473,7 @@ const loadFineLogs = async () => {
 }
 
 onMounted(() => {
+  catalog.ensure()
   loadIntentConfig()
   refreshAll()
   loadFineLogs()

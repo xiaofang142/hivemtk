@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import ElementPlus from 'element-plus'
+import { createPinia } from 'pinia'
 import { settle } from './settle-helper'
 import zh from '../../src/i18n/locales/zh.json'
 
@@ -20,7 +21,7 @@ describe('链路明细真实渲染', () => {
       { id: 2, node: 'ai_result', status: 'skipped', duration_ms: 0, duration_measured: true, timing_version: 1, started_at: '2026-11-16T07:00:01Z' }
     ] })
     const i18n = createI18n({ legacy: false, locale: 'zh', messages: { zh } })
-    wrapper = mount(TraceMonitor, { global: { plugins: [ElementPlus, i18n] } })
+    wrapper = mount(TraceMonitor, { global: { plugins: [createPinia(), ElementPlus, i18n] } })
     await wrapper.find('input[placeholder="turn_id"]').setValue('turn-one')
     await wrapper.find('input[placeholder="account_id"]').setValue('account')
     const query = wrapper.findAll('button').find(button => button.text() === '查询')

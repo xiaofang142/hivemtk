@@ -91,19 +91,11 @@
           </el-select>
         </el-form-item>
         <el-form-item label="渠道范围">
-          <el-select
+          <ChannelSelect
             v-model="recordForm.channel_scope"
-            clearable
             placeholder="全渠道"
             style="width: 150px"
-          >
-            <el-option
-              v-for="c in CHANNEL_OPTIONS"
-              :key="c.value"
-              :label="c.label"
-              :value="c.value"
-            />
-          </el-select>
+          />
         </el-form-item>
         <el-form-item label="声明版本">
           <el-input
@@ -180,7 +172,7 @@
           width="110"
         >
           <template #default="{ row }">
-            {{ row.channel_scope ? channelLabel(row.channel_scope) : '全渠道' }}
+            {{ row.channel_scope ? catalog.channelLabel(row.channel_scope) : '全渠道' }}
           </template>
         </el-table-column>
         <el-table-column
@@ -278,7 +270,7 @@
           width="130"
         >
           <template #default="{ row }">
-            {{ row.channel ? channelLabel(row.channel) : '全渠道' }}
+            {{ row.channel ? catalog.channelLabel(row.channel) : '全渠道' }}
           </template>
         </el-table-column>
         <el-table-column
@@ -370,19 +362,11 @@
           </el-select>
         </el-form-item>
         <el-form-item label="渠道">
-          <el-select
+          <ChannelSelect
             v-model="prefForm.channel"
-            clearable
             placeholder="全渠道（默认）"
             style="width: 100%"
-          >
-            <el-option
-              v-for="c in CHANNEL_OPTIONS"
-              :key="c.value"
-              :label="c.label"
-              :value="c.value"
-            />
-          </el-select>
+          />
         </el-form-item>
         <el-form-item label="暂停触达">
           <el-switch
@@ -435,7 +419,8 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { contactConsentApi } from '@/api/contactConsent'
-import { CHANNEL_OPTIONS, getChannelLabel } from '@/constants/channel'
+import ChannelSelect from '@/components/ChannelSelect.vue'
+import { useChannelCatalogStore } from '@/stores/channelCatalog'
 
 const PURPOSE_OPTIONS = [
   { value: 'marketing', label: '主动营销' },
@@ -453,7 +438,7 @@ const SOURCE_OPTIONS = [
 const RFC3339_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/
 
 const route = useRoute()
-const channelLabel = getChannelLabel
+const catalog = useChannelCatalogStore()
 
 const customerId = ref(String(route.query.customer_id || route.query.one_id || ''))
 const timeline = ref([])
@@ -636,6 +621,7 @@ const formatTime = (value) => {
 }
 
 onMounted(() => {
+  catalog.ensure()
   if (customerId.value.trim()) loadAll()
 })
 </script>

@@ -81,7 +81,7 @@
           width="120"
         >
           <template #default="{ row }">
-            {{ getChannelLabel(row.channel) }}
+            {{ catalog.channelLabel(row.channel) || '通用' }}
           </template>
         </el-table-column>
         <el-table-column
@@ -147,40 +147,11 @@
           />
         </el-form-item>
         <el-form-item label="适用渠道">
-          <el-select
+          <ChannelSelect
             v-model="form.channel"
-            clearable
+            placeholder="不选表示通用"
             style="width: 100%"
-          >
-            <el-option
-              label="通用"
-              value=""
-            />
-            <el-option
-              label="WhatsApp"
-              value="whatsapp"
-            />
-            <el-option
-              label="企业微信"
-              value="wecom"
-            />
-            <el-option
-              label="飞书"
-              value="feishu"
-            />
-            <el-option
-              label="Telegram"
-              value="telegram"
-            />
-            <el-option
-              label="邮件"
-              value="email"
-            />
-            <el-option
-              label="短信"
-              value="sms"
-            />
-          </el-select>
+          />
         </el-form-item>
         <el-form-item label="排序">
           <el-input-number
@@ -218,8 +189,10 @@ import {
   updateQuickReply,
   deleteQuickReply
 } from '@/api/customerService.js'
-import { getChannelLabel } from '@/constants/channel'
+import ChannelSelect from '@/components/ChannelSelect.vue'
+import { useChannelCatalogStore } from '@/stores/channelCatalog'
 
+const catalog = useChannelCatalogStore()
 const loading = ref(false)
 const search = ref('')
 const filterCategory = ref('')
@@ -317,7 +290,10 @@ const handleDelete = async (row) => {
   }
 }
 
-onMounted(() => load())
+onMounted(() => {
+  catalog.ensure()
+  load()
+})
 </script>
 
 <style scoped lang="scss">

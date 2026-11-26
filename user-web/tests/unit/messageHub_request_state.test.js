@@ -1,6 +1,7 @@
 import { beforeEach, afterEach, describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
+import { createPinia } from 'pinia'
 import { settle, settleBody } from './settle-helper'
 import i18n from '@/i18n'
 const api = vi.hoisted(() => ({ getPlatforms: vi.fn(), getStats: vi.fn(), getMessages: vi.fn(), getMessageById: vi.fn(), markRead: vi.fn(), recallMessage: vi.fn(), pushMessage: vi.fn() }))
@@ -17,7 +18,7 @@ beforeEach(() => {
   api.getMessages.mockResolvedValue({ list: [row(1, '初始消息')], total: 1 })
 })
 afterEach(() => { wrapper?.unmount(); document.body.replaceChildren() })
-async function page() { wrapper = mount(List, { attachTo: document.body, global: { plugins: [ElementPlus, i18n] } }); await settle(wrapper) }
+async function page() { wrapper = mount(List, { attachTo: document.body, global: { plugins: [createPinia(), ElementPlus, i18n] } }); await settle(wrapper) }
 describe('消息中台请求和详情状态', () => {
   it('较旧的搜索响应不能覆盖新列表', async () => {
     await page()

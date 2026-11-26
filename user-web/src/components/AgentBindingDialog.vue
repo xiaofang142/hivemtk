@@ -170,13 +170,16 @@
 <script setup>
 import i18n from '@/i18n'
 
-import { ref, reactive, computed, watch as _watch } from 'vue'
+import { ref, reactive, computed, onMounted, watch as _watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { listBindings, createBinding, updateBinding, deleteBinding } from '@/api/channelAgentBinding.js'
 import { listEnabledAgents } from '@/api/aiAgent.js'
-import { getChannelLabel } from '@/constants/channel'
+import { useChannelCatalogStore } from '@/stores/channelCatalog'
 import { isUserReportedError } from '@/utils/errorReporting'
+
+const catalog = useChannelCatalogStore()
+onMounted(() => { catalog.ensure() })
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -192,7 +195,7 @@ const visible = computed({
   set: (v) => emit('update:modelValue', v)
 })
 
-const channelTypeLabel = computed(() => getChannelLabel(props.channelType))
+const channelTypeLabel = computed(() => catalog.channelLabel(props.channelType))
 
 const loading = ref(false)
 const adding = ref(false)

@@ -14,12 +14,16 @@ func setupChannelRoutes(auth *gin.RouterGroup) {
 	channelCtl := controller.NewChannelController(service.NewChannelMasterService())
 	accountCtl := controller.NewChannelAccountController(service.NewChannelAccountService())
 	identifyCtl := controller.NewChannelIdentifyCodeController(service.NewChannelIdentifyService())
+	opsCtl := controller.NewChannelOperationsController()
 	// T054：共享对话上下文只读口（两智能体交叉引用展示数据源）。
 	ctxCtl := controller.NewConversationContextController(service.NewConversationContextService())
 
 	// 渠道主数据
 	auth.GET("/channels", channelCtl.List)
 	auth.GET("/channels/options", channelCtl.Options)
+	// 统一目录：一次返回已启用渠道 + 渠道下已启用账号。
+	auth.GET("/channels/catalog", opsCtl.Catalog)
+	auth.PUT("/channels/:id/tenant-enabled", opsCtl.SetTenantEnabled)
 	auth.GET("/channels/:id", channelCtl.Get)
 	auth.POST("/channels", channelCtl.Create)
 	auth.PUT("/channels/:id", channelCtl.Update)
@@ -28,7 +32,15 @@ func setupChannelRoutes(auth *gin.RouterGroup) {
 	// 渠道账号（列表/下拉统一走 ListOptions）
 	auth.GET("/channel-accounts", accountCtl.List)
 	auth.GET("/channel-accounts/options", accountCtl.Options)
+	// 管理面：含停用账号的分页列表/详情/编辑/启停。
+	auth.GET("/channel-accounts/managed", opsCtl.ManagedList)
+	auth.GET("/channel-accounts/authorization-options", opsCtl.AuthorizationAvailable)
+	auth.GET("/channel-accounts/:id/authorizations", opsCtl.AuthorizationList)
+	auth.POST("/channel-accounts/:id/authorizations", opsCtl.AuthorizationSave)
+	auth.DELETE("/channel-accounts/:id/authorizations/:account_id", opsCtl.AuthorizationRevoke)
 	auth.GET("/channel-accounts/:id", accountCtl.Get)
+	auth.PUT("/channel-accounts/:id/managed", opsCtl.ManagedUpdate)
+	auth.PUT("/channel-accounts/:id/status", opsCtl.ManagedSetStatus)
 	auth.POST("/channel-accounts", accountCtl.Create)
 	auth.PUT("/channel-accounts/:id", accountCtl.Update)
 	auth.DELETE("/channel-accounts/:id", accountCtl.Delete)

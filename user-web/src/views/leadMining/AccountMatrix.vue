@@ -34,7 +34,7 @@
         width="120"
       >
         <template #default="{ row }">
-          {{ channelLabel(row.channel_id) }}
+          {{ catalog.channelLabel(row.channel_id) || '-' }}
         </template>
       </el-table-column>
       <el-table-column
@@ -216,11 +216,13 @@ import { ElMessage } from 'element-plus'
 import { channelAccountApi } from '@/api/channelAccount'
 import { leadsApi } from '@/api/leads'
 import { listAgents } from '@/api/aiAgent'
+import { useChannelCatalogStore } from '@/stores/channelCatalog'
+
+const catalog = useChannelCatalogStore()
 
 const loading = ref(false)
 const saving = ref(false)
 const rows = ref([])
-const channels = ref([])
 const leadAgents = ref([])
 const replyAgents = ref([])
 const rules = ref([])
@@ -250,11 +252,6 @@ function join(list) {
 
 function split(text) {
   return String(text || '').split(/[,，、\n]/).map((s) => s.trim()).filter(Boolean)
-}
-
-function channelLabel(id) {
-  const ch = channels.value.find((c) => Number(c.id) === Number(id))
-  return ch?.name || ch?.code || (id ? `#${id}` : '-')
 }
 
 function replyLabel(id) {
@@ -299,15 +296,13 @@ function ruleTagType(row) {
 async function loadAll() {
   loading.value = true
   try {
-    const [accRes, chRes, leadRes, agentRes, ruleRes] = await Promise.all([
+    const [accRes, leadRes, agentRes, ruleRes] = await Promise.all([
       channelAccountApi.listAccounts(),
-      channelAccountApi.listChannels(),
       channelAccountApi.listLeadMiningAgents(),
       listAgents(),
       leadsApi.listRules()
     ])
     rows.value = asList(accRes)
-    channels.value = asList(chRes)
     leadAgents.value = asList(leadRes)
     replyAgents.value = asList(agentRes).filter((a) =>
       ['sales', 'hybrid', 'customer_service'].includes(String(a.agent_type || '').toLowerCase())
@@ -377,7 +372,10 @@ async function save() {
   }
 }
 
-onMounted(loadAll)
+onMounted(() => {
+  catalog.ensure()
+  loadAll()
+})
 </script>
 
 <style scoped>

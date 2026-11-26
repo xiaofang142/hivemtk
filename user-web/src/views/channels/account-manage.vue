@@ -20,19 +20,13 @@
         size="small"
       >
         <el-form-item label="渠道">
-          <el-select
+          <ChannelSelect
             v-model="filter.channel_id"
-            clearable
+            value-key="id"
+            include-disabled
             placeholder="全部渠道"
             style="width: 180px"
-          >
-            <el-option
-              v-for="c in channels"
-              :key="c.id"
-              :label="channelName(c.id)"
-              :value="c.id"
-            />
-          </el-select>
+          />
         </el-form-item>
         <el-form-item label="关键字">
           <el-input
@@ -79,7 +73,7 @@
           width="130"
         >
           <template #default="{ row }">
-            {{ channelName(row.channel_id) }}
+            {{ catalog.channelLabel(row.channel_id) }}
           </template>
         </el-table-column>
         <el-table-column
@@ -154,6 +148,23 @@
             </el-button>
             <el-button
               link
+              type="warning"
+              size="small"
+              :loading="rotatingId === row.id"
+              @click="onRotateCode(row)"
+            >
+              重置识别码
+            </el-button>
+            <el-button
+              link
+              :type="row.status === 1 ? 'warning' : 'success'"
+              size="small"
+              @click="onToggleStatus(row)"
+            >
+              {{ row.status === 1 ? '停用' : '启用' }}
+            </el-button>
+            <el-button
+              link
               type="danger"
               size="small"
               @click="onDelete(row)"
@@ -181,18 +192,12 @@
           label="所属渠道"
           required
         >
-          <el-select
+          <ChannelSelect
             v-model="form.channel_id"
+            value-key="id"
             placeholder="请选择渠道"
             style="width: 100%"
-          >
-            <el-option
-              v-for="c in channels"
-              :key="c.id"
-              :label="channelName(c.id)"
-              :value="c.id"
-            />
-          </el-select>
+          />
         </el-form-item>
         <el-form-item
           label="账号名称"
@@ -417,18 +422,20 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import channelAccountApi from '@/api/channelAccount.js'
+import channelCatalogApi from '@/api/channelCatalog.js'
+import channelIdentifyCodeApi from '@/api/channelIdentifyCode.js'
 import { listAgents } from '@/api/aiAgent.js'
-import { isLegacyConnectionService } from '@/constants/channel'
+import ChannelSelect from '@/components/ChannelSelect.vue'
+import { useChannelCatalogStore } from '@/stores/channelCatalog'
 
-const { t: translate } = useI18n()
+const catalog = useChannelCatalogStore()
 const loading = ref(false)
 const saving = ref(false)
+const rotatingId = ref(null)
 const accounts = ref([])
-const channels = ref([])
 const autoReplyAgents = ref([])
 const leadMiningAgents = ref([])
 const filter = reactive({ channel_id: null, keyword: '' })
@@ -454,15 +461,14 @@ const crossRefAccount = ref(null)
 const crossRefConvId = ref('')
 const crossRef = ref(null)
 
-function channelName(id) {
-  const c = channels.value.find((x) => x.id === id)
-  return c ? (isLegacyConnectionService(c.code) ? translate('channels.serviceBindingLabel', { name: c.name }) : c.name) : '-'
-}
-
 async function loadList() {
   loading.value = true
   try {
-    const res = await channelAccountApi.listAccounts({ channel_id: filter.channel_id || undefined, keyword: filter.keyword })
+    // 管理面必须能看见停用账号；普通 /channel-accounts 列表只给启用账号（FR-029）。
+    const res = await channelCatalogApi.managedAccounts({
+      channel_id: filter.channel_id || undefined,
+      keyword: filter.keyword
+    })
     accounts.value = res?.list || res || []
   } catch (e) {
     ElMessage.error('加载渠道账号失败：' + (e.message || '未知错误'))
@@ -553,11 +559,42 @@ async function onSave() {
     }
     ElMessage.success('保存成功')
     dialogVisible.value = false
-    loadList()
+    await Promise.all([loadList(), catalog.ensure(true)])
   } catch (e) {
     ElMessage.error('保存失败：' + (e.message || '未知错误'))
   } finally {
     saving.value = false
+  }
+}
+
+async function onToggleStatus(row) {
+  const next = row.status === 1 ? 0 : 1
+  try {
+    await channelCatalogApi.setAccountStatus(row.id, next)
+    ElMessage.success(next === 1 ? '已启用' : '已停用')
+    await Promise.all([loadList(), catalog.ensure(true)])
+  } catch (e) {
+    ElMessage.error('操作失败：' + (e.message || '未知错误'))
+  }
+}
+
+async function onRotateCode(row) {
+  if (rotatingId.value != null) return
+  rotatingId.value = row.id
+  try {
+    await ElMessageBox.confirm(
+      `确认重置账号「${row.name}」的识别码？旧码仅在短暂在途窗口内有效。`,
+      '提示',
+      { type: 'warning' }
+    )
+    const res = await channelIdentifyCodeApi.rotateForAccount(row.channel_id, row.id)
+    const code = res?.code || res?.data?.code || ''
+    ElMessage.success(code ? `已重置，新识别码：${code}` : '已重置识别码')
+    await Promise.all([loadList(), catalog.ensure(true)])
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') ElMessage.error('重置失败：' + (e.message || '未知错误'))
+  } finally {
+    rotatingId.value = null
   }
 }
 
@@ -596,10 +633,9 @@ async function loadCrossRef() {
 }
 
 onMounted(async () => {
+  await catalog.ensure()
   loadList()
   try {
-    const c = await channelAccountApi.listChannels()
-    channels.value = c?.list || c || []
     const agents = await listAgents({})
     autoReplyAgents.value = (agents?.list || agents || []).filter((a) => a.agent_type !== 'lead_mining')
     const lm = await channelAccountApi.listLeadMiningAgents()

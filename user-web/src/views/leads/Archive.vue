@@ -46,10 +46,13 @@
           />
         </el-form-item>
         <el-form-item label="来源渠道">
-          <el-input v-model="form.source_channel" />
+          <ChannelSelect v-model="form.source_channel" />
         </el-form-item>
-        <el-form-item label="来源账号ID">
-          <el-input v-model="form.source_account_id" />
+        <el-form-item label="来源账号">
+          <ChannelAccountSelect
+            v-model="form.source_account_id"
+            :channel="form.source_channel"
+          />
         </el-form-item>
         <el-form-item label="角色">
           <el-select v-model="form.role">
@@ -118,6 +121,12 @@
 import { reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { leadsApi } from '@/api/leads'
+import ChannelSelect from '@/components/ChannelSelect.vue'
+import ChannelAccountSelect from '@/components/ChannelAccountSelect.vue'
+import { useChannelCatalogStore } from '@/stores/channelCatalog'
+
+const catalog = useChannelCatalogStore()
+catalog.ensure()
 
 const saving = ref(false)
 const result = ref(null)

@@ -15,7 +15,12 @@
     "serviceBindingLabel": "{name} · اتصال SageX ‏(QQ / WeChat الشخصي)",
     "editBinding": "تعديل ارتباط الاتصال",
     "bindingName": "اسم الشركة أو الفريق",
-    "bindingCode": "رمز ارتباط الاتصال"
+    "bindingCode": "رمز ارتباط الاتصال",
+    "toggleOnlyHint": "Channels are maintained centrally; this page only toggles them for your tenant.",
+    "enabledOnlyHint": "Dropdowns list only enabled channels and their active accounts.",
+    "accountIdentifyCode": "Account access code",
+    "resetAccountCode": "Reset account access code",
+    "noEnabledChannel": "No enabled channel yet. Enable one in channel management first."
   },
   "clue": {
     "updated": "تم تحديث العميل المحتمل",

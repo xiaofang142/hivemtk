@@ -139,26 +139,17 @@
       >
         <el-card shadow="never">
           <div class="toolbar">
-            <el-select
+            <ChannelSelect
               v-model="routeFilter.channel"
               placeholder="渠道"
-              clearable
               style="width: 140px"
               @change="loadRoutes"
-            >
-              <el-option
-                v-for="c in channelOptions"
-                :key="c.value"
-                :label="c.label"
-                :value="c.value"
-              />
-            </el-select>
-            <el-input
+            />
+            <ChannelAccountSelect
               v-model="routeFilter.account_id"
+              :channel="routeFilter.channel"
               placeholder="账号ID"
-              clearable
               style="width: 180px"
-              @keyup.enter="loadRoutes"
             />
             <el-button @click="loadRoutes">
               查询
@@ -188,7 +179,7 @@
               width="110"
             >
               <template #default="{ row }">
-                {{ channelLabel(row.channel) }}
+                {{ catalog.channelLabel(row.channel) || '-' }}
               </template>
             </el-table-column>
             <el-table-column
@@ -198,7 +189,7 @@
               show-overflow-tooltip
             >
               <template #default="{ row }">
-                {{ row.account_id || '（默认/全部）' }}
+                {{ routeAccountLabel(row) }}
               </template>
             </el-table-column>
             <el-table-column
@@ -265,23 +256,15 @@
       >
         <el-card shadow="never">
           <div class="toolbar">
-            <el-select
+            <ChannelSelect
               v-model="judgementFilter.platform"
               placeholder="平台"
-              clearable
               style="width: 130px"
-            >
-              <el-option
-                v-for="c in channelOptions"
-                :key="c.value"
-                :label="c.label"
-                :value="c.value"
-              />
-            </el-select>
-            <el-input
+            />
+            <ChannelAccountSelect
               v-model="judgementFilter.account_id"
+              :channel="judgementFilter.platform"
               placeholder="账号ID"
-              clearable
               style="width: 160px"
             />
             <el-select
@@ -340,7 +323,7 @@
               width="100"
             >
               <template #default="{ row }">
-                {{ channelLabel(row.platform) }}
+                {{ catalog.channelLabel(row.platform) || '-' }}
               </template>
             </el-table-column>
             <el-table-column
@@ -547,9 +530,12 @@
                 border
               >
                 <el-table-column
-                  prop="platform"
                   label="渠道"
-                />
+                >
+                  <template #default="{ row }">
+                    {{ catalog.channelLabel(row.platform) || '-' }}
+                  </template>
+                </el-table-column>
                 <el-table-column
                   prop="total"
                   label="总数"
@@ -633,19 +619,11 @@
                 :value="s"
               />
             </el-select>
-            <el-select
+            <ChannelSelect
               v-model="leadFilter.source_channel"
               placeholder="渠道"
-              clearable
               style="width: 120px"
-            >
-              <el-option
-                v-for="c in channelOptions"
-                :key="c.value"
-                :label="c.label"
-                :value="c.value"
-              />
-            </el-select>
+            />
             <el-select
               v-model="leadFilter.is_group"
               placeholder="会话类型"
@@ -731,9 +709,9 @@
               show-overflow-tooltip
             >
               <template #default="{ row }">
-                <div>{{ channelLabel(row.source_channel) || '-' }}</div>
+                <div>{{ catalog.channelLabel(row.source_channel) || '-' }}</div>
                 <div class="muted">
-                  {{ row.source_account_id || row.account || '-' }}
+                  {{ catalog.accountLabel(row.source_account_id || row.account) || '-' }}
                 </div>
               </template>
             </el-table-column>
@@ -816,7 +794,7 @@
           {{ formatTime(judgementDetail.created_at) }}
         </el-descriptions-item>
         <el-descriptions-item label="平台/账号">
-          {{ channelLabel(judgementDetail.platform) }} / {{ judgementDetail.account_id }}
+          {{ catalog.channelLabel(judgementDetail.platform) || '-' }} / {{ catalog.accountLabel(judgementDetail.account_id) || '-' }}
         </el-descriptions-item>
         <el-descriptions-item label="会话">
           {{ judgementDetail.is_group ? '群聊' : '单聊' }} {{ judgementDetail.conversation_id }}
@@ -880,22 +858,15 @@
         label-width="100px"
       >
         <el-form-item label="渠道">
-          <el-select
+          <ChannelSelect
             v-model="routeForm.channel"
-            clearable
             placeholder="空=默认"
-          >
-            <el-option
-              v-for="c in channelOptions"
-              :key="c.value"
-              :label="c.label"
-              :value="c.value"
-            />
-          </el-select>
+          />
         </el-form-item>
         <el-form-item label="账号ID">
-          <el-input
+          <ChannelAccountSelect
             v-model="routeForm.account_id"
+            :channel="routeForm.channel"
             placeholder="空=该渠道默认"
           />
         </el-form-item>
@@ -942,7 +913,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getLeadMiningConfig, saveLeadMiningConfig, getLeadMiningStatus,
@@ -952,6 +923,11 @@ import {
 } from '@/api/leadMining'
 import { clueApi } from '@/api/clue'
 import AccountMatrix from './AccountMatrix.vue'
+import ChannelSelect from '@/components/ChannelSelect.vue'
+import ChannelAccountSelect from '@/components/ChannelAccountSelect.vue'
+import { useChannelCatalogStore } from '@/stores/channelCatalog'
+
+const catalog = useChannelCatalogStore()
 
 const activeTab = ref('matrix')
 const saving = ref(false)
@@ -960,18 +936,11 @@ const tagsText = ref('')
 const form = reactive({ enabled: false, channels: [], requirement: '', min_intent_score: 50, model: '' })
 const status = ref({})
 
-const channelOptions = [
-  { value: 'telegram', label: 'Telegram' },
-  { value: 'whatsapp', label: 'WhatsApp' },
-  { value: 'douyin', label: '抖音' },
-  { value: 'xiaohongshu', label: '小红书' },
-  { value: 'wecom', label: '企业微信' },
-  { value: 'wechat', label: '微信' },
-  { value: 'xianyu', label: '闲鱼' },
-  { value: 'kuaishou', label: '快手' },
-  { value: 'tiktok', label: 'TikTok' },
-  { value: 'feishu', label: '飞书' }
-]
+// 监测渠道多选的候选也统一走目录（只列已开启渠道），不再维护本地硬编码表。
+const channelOptions = computed(() => catalog.channels.map((c) => ({
+  value: c.code,
+  label: c.label || c.name || c.code
+})))
 const leadRoleOptions = [
   { value: 'demand', label: '需求方' },
   { value: 'supply', label: '供货方' },
@@ -982,10 +951,17 @@ const leadRoleOptions = [
 const statusOptions = ['new', 'notified', 'following', 'converted', 'ignored', 'invalid']
 
 function unwrap(res) { return res?.data?.data ?? res?.data ?? res ?? {} }
-function channelLabel(v) { return channelOptions.find(c => c.value === v)?.label || v || '-' }
 function leadRoleLabel(v) { return leadRoleOptions.find(r => r.value === v)?.label || v || '未知' }
 function leadRoleTag(v) { return ({ demand: 'danger', supply: 'success', resource: 'warning', broker: '', unknown: 'info' })[v] || 'info' }
-function notifyChannelLabel(v) { return ({ in_app: '站内', telegram: 'Telegram', feishu: '飞书' })[v] || v || '-' }
+// 通知通道是送达方式（in_app 不属于业务渠道），保留本地选项；标签值能译则走统一目录。
+function notifyChannelLabel(v) {
+  if (v === 'in_app') return '站内'
+  return catalog.channelLabel(v) || v || '-'
+}
+function routeAccountLabel(row) {
+  if (!row.account_id) return '（默认/全部）'
+  return catalog.accountLabel(row.account_id) || row.account_id
+}
 function parseList(text) { return (text || '').split(/[\n,，、]/).map(s => s.trim()).filter(Boolean) }
 function formatTime(t) {
   if (!t) return '-'
@@ -1179,7 +1155,10 @@ function refreshAll() {
   loadConfig(); loadStatus(); loadRoutes(); loadJudgements(judgementPage.value); loadQualityStats(); loadLeads(leadPage.value)
 }
 
-onMounted(refreshAll)
+onMounted(() => {
+  catalog.ensure()
+  refreshAll()
+})
 </script>
 
 <style scoped>

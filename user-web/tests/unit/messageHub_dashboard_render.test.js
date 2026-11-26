@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
+import { createPinia } from 'pinia'
 import { settle } from './settle-helper'
 
 // 消息中枢 Dashboard 的渲染腿：证明"页面上那几个数"真的来自 /api/message-hub/stats，
@@ -22,6 +23,12 @@ const http = vi.hoisted(() => ({
 }))
 
 vi.mock('@/utils/request', () => ({ http: http }))
+vi.mock('@/api/channelCatalog.js', () => ({ default: {
+  catalog: vi.fn().mockResolvedValue({ channels: [], accounts: [] })
+} }))
+vi.mock('@/api/channelAccount.js', () => ({ default: {
+  listChannels: vi.fn().mockResolvedValue([])
+} }))
 
 // echarts 在 jsdom 里 init 不出 canvas，这里换成一个只记实参的桩：
 // 这张桩收到的 option 就是"用户在这块画布上看见的那些柱子"。
@@ -83,7 +90,7 @@ const findButton = (text) =>
   Array.from(document.querySelectorAll('button')).find((b) => b.textContent.trim() === text)
 
 async function mountPage() {
-  const wrapper = mount(Dashboard, { attachTo: document.body, global: { plugins: [ElementPlus] } })
+  const wrapper = mount(Dashboard, { attachTo: document.body, global: { plugins: [createPinia(), ElementPlus] } })
   await settle(wrapper)
   return wrapper
 }

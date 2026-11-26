@@ -37,20 +37,13 @@
             :value="s.value"
           />
         </el-select>
-        <el-select
+        <ChannelSelect
           v-model="filters.channel"
           placeholder="渠道"
           clearable
           style="width: 160px"
           @change="onFilterChange"
-        >
-          <el-option
-            v-for="c in CHANNEL_OPTIONS"
-            :key="c.value"
-            :label="c.label"
-            :value="c.value"
-          />
-        </el-select>
+        />
         <el-button @click="resetFilters">
           重置
         </el-button>
@@ -197,7 +190,11 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { reachPipelineApi } from '@/api/reachPipeline.js'
-import { CHANNEL_OPTIONS, getChannelLabel } from '@/constants/channel'
+import ChannelSelect from '@/components/ChannelSelect.vue'
+import { useChannelCatalogStore } from '@/stores/channelCatalog'
+
+const catalog = useChannelCatalogStore()
+const channelLabel = (v) => catalog.channelLabel(v)
 
 const STATUS_OPTIONS = [
   { value: 'pending', label: '待发送' },
@@ -208,7 +205,6 @@ const STATUS_OPTIONS = [
   { value: 'unknown', label: '结果未知' }
 ]
 
-const channelLabel = getChannelLabel
 
 const list = ref([])
 const total = ref(0)
@@ -309,7 +305,10 @@ const formatTime = (value) => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }
 
-onMounted(load)
+onMounted(() => {
+  catalog.ensure()
+  load()
+})
 </script>
 
 <style scoped>

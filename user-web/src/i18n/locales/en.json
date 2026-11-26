@@ -15,7 +15,12 @@
     "accounts": "Accounts",
     "identifyCodes": "Access codes",
     "displayName": "Account display name",
-    "displayNamePlaceholder": "For display only, not identity matching"
+    "displayNamePlaceholder": "For display only, not identity matching",
+    "toggleOnlyHint": "Channels are maintained centrally; this page only toggles them for your tenant.",
+    "enabledOnlyHint": "Dropdowns list only enabled channels and their active accounts.",
+    "accountIdentifyCode": "Account access code",
+    "resetAccountCode": "Reset account access code",
+    "noEnabledChannel": "No enabled channel yet. Enable one in channel management first."
   },
   "clue": {
     "updated": "Clue updated",
@@ -328,7 +333,7 @@
     "customerIdentity": "Customer Identity",
     "oneidList": "OneID List",
     "oneidConflicts": "Identity Conflict Resolution",
-    "aiAgent": "Agents & Customer Service",
+    "aiAgent": "Customer Service Agent",
     "agentManage": "AI Agent Management",
     "aiAgentList": "AI Agent List",
     "aiAgentCreate": "Create AI Agent",
@@ -574,7 +579,7 @@
     "crossAccountSearch": "Cross-Account Search",
     "crmMaster": "Customer Master Data",
     "leadGovernance": "Lead Governance",
-    "leadDiscovery": "Lead Discovery",
+    "leadDiscovery": "Lead Agent",
     "leadMiningAgents": "Lead Discovery Agents",
     "leadNotifyRoutes": "Lead Notify Routes",
     "leadEvidence": "Judgement & Evidence",

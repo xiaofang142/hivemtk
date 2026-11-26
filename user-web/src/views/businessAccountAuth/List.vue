@@ -48,10 +48,13 @@
           width="100"
         />
         <el-table-column
-          prop="channel"
           label="渠道"
           min-width="120"
-        />
+        >
+          <template #default="{ row }">
+            {{ catalog.channelLabel(row.channel) }}
+          </template>
+        </el-table-column>
         <el-table-column
           prop="account_id"
           label="账号ID"
@@ -123,18 +126,19 @@
           label="渠道"
           prop="channel"
         >
-          <el-input
+          <ChannelSelect
             v-model="form.channel"
-            placeholder="如 wechat / douyin / whatsapp"
+            placeholder="请选择渠道"
           />
         </el-form-item>
         <el-form-item
           label="账号ID"
           prop="account_id"
         >
-          <el-input
+          <ChannelAccountSelect
             v-model="form.account_id"
-            placeholder="业务账号ID"
+            :channel="form.channel"
+            placeholder="请选择账号"
           />
         </el-form-item>
         <el-form-item
@@ -180,7 +184,11 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { businessAccountAuthApi } from '@/api/businessAccountAuth'
+import ChannelSelect from '@/components/ChannelSelect.vue'
+import ChannelAccountSelect from '@/components/ChannelAccountSelect.vue'
+import { useChannelCatalogStore } from '@/stores/channelCatalog'
 
+const catalog = useChannelCatalogStore()
 const loading = ref(false)
 const saving = ref(false)
 const rows = ref([])
@@ -241,8 +249,8 @@ async function submit() {
   try {
     await businessAccountAuthApi.upsert({
       user_id: Number(form.user_id),
-      channel: form.channel.trim(),
-      account_id: form.account_id.trim(),
+      channel: String(form.channel || '').trim(),
+      account_id: String(form.account_id || '').trim(),
       scope: form.scope,
     })
     ElMessage.success('保存成功')
@@ -264,7 +272,10 @@ async function confirmRemove(row) {
   await load()
 }
 
-onMounted(load)
+onMounted(async () => {
+  catalog.ensure()
+  await load()
+})
 </script>
 
 <style scoped>

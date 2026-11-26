@@ -15,7 +15,12 @@
     "serviceBindingLabel": "{name} · Подключение SageX (QQ / личный WeChat)",
     "editBinding": "Изменить привязку подключения",
     "bindingName": "Название компании или команды",
-    "bindingCode": "Код привязки подключения"
+    "bindingCode": "Код привязки подключения",
+    "toggleOnlyHint": "Channels are maintained centrally; this page only toggles them for your tenant.",
+    "enabledOnlyHint": "Dropdowns list only enabled channels and their active accounts.",
+    "accountIdentifyCode": "Account access code",
+    "resetAccountCode": "Reset account access code",
+    "noEnabledChannel": "No enabled channel yet. Enable one in channel management first."
   },
   "clue": {
     "updated": "Лид обновлён",

@@ -1,25 +1,43 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ElementPlus, { ElMessage, ElMessageBox } from 'element-plus'
+import { createPinia } from 'pinia'
+import i18n from '@/i18n'
 import { settle } from './settle-helper'
 
 const api = vi.hoisted(() => ({
   list: vi.fn(),
   get: vi.fn(),
   rotate: vi.fn(),
-  listChannels: vi.fn()
+  rotateForAccount: vi.fn(),
+  listChannels: vi.fn(),
+  catalog: vi.fn(),
+  managedAccounts: vi.fn(),
+  setTenantEnabled: vi.fn()
 }))
 
 vi.mock('@/api/channelIdentifyCode.js', () => ({
   default: {
     list: api.list,
     get: api.get,
-    rotate: api.rotate
+    rotate: api.rotate,
+    rotateForAccount: api.rotateForAccount
   },
   channelIdentifyCodeApi: {
     list: api.list,
     get: api.get,
-    rotate: api.rotate
+    rotate: api.rotate,
+    rotateForAccount: api.rotateForAccount
+  }
+}))
+
+vi.mock('@/api/channelCatalog.js', () => ({
+  default: {
+    catalog: api.catalog,
+    managedAccounts: api.managedAccounts,
+    setTenantEnabled: api.setTenantEnabled,
+    updateManagedAccount: vi.fn(),
+    setAccountStatus: vi.fn()
   }
 }))
 
@@ -53,7 +71,7 @@ const CHANNELS = [
 
 async function mountPage() {
   const wrapper = mount(IdentifyCodeManage, {
-    global: { plugins: [ElementPlus] }
+    global: { plugins: [createPinia(), ElementPlus, i18n] }
   })
   await settle(wrapper)
   return wrapper
@@ -70,7 +88,13 @@ beforeEach(() => {
   api.list.mockReset().mockResolvedValue({ list: [...ROWS] })
   api.get.mockReset().mockResolvedValue({ ...ROWS[0] })
   api.rotate.mockReset().mockResolvedValue({ code: 'cid_new', version: 2 })
+  api.rotateForAccount.mockReset().mockResolvedValue({ code: 'cid_account_new' })
   api.listChannels.mockReset().mockResolvedValue({ list: [...CHANNELS] })
+  api.catalog.mockReset().mockResolvedValue({
+    channels: CHANNELS.map((c) => ({ id: c.id, code: String(c.id), name: c.name, label: c.name, enabled: true })),
+    accounts: []
+  })
+  api.managedAccounts.mockReset().mockResolvedValue({ list: [] })
   ElMessageBox.confirm.mockReset().mockResolvedValue('confirm')
 })
 

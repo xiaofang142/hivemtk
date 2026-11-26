@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
+import { createPinia } from 'pinia'
 import { settle } from './settle-helper'
 
 // CH-37b 刀5：消息中心列表的 unknown（结果不明）行露出格。
@@ -58,7 +59,7 @@ async function mountList(rows) {
   const host = document.createElement('div')
   document.body.appendChild(host)
   const wrapper = mount(List, {
-    global: { plugins: [ElementPlus], mocks: { $t: (k) => k } },
+    global: { plugins: [createPinia(), ElementPlus], mocks: { $t: (k) => k } },
     attachTo: host,
   })
   current = wrapper

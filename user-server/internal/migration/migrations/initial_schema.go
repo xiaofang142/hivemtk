@@ -381,4 +381,7 @@ func RegisterMigrations(registry *migration.MigrationRegistry, db *gorm.DB) {
 	register(NewMergedIntoIDWidenVarchar64Migration(db))
 	// v3.115.0：SageX 非空安装标识在租户内唯一；重复存量数据 fail-closed。
 	register(NewSageXInstallationUniqueMigration(db))
+	// v3.116.0：渠道统一数据落地——补齐规范渠道全局行 + 历史旧码归一（幂等）。
+	// 对应顶层 migrations/100_channel_code_unify.sql。
+	register(NewChannelCodeUnifyMigration(db))
 }

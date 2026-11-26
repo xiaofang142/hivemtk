@@ -85,21 +85,13 @@
         shadow="never"
       >
         <div class="conv-filters">
-          <el-select
+          <ChannelSelect
             v-model="searchForm.platform"
             :placeholder="$t('全部平台')"
-            clearable
             size="default"
             style="width: 130px"
             @change="handleSearch"
-          >
-            <el-option
-              v-for="c in CHANNEL_OPTIONS"
-              :key="c.value"
-              :label="c.label"
-              :value="c.value"
-            />
-          </el-select>
+          />
           <el-select
             v-model="searchForm.status"
             :placeholder="$t('全部状态')"
@@ -223,7 +215,7 @@
                 size="small"
                 :type="getChannelTagType(conv.platform) || 'info'"
               >
-                {{ getChannelLabel(conv.platform) || conv.platform }}
+                {{ catalog.channelLabel(conv.platform) || conv.platform }}
               </el-tag>
               <el-tag
                 size="small"
@@ -238,7 +230,7 @@
                 type="info"
                 effect="plain"
               >
-                {{ conv.account_id }}
+                {{ catalog.accountLabel(conv.account_id) }}
               </el-tag>
               <el-tag
                 size="small"
@@ -332,7 +324,7 @@
                 size="small"
                 :type="getChannelTagType(currentConv.platform) || 'info'"
               >
-                {{ getChannelLabel(currentConv.platform) || currentConv.platform }}
+                {{ catalog.channelLabel(currentConv.platform) || currentConv.platform }}
               </el-tag>
               <el-tag
                 v-if="currentConv.account_id"
@@ -340,7 +332,7 @@
                 type="info"
                 effect="plain"
               >
-                账号 {{ currentConv.account_id }}
+                账号 {{ catalog.accountLabel(currentConv.account_id) }}
               </el-tag>
               <el-tag
                 size="small"
@@ -452,7 +444,7 @@
             <span
               v-if="currentConv.account_id"
               class="banner-account"
-            >渠道账号：{{ getChannelLabel(currentConv.platform) || currentConv.platform }} / {{ currentConv.account_id }}</span>
+            >渠道账号：{{ catalog.channelLabel(currentConv.platform) || currentConv.platform }} / {{ catalog.accountLabel(currentConv.account_id) }}</span>
           </div>
           <div
             v-for="msg in threadMessages"
@@ -805,7 +797,9 @@ import {
 import { inboxApi } from '@/api/inbox'
 import { http } from '@/utils/request'
 import { useUserStore } from '@/stores/user'
-import { CHANNEL_OPTIONS, getChannelLabel, getChannelTagType } from '@/constants/channel'
+import { getChannelTagType } from '@/constants/channel'
+import ChannelSelect from '@/components/ChannelSelect.vue'
+import { useChannelCatalogStore } from '@/stores/channelCatalog'
 import i18n from '@/i18n'
 
 const t = (k) => i18n.global.t(k)
@@ -882,6 +876,7 @@ const historyLoading = ref(false)
 const assignmentHistory = ref([])
 
 const userStore = useUserStore()
+const catalog = useChannelCatalogStore()
 let refreshTimer = null
 
 // ---- 字典 ----
@@ -1281,6 +1276,7 @@ const stopPolling = () => {
 }
 
 onMounted(() => {
+  catalog.ensure()
   refreshAll()
   startPolling()
 })

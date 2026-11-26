@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
+import { createPinia } from 'pinia'
 import { settle, settleBody } from './settle-helper'
 import i18n from '@/i18n'
 
@@ -42,7 +43,7 @@ const row = (over = {}) => ({
 async function mountPage() {
   const wrapper = mount(ClueList, {
     attachTo: document.body,
-    global: { plugins: [ElementPlus, i18n] }
+    global: { plugins: [createPinia(), ElementPlus, i18n] }
   })
   mounted.push(wrapper)
   await settle(wrapper)

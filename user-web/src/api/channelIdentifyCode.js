@@ -12,6 +12,10 @@ export const channelIdentifyCodeApi = {
   // 为渠道生成识别码；已存在则重置（version+1，旧码进入短暂在途窗口）。
   rotate(channelId) {
     return http.post(`/api/identify-codes/${channelId}/rotate`)
+  },
+  // 一个渠道下多个账号各有自己的识别码（FR-027）；账号级重置入口。
+  rotateForAccount(channelId, accountId) {
+    return http.post(`/api/identify-codes/${channelId}/rotate-for-account`, { account_id: accountId })
   }
 }
 

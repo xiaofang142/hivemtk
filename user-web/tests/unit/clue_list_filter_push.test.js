@@ -15,6 +15,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
+import { createPinia } from 'pinia'
 import { settle } from './settle-helper'
 
 const api = vi.hoisted(() => ({
@@ -53,7 +54,7 @@ async function mountList() {
   const host = document.createElement('div')
   document.body.appendChild(host)
   const wrapper = mount(List, {
-    global: { plugins: [ElementPlus], mocks: { $t: (k) => k } },
+    global: { plugins: [createPinia(), ElementPlus], mocks: { $t: (k) => k } },
     attachTo: host,
   })
   current = wrapper

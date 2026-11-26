@@ -15,7 +15,12 @@
     "accounts": "账号",
     "identifyCodes": "识别码",
     "displayName": "本账号显示名称",
-    "displayNamePlaceholder": "用于显示，不作为自他身份判据"
+    "displayNamePlaceholder": "用于显示，不作为自他身份判据",
+    "toggleOnlyHint": "渠道由系统统一维护，此处仅控制本租户启停。",
+    "enabledOnlyHint": "下拉仅列出已开启渠道及其下已启用账号。",
+    "accountIdentifyCode": "账号识别码",
+    "resetAccountCode": "重置账号识别码",
+    "noEnabledChannel": "暂无已开启渠道，请先在渠道管理中开启。"
   },
   "clue": {
     "updated": "线索已更新",
@@ -328,7 +333,7 @@
     "customerIdentity": "客户身份",
     "oneidList": "OneID 列表",
     "oneidConflicts": "身份冲突解决",
-    "aiAgent": "智能体与客服",
+    "aiAgent": "客服智能体",
     "agentManage": "智能体管理",
     "aiAgentList": "智能体列表",
     "aiAgentCreate": "创建智能体",
@@ -574,7 +579,7 @@
     "crossAccountSearch": "跨账号客户检索",
     "crmMaster": "客户主数据",
     "leadGovernance": "线索治理",
-    "leadDiscovery": "线索发现",
+    "leadDiscovery": "线索智能体",
     "leadMiningAgents": "线索发现智能体",
     "leadNotifyRoutes": "线索通知路由",
     "leadEvidence": "判定与证据",
@@ -1956,7 +1961,7 @@
         },
         "step2": {
           "title": "顶部导航",
-          "description": "按工作台、客户与销售、智能体与客服、触达运营、知识中心、GEO 增长、数据分析、系统管理查找功能。可见入口取决于站点已启用的模块和当前角色的权限。"
+          "description": "按工作台、客户与销售、客服智能体、触达运营、知识中心、GEO 增长、数据分析、系统管理查找功能。可见入口取决于站点已启用的模块和当前角色的权限。"
         },
         "step3": {
           "title": "侧边栏",

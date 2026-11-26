@@ -201,20 +201,13 @@
                 @keyup.enter="onPipeFilterChange"
                 @clear="onPipeFilterChange"
               />
-              <el-select
+              <ChannelSelect
                 v-model="pipeFilter.channel"
                 :placeholder="$t('reachPipeline.channel')"
                 clearable
                 style="width: 140px; margin-left: 8px"
                 @change="onPipeFilterChange"
-              >
-                <el-option
-                  v-for="c in CHANNEL_OPTIONS"
-                  :key="c.value"
-                  :label="c.label"
-                  :value="c.value"
-                />
-              </el-select>
+              />
               <el-select
                 v-model="pipeFilter.status"
                 :placeholder="$t('reachPipeline.status')"
@@ -420,20 +413,13 @@
                   :value="p.id"
                 />
               </el-select>
-              <el-select
+              <ChannelSelect
                 v-model="jobFilter.channel"
                 :placeholder="$t('reachPipeline.channel')"
                 clearable
                 style="width: 140px; margin-left: 8px"
                 @change="onJobFilterChange"
-              >
-                <el-option
-                  v-for="c in CHANNEL_OPTIONS"
-                  :key="c.value"
-                  :label="c.label"
-                  :value="c.value"
-                />
-              </el-select>
+              />
               <el-select
                 v-model="jobFilter.state"
                 :placeholder="$t('reachPipeline.status')"
@@ -837,18 +823,11 @@
           :label="$t('reachPipeline.channel')"
           prop="channel"
         >
-          <el-select
+          <ChannelSelect
             v-model="pipeForm.channel"
             style="width: 100%"
             :placeholder="$t('reachPipeline.channelPlaceholder')"
-          >
-            <el-option
-              v-for="c in CHANNEL_OPTIONS"
-              :key="c.value"
-              :label="c.label"
-              :value="c.value"
-            />
-          </el-select>
+          />
         </el-form-item>
         <el-form-item
           :label="$t('reachPipeline.steps')"
@@ -1101,19 +1080,12 @@
           </el-select>
         </el-form-item>
         <el-form-item :label="$t('reachPipeline.channel')">
-          <el-select
+          <ChannelSelect
             v-model="jobForm.channel"
             :placeholder="$t('reachPipeline.followPipeline')"
             clearable
             style="width: 100%"
-          >
-            <el-option
-              v-for="c in CHANNEL_OPTIONS"
-              :key="c.value"
-              :label="c.label"
-              :value="c.value"
-            />
-          </el-select>
+          />
         </el-form-item>
         <el-form-item
           :label="$t('reachPipeline.targetCustomerId')"
@@ -1314,7 +1286,11 @@ import {
   CircleCheck, CircleClose, Timer, Warning, Share
 } from '@element-plus/icons-vue'
 import { reachPipelineApi } from '@/api/reachPipeline.js'
-import { CHANNEL_OPTIONS, getChannelLabel } from '@/constants/channel'
+import ChannelSelect from '@/components/ChannelSelect.vue'
+import { useChannelCatalogStore } from '@/stores/channelCatalog'
+
+const catalog = useChannelCatalogStore()
+const channelLabel = (v) => catalog.channelLabel(v)
 
 const { t } = useI18n()
 
@@ -1340,7 +1316,6 @@ const jobStateOptions = computed(() => [
   { value: 'rate_limited', label: t('reachPipeline.stateRateLimited') }
 ])
 
-const channelLabel = getChannelLabel
 const stepLabel = (v) => (stepOptions.value.find((s) => s.value === v) || {}).label || v
 const pipeStatusType = (s) => ({ active: 'success', paused: 'warning', archived: 'info' }[s] || 'info')
 const pipeStatusText = (s) => ({
@@ -1799,6 +1774,7 @@ const channelStats = computed(() => {
 })
 
 onMounted(() => {
+  catalog.ensure()
   loadStats()
   loadPipelines()
   loadJobs()

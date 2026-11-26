@@ -329,52 +329,16 @@
         label-width="100px"
       >
         <el-form-item label="账号类型">
-          <el-select
+          <ChannelSelect
             v-model="bindForm.account_type"
-            placeholder="选择账号类型"
-          >
-            <el-option
-              label="短信"
-              value="sms"
-            />
-            <el-option
-              label="邮件"
-              value="email"
-            />
-            <el-option
-              label="Telegram"
-              value="telegram"
-            />
-            <el-option
-              label="企业微信"
-              value="wecom"
-            />
-            <el-option
-              label="飞书"
-              value="feishu"
-            />
-            <el-option
-              label="WhatsApp"
-              value="whatsapp"
-            />
-            <el-option
-              label="抖音"
-              value="douyin"
-            />
-            <el-option
-              label="快手"
-              value="kuaishou"
-            />
-            <el-option
-              label="小红书"
-              value="xhs"
-            />
-          </el-select>
+            placeholder="选择渠道"
+          />
         </el-form-item>
-        <el-form-item label="账号ID">
-          <el-input
+        <el-form-item label="渠道账号">
+          <ChannelAccountSelect
             v-model="bindForm.account_id"
-            placeholder="输入账号ID"
+            :channel="bindForm.account_type"
+            placeholder="请选择账号"
           />
         </el-form-item>
         <el-form-item label="设为主账号">
@@ -402,7 +366,11 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { Refresh, Star } from '@element-plus/icons-vue'
 import { listTools, updateToolStatus, bindToolAccount } from '@/api/aiTool.js'
+import ChannelSelect from '@/components/ChannelSelect.vue'
+import ChannelAccountSelect from '@/components/ChannelAccountSelect.vue'
+import { useChannelCatalogStore } from '@/stores/channelCatalog'
 
+const catalog = useChannelCatalogStore()
 const { t } = useI18n()
 const loading = ref(false);
 const loadError = ref('')
@@ -552,7 +520,7 @@ const onBind = async () => {
     await bindToolAccount(
       currentTool.value.tool_name,
       bindForm.account_type,
-      bindForm.account_id,
+      String(bindForm.account_id),
       bindForm.is_primary
     )
     ElMessage.success('绑定成功')
@@ -564,6 +532,7 @@ const onBind = async () => {
 };
 
 onMounted(() => {
+  catalog.ensure()
   loadTools()
 });
 onBeforeUnmount(() => { requestVersion++ })

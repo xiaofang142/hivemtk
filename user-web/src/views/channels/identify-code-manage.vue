@@ -41,7 +41,7 @@
         />
         <el-table-column label="渠道">
           <template #default="{ row }">
-            {{ channelName(row.channel_id) }}
+            {{ catalog.channelLabel(row.channel_id) }}
           </template>
         </el-table-column>
         <el-table-column
@@ -88,20 +88,73 @@
         </el-table-column>
       </el-table>
 
-      <div class="create-bar">
-        <el-select
-          v-model="newChannelId"
-          placeholder="选择尚未生成识别码的渠道"
-          clearable
-          style="width: 260px"
+      <h3 class="section-title">
+        {{ $t('channels.accountIdentifyCode') }}
+      </h3>
+      <el-table
+        v-loading="loading"
+        :data="accountRows"
+        size="small"
+        border
+        stripe
+      >
+        <el-table-column
+          prop="id"
+          label="账号 ID"
+          width="90"
+        />
+        <el-table-column
+          prop="name"
+          label="账号名称"
+          min-width="160"
+          show-overflow-tooltip
+        />
+        <el-table-column label="渠道">
+          <template #default="{ row }">
+            {{ catalog.channelLabel(row.channel_id) }}
+          </template>
+        </el-table-column>
+        <el-table-column
+          prop="identify_code"
+          :label="$t('channels.accountIdentifyCode')"
+          min-width="240"
+          show-overflow-tooltip
+        />
+        <el-table-column
+          label="操作"
+          width="150"
+          fixed="right"
         >
-          <el-option
-            v-for="c in channels"
-            :key="c.id"
-            :label="c.name"
-            :value="c.id"
-          />
-        </el-select>
+          <template #default="{ row }">
+            <el-button
+              link
+              type="primary"
+              size="small"
+              @click="copyCode(row.identify_code)"
+            >
+              复制
+            </el-button>
+            <el-button
+              link
+              type="warning"
+              size="small"
+              :loading="rotatingAccountId === row.id"
+              @click="resetAccountCode(row)"
+            >
+              {{ $t('channels.resetAccountCode') }}
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <div class="create-bar">
+        <ChannelSelect
+          v-model="newChannelId"
+          value-key="id"
+          include-disabled
+          placeholder="选择尚未生成识别码的渠道"
+          style="width: 260px"
+        />
         <el-button
           type="primary"
           size="small"
@@ -117,37 +170,31 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import channelAccountApi from '@/api/channelAccount.js'
+import channelCatalogApi from '@/api/channelCatalog.js'
 import channelIdentifyCodeApi from '@/api/channelIdentifyCode.js'
+import ChannelSelect from '@/components/ChannelSelect.vue'
+import { useChannelCatalogStore } from '@/stores/channelCatalog'
 
+const catalog = useChannelCatalogStore()
 const loading = ref(false)
 const rotating = ref(false)
+const rotatingAccountId = ref(null)
 const rotationError = ref('')
 const rows = ref([])
-const channels = ref([])
+const accountRows = ref([])
 const newChannelId = ref(null)
-
-const channelMap = computed(() => {
-  const m = {}
-  for (const c of channels.value) m[c.id] = c.name
-  return m
-})
-
-function channelName(id) {
-  return channelMap.value[id] || `- (${id})`
-}
 
 async function loadList() {
   loading.value = true
   try {
-    const [codes, chans] = await Promise.all([
+    const [codes, accounts] = await Promise.all([
       channelIdentifyCodeApi.list(),
-      channelAccountApi.listChannels()
+      channelCatalogApi.managedAccounts()
     ])
     rows.value = codes?.list || codes || []
-    channels.value = chans?.list || chans || []
+    accountRows.value = accounts?.list || accounts || []
   } catch (e) {
     ElMessage.error('加载识别码失败：' + (e.message || '未知错误'))
   } finally {
@@ -188,7 +235,7 @@ function isConfirmCancel(error) {
 
 function resetCode(row) {
   ElMessageBox.confirm(
-    `确认重置渠道「${channelName(row.channel_id)}」的识别码？旧码仅在短暂在途窗口内有效。`,
+    `确认重置渠道「${catalog.channelLabel(row.channel_id)}」的识别码？旧码仅在短暂在途窗口内有效。`,
     '提示',
     { type: 'warning' }
   ).then(() => rotate(row.channel_id)).catch((error) => {
@@ -200,6 +247,32 @@ function resetCode(row) {
   })
 }
 
+async function resetAccountCode(row) {
+  if (rotatingAccountId.value != null) return
+  try {
+    await ElMessageBox.confirm(
+      `确认重置账号「${row.name}」的识别码？旧码仅在短暂在途窗口内有效。`,
+      '提示',
+      { type: 'warning' }
+    )
+  } catch (e) {
+    if (e === 'cancel' || e === 'close') return
+  }
+  rotatingAccountId.value = row.id
+  rotationError.value = ''
+  try {
+    const res = await channelIdentifyCodeApi.rotateForAccount(row.channel_id, row.id)
+    const code = res?.code || res?.data?.code || ''
+    ElMessage.success(code ? `已重置，新识别码：${code}` : '已重置识别码')
+    await Promise.all([loadList(), catalog.ensure(true)])
+  } catch (e) {
+    rotationError.value = `识别码操作失败：${e?.message || '未知错误'}`
+    ElMessage.error(rotationError.value)
+  } finally {
+    rotatingAccountId.value = null
+  }
+}
+
 async function generateCode() {
   if (!newChannelId.value || rotating.value) return
   const channelId = newChannelId.value
@@ -207,10 +280,14 @@ async function generateCode() {
   await rotate(channelId)
 }
 
-onMounted(loadList)
+onMounted(async () => {
+  await catalog.ensure()
+  await loadList()
+})
 </script>
 
 <style scoped>
 .card-header { display: flex; justify-content: space-between; align-items: center; }
+.section-title { margin: 20px 0 8px; font-size: 15px; }
 .create-bar { margin-top: 16px; display: flex; gap: 12px; align-items: center; }
 </style>

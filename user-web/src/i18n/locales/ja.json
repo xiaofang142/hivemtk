@@ -15,7 +15,12 @@
     "serviceBindingLabel": "{name} · SageX 接続（QQ / 個人用 WeChat）",
     "editBinding": "接続設定を編集",
     "bindingName": "会社名またはチーム名",
-    "bindingCode": "接続設定コード"
+    "bindingCode": "接続設定コード",
+    "toggleOnlyHint": "Channels are maintained centrally; this page only toggles them for your tenant.",
+    "enabledOnlyHint": "Dropdowns list only enabled channels and their active accounts.",
+    "accountIdentifyCode": "Account access code",
+    "resetAccountCode": "Reset account access code",
+    "noEnabledChannel": "No enabled channel yet. Enable one in channel management first."
   },
   "clue": {
     "updated": "リードを更新しました",

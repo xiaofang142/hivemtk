@@ -95,6 +95,14 @@
           show-overflow-tooltip
         />
         <el-table-column
+          label="来源渠道"
+          min-width="120"
+        >
+          <template #default="{ row }">
+            {{ catalog.channelLabel(row.source_channel) || '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column
           prop="owner_user_id"
           label="负责人"
           min-width="90"
@@ -168,11 +176,14 @@
         <el-form-item label="行业">
           <el-input v-model="form.industry" />
         </el-form-item>
-        <el-form-item label="来源账号">
-          <el-input v-model="form.source_account_id" />
-        </el-form-item>
         <el-form-item label="来源渠道">
-          <el-input v-model="form.source_channel" />
+          <ChannelSelect v-model="form.source_channel" />
+        </el-form-item>
+        <el-form-item label="来源账号">
+          <ChannelAccountSelect
+            v-model="form.source_account_id"
+            :channel="form.source_channel"
+          />
         </el-form-item>
         <el-form-item label="负责人ID">
           <el-input-number
@@ -209,6 +220,11 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { crmApi } from '@/api/crm'
 import WorkflowNavigation from '@/components/WorkflowNavigation.vue'
+import ChannelSelect from '@/components/ChannelSelect.vue'
+import ChannelAccountSelect from '@/components/ChannelAccountSelect.vue'
+import { useChannelCatalogStore } from '@/stores/channelCatalog'
+
+const catalog = useChannelCatalogStore()
 
 const workflowLinks = [
   { key: 'dedupe', path: '/crm/dedupe' },
@@ -328,7 +344,10 @@ function view360(row) {
   router.push({ path: `/crm/profile360/${row.id}` })
 }
 
-onMounted(fetchList)
+onMounted(async () => {
+  catalog.ensure()
+  await fetchList()
+})
 </script>
 
 <style scoped>

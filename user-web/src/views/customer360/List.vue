@@ -11,45 +11,15 @@
           clearable
         />
         <div class="filter-row">
-          <el-select
+          <ChannelSelect
             v-model="filters.source_channel"
-            clearable
             placeholder="来源渠道"
             size="small"
-          >
-            <el-option
-              label="抖音"
-              value="douyin"
-            />
-            <el-option
-              label="小红书"
-              value="xiaohongshu"
-            />
-            <el-option
-              label="微信"
-              value="wechat"
-            />
-            <el-option
-              label="企微"
-              value="wecom"
-            />
-            <el-option
-              label="WhatsApp"
-              value="whatsapp"
-            />
-            <el-option
-              label="Telegram"
-              value="telegram"
-            />
-            <el-option
-              label="Web"
-              value="web"
-            />
-          </el-select>
-          <el-input
+          />
+          <ChannelAccountSelect
             v-model="filters.source_account_id"
-            clearable
-            placeholder="来源账号ID"
+            :channel="filters.source_channel"
+            placeholder="来源账号"
             size="small"
           />
         </div>
@@ -93,7 +63,7 @@
             show-overflow-tooltip
           >
             <template #default="{ row }">
-              {{ getChannelLabel(row.source) || '-' }}
+              {{ catalog.channelLabel(row.source) || '-' }}
             </template>
           </el-table-column>
         </el-table>
@@ -157,7 +127,7 @@
             {{ current.wechat }}
           </el-descriptions-item>
           <el-descriptions-item label="来源渠道">
-            {{ getChannelLabel(current.sourceChannel || current.source) || '-' }}
+            {{ catalog.channelLabel(current.sourceChannel || current.source) || '-' }}
           </el-descriptions-item>
           <el-descriptions-item label="来源账号">
             {{ current.sourceAccountId || '-' }}
@@ -266,7 +236,7 @@
                 :timestamp="item.time"
                 :type="item.direction === 'in' ? 'primary' : 'success'"
               >
-                <h4>{{ getChannelLabel(item.channel) }} - {{ item.direction === 'in' ? '客户' : '我方' }}</h4>
+                <h4>{{ catalog.channelLabel(item.channel) }} - {{ item.direction === 'in' ? '客户' : '我方' }}</h4>
                 <p>{{ item.content }}</p>
               </el-timeline-item>
             </el-timeline>
@@ -324,7 +294,7 @@
                 width="100"
               >
                 <template #default="{ row }">
-                  {{ getChannelLabel(row.platform) }}
+                  {{ catalog.channelLabel(row.platform) }}
                 </template>
               </el-table-column>
               <el-table-column
@@ -455,7 +425,7 @@
                       type="info"
                       effect="plain"
                     >
-                      {{ item.channel }}
+                      {{ catalog.channelLabel(item.channel) }}
                     </el-tag>
                     <el-tag
                       v-if="item.reminder_id"
@@ -595,9 +565,9 @@
           </el-select>
         </el-form-item>
         <el-form-item label="渠道">
-          <el-input
+          <ChannelSelect
             v-model="followupRecordForm.channel"
-            placeholder="如 wechat/douyin/email"
+            placeholder="请选择渠道"
           />
         </el-form-item>
         <el-form-item label="关联提醒ID">
@@ -660,7 +630,9 @@ import { createSession, sendMessage } from '@/api/customerSession.js'
 import { getExternalOrdersByCustomer } from '@/api/integration.js'
 import { followupRecordApi } from '@/api/followupRecord.js'
 import { toList } from '@/utils/list'
-import { getChannelLabel } from '@/constants/channel';
+import ChannelSelect from '@/components/ChannelSelect.vue'
+import ChannelAccountSelect from '@/components/ChannelAccountSelect.vue'
+import { useChannelCatalogStore } from '@/stores/channelCatalog'
 import {
   getCustomerStatusLabel as getCustomerStatusLabelFromConst,
   getCustomerStatusTagType as getCustomerStatusTagTypeFromConst,
@@ -669,6 +641,7 @@ import { getEnabledLabel, getEnabledTagType } from '@/constants/enabled';
 import { useRoute } from 'vue-router'
 import { fmtTime } from '@/utils/time'
 const route = useRoute()
+const catalog = useChannelCatalogStore()
 
 const getCustomerStatusLabel = (s) => getCustomerStatusLabelFromConst(s) || getEnabledLabel(s);
 const getCustomerStatusTagType = (s) => getCustomerStatusTagTypeFromConst(s) || getEnabledTagType(s)
@@ -984,6 +957,7 @@ const removeTag = async (tag) => {
 }
 
 onMounted(async () => {
+  catalog.ensure()
   await loadCustomers()
   const id = route.query?.id
   if (typeof id === 'string' && id) await selectCustomer({ id })

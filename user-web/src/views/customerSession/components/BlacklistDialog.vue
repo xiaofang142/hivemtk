@@ -36,7 +36,7 @@
         width="100"
       >
         <template #default="{ row }">
-          {{ getChannelLabel(row.platform ?? row.Platform) }}
+          {{ catalog.channelLabel(row.platform ?? row.Platform) }}
         </template>
       </el-table-column>
       <el-table-column
@@ -96,8 +96,12 @@
 
 <script setup>
 // 黑名单管理弹窗(由 List.vue 原样迁出,渲染与交互保持一致)
-import { getChannelLabel } from '@/constants/channel'
+import { onMounted } from 'vue'
+import { useChannelCatalogStore } from '@/stores/channelCatalog'
 import { formatTime } from '../composables/useSessionFilters'
+
+const catalog = useChannelCatalogStore()
+onMounted(() => { catalog.ensure() })
 
 defineProps({
   modelValue: { type: Boolean, default: false },

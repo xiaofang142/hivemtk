@@ -16,6 +16,8 @@ declare module 'vue' {
     ArrowRight: typeof import('@element-plus/icons-vue')['ArrowRight']
     Breadcrumb: typeof import('./../components/Breadcrumb.vue')['default']
     CashierDialog: typeof import('./../components/CashierDialog.vue')['default']
+    ChannelAccountSelect: typeof import('./../components/ChannelAccountSelect.vue')['default']
+    ChannelSelect: typeof import('./../components/ChannelSelect.vue')['default']
     ChatDotRound: typeof import('@element-plus/icons-vue')['ChatDotRound']
     Check: typeof import('@element-plus/icons-vue')['Check']
     CircleCloseFilled: typeof import('@element-plus/icons-vue')['CircleCloseFilled']

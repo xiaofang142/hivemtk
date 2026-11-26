@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
+import { createPinia } from 'pinia'
 import { settle } from './settle-helper'
 import i18n from '@/i18n'
 
@@ -20,6 +21,14 @@ const api = vi.hoisted(() => ({
 }))
 
 vi.mock('@/api/conversionFunnel', () => ({ default: api }))
+vi.mock('@/api/channelCatalog.js', () => ({ default: {
+  catalog: vi.fn().mockResolvedValue({ channels: [], accounts: [] }),
+  managedAccounts: vi.fn().mockResolvedValue({ list: [] })
+} }))
+vi.mock('@/api/channelAccount.js', () => ({ default: {
+  listChannels: vi.fn().mockResolvedValue([]),
+  listAccounts: vi.fn().mockResolvedValue([])
+} }))
 vi.mock('@/utils/echarts', () => ({
   safeInit: vi.fn(() => ({ setOption: vi.fn(), resize: vi.fn(), dispose: vi.fn() }))
 }))
@@ -45,7 +54,7 @@ async function mountPage(stages = STAGES) {
     conversion: 20
   })
   api.getStageDetails.mockResolvedValue({ stage: 'clue', name: '线索', count: 6, top_sources: [] })
-  const wrapper = mount(List, { attachTo: document.body, global: { plugins: [ElementPlus, i18n] } })
+  const wrapper = mount(List, { attachTo: document.body, global: { plugins: [createPinia(), ElementPlus, i18n] } })
   await settle(wrapper)
   return wrapper
 }

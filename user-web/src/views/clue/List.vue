@@ -297,7 +297,7 @@
           show-overflow-tooltip
         >
           <template #default="{ row }">
-            <div>{{ getChannelLabel(row.source_channel) || row.source_channel || '-' }}</div>
+            <div>{{ catalog.channelLabel(row.source_channel) || row.source_channel || '-' }}</div>
             <div style="color:#909399;font-size:12px">
               {{ row.source_account_id || '-' }}
             </div>
@@ -339,7 +339,7 @@
               effect="plain"
               size="small"
             >
-              {{ getChannelLabel(row.source_id) || row.source_id || '-' }}
+              {{ catalog.channelLabel(row.source_id) || row.source_id || '-' }}
             </el-tag>
           </template>
         </el-table-column>
@@ -529,7 +529,7 @@
           {{ current.address || '-' }}
         </el-descriptions-item>
         <el-descriptions-item label="来源">
-          {{ getChannelLabel(current.source_id) || current.source_id || '-' }}
+          {{ catalog.channelLabel(current.source_id) || current.source_id || '-' }}
         </el-descriptions-item>
         <el-descriptions-item label="验证">
           {{ current.is_verify >= 1 ? '已验证' : '未验证' }}
@@ -643,7 +643,10 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Refresh, RefreshRight, Upload } from '@element-plus/icons-vue'
 import { clueApi } from '@/api/clue'
-import { getChannelLabel, getChannelTagType } from '@/constants/channel'
+import { getChannelTagType } from '@/constants/channel'
+import { useChannelCatalogStore } from '@/stores/channelCatalog'
+
+const catalog = useChannelCatalogStore()
 import { getClueTypeLabel, CLUE_TYPE_OPTIONS } from '@/constants/cardPlatform';
 
 const cluelist = ref([]);
@@ -923,6 +926,7 @@ const formatTime = (val) => {
 };
 
 onMounted(() => {
+  catalog.ensure()
   fetchCluelist()
 })
 </script>

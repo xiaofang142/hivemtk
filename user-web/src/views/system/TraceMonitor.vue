@@ -54,19 +54,11 @@
             />
           </el-form-item>
           <el-form-item label="渠道">
-            <el-select
+            <ChannelSelect
               v-model="form.channel"
               placeholder="全部"
-              clearable
               style="width: 160px"
-            >
-              <el-option
-                v-for="c in channels"
-                :key="c"
-                :label="c"
-                :value="c"
-              />
-            </el-select>
+            />
           </el-form-item>
           <el-form-item>
             <el-button
@@ -350,10 +342,13 @@
           empty-text="暂无数据"
         >
           <el-table-column
-            prop="channel"
             label="渠道"
             width="160"
-          />
+          >
+            <template #default="{ row }">
+              {{ catalog.channelLabel(row.channel) }}
+            </template>
+          </el-table-column>
           <el-table-column
             prop="node"
             label="节点"
@@ -423,10 +418,13 @@
           empty-text="暂无数据"
         >
           <el-table-column
-            prop="channel"
             label="渠道"
             width="180"
-          />
+          >
+            <template #default="{ row }">
+              {{ catalog.channelLabel(row.channel) }}
+            </template>
+          </el-table-column>
           <el-table-column
             prop="p50_ms"
             label="P50(ms)"
@@ -511,10 +509,13 @@
             width="180"
           />
           <el-table-column
-            prop="channel"
             label="渠道"
             width="120"
-          />
+          >
+            <template #default="{ row }">
+              {{ catalog.channelLabel(row.channel) }}
+            </template>
+          </el-table-column>
           <el-table-column
             prop="direction"
             label="方向"
@@ -579,10 +580,13 @@
             width="180"
           />
           <el-table-column
-            prop="channel"
             label="渠道"
             width="120"
-          />
+          >
+            <template #default="{ row }">
+              {{ catalog.channelLabel(row.channel) }}
+            </template>
+          </el-table-column>
           <el-table-column
             prop="node_count"
             label="节点数"
@@ -662,10 +666,13 @@
                 width="200"
               />
               <el-table-column
-                prop="channel"
                 label="渠道"
                 width="120"
-              />
+              >
+                <template #default="{ row }">
+                  {{ catalog.channelLabel(row.channel) }}
+                </template>
+              </el-table-column>
               <el-table-column
                 prop="message_count"
                 label="缺口数"
@@ -689,10 +696,13 @@
                 width="200"
               />
               <el-table-column
-                prop="channel"
                 label="渠道"
                 width="120"
-              />
+              >
+                <template #default="{ row }">
+                  {{ catalog.channelLabel(row.channel) }}
+                </template>
+              </el-table-column>
               <el-table-column
                 prop="age_min"
                 label="滞留(分)"
@@ -716,10 +726,13 @@
                 width="200"
               />
               <el-table-column
-                prop="channel"
                 label="渠道"
                 width="120"
-              />
+              >
+                <template #default="{ row }">
+                  {{ catalog.channelLabel(row.channel) }}
+                </template>
+              </el-table-column>
               <el-table-column
                 prop="age_min"
                 label="滞留(分)"
@@ -743,10 +756,13 @@
                 width="200"
               />
               <el-table-column
-                prop="channel"
                 label="渠道"
                 width="120"
-              />
+              >
+                <template #default="{ row }">
+                  {{ catalog.channelLabel(row.channel) }}
+                </template>
+              </el-table-column>
             </el-table>
           </el-collapse-item>
           <el-collapse-item
@@ -760,10 +776,13 @@
               empty-text="无"
             >
               <el-table-column
-                prop="channel"
                 label="渠道"
                 width="140"
-              />
+              >
+                <template #default="{ row }">
+                  {{ catalog.channelLabel(row.channel) }}
+                </template>
+              </el-table-column>
               <el-table-column
                 prop="node"
                 label="节点"
@@ -862,10 +881,13 @@
             </template>
           </el-table-column>
           <el-table-column
-            prop="channel"
             label="渠道"
             width="120"
-          />
+          >
+            <template #default="{ row }">
+              {{ catalog.channelLabel(row.channel) }}
+            </template>
+          </el-table-column>
           <el-table-column
             prop="trace_id"
             label="Trace"
@@ -980,11 +1002,13 @@ import { useI18n } from 'vue-i18n'
 import { MonitorApi as monitorApi } from '@/api/monitor'
 import { fmtTime } from '@/utils/time'
 import { durationText, spanDurationText, operationTime, flattenTraceSpans, buildTraceQuery } from '@/utils/traceTiming'
+import ChannelSelect from '@/components/ChannelSelect.vue'
+import { useChannelCatalogStore } from '@/stores/channelCatalog'
 
 const { t } = useI18n()
+const catalog = useChannelCatalogStore()
+catalog.ensure()
 
-// 渠道筛选下拉：与 bridge 渠道注册表对齐（2026-11-12 补 bilibili——原清单有 weibo 缺 bilibili）
-const channels = ['douyin', 'xiaohongshu', 'wechat', 'telegram', 'whatsapp', 'instagram', 'facebook', 'line', 'kuaishou', 'weibo', 'bilibili']
 
 const activeTab = ref('trace')
 const form = reactive({ trace_id: '', turn_id: '', account_id: '', conversation_id: '', msg_id: '', channel: '' })

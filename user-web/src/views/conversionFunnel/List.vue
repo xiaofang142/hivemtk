@@ -175,7 +175,7 @@
         >
           <el-table-column label="来源(账号)">
             <template #default="{ row }">
-              {{ getChannelLabel(row.source) }}
+              {{ catalog.channelLabel(row.source) }}
             </template>
           </el-table-column>
           <el-table-column
@@ -189,9 +189,10 @@
 </template>
 
 <script>
+import { onMounted } from 'vue'
 import { safeInit } from '@/utils/echarts'
 import ConversionFunnelApi from '@/api/conversionFunnel'
-import { getChannelLabel } from '@/constants/channel'
+import { useChannelCatalogStore } from '@/stores/channelCatalog'
 
 // 按阶段名取计数，不按数组下标取。
 //
@@ -207,6 +208,11 @@ function countByStage(stages, key) {
 
 export default {
   name: 'ConversionFunnelList',
+  setup() {
+    const catalog = useChannelCatalogStore()
+    onMounted(() => { catalog.ensure() })
+    return { catalog }
+  },
   data() {
     return {
       report: null,
@@ -238,7 +244,6 @@ export default {
     }
   },
   methods: {
-    getChannelLabel,
     async loadAll() {
       const res = await ConversionFunnelApi.getFunnel({})
       if (this._destroyed) return

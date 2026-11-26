@@ -315,7 +315,7 @@
           width="100"
         >
           <template #default="{ row }">
-            {{ getChannelLabel(row.platform) }}
+            {{ catalog.channelLabel(row.platform) }}
           </template>
         </el-table-column>
         <el-table-column
@@ -360,7 +360,9 @@ import {
   goOffline,
   getAgentSessions
 } from '@/api/customerService.js'
-import { getChannelLabel } from '@/constants/channel';
+import { useChannelCatalogStore } from '@/stores/channelCatalog'
+
+const catalog = useChannelCatalogStore()
 import { isUserReportedError } from '@/utils/errorReporting';
 import { getEnabledLabel as _getEnabledLabel, getEnabledTagType as _getEnabledTagType } from '@/constants/enabled';
 import { AGENT_STATUS, SESSION_STATUS, getStatusLabel, getStatusTagType } from '@/constants/status';
@@ -504,7 +506,10 @@ const loadSessions = async (row) => {
   }
 }
 
-onMounted(() => loadAgents())
+onMounted(() => {
+  catalog.ensure()
+  loadAgents()
+})
 </script>
 
 <style scoped lang="scss">

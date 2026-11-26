@@ -74,10 +74,13 @@
           </template>
         </el-table-column>
         <el-table-column
-          prop="scope_id"
-          label="范围ID"
-          width="100"
-        />
+          label="范围"
+          width="140"
+        >
+          <template #default="{ row }">
+            {{ scopeIdLabel(row) }}
+          </template>
+        </el-table-column>
         <el-table-column
           label="关键词"
           min-width="200"
@@ -158,11 +161,22 @@
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="范围ID">
+        <el-form-item :label="form.scope === 'global' ? '范围' : '范围选择'">
+          <ChannelSelect
+            v-if="form.scope === 'channel'"
+            v-model="form.scope_id"
+            value-key="id"
+            placeholder="请选择渠道"
+          />
+          <ChannelAccountSelect
+            v-else-if="form.scope === 'account'"
+            v-model="form.scope_id"
+            placeholder="请选择账号"
+          />
           <el-input
-            v-model.number="form.scope_id"
-            :disabled="form.scope === 'global'"
-            placeholder="channel/account 必填"
+            v-else
+            :model-value="'全部渠道'"
+            disabled
           />
         </el-form-item>
         <el-form-item label="关键词">
@@ -213,6 +227,11 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { leadsApi } from '@/api/leads'
 import WorkflowNavigation from '@/components/WorkflowNavigation.vue'
+import ChannelSelect from '@/components/ChannelSelect.vue'
+import ChannelAccountSelect from '@/components/ChannelAccountSelect.vue'
+import { useChannelCatalogStore } from '@/stores/channelCatalog'
+
+const catalog = useChannelCatalogStore()
 
 const workflowLinks = [
   { key: 'notifyRoutes', path: '/leads/notify-routes' },
@@ -233,6 +252,12 @@ const form = reactive({
 
 function scopeLabel(scope) {
   return { global: '全局', channel: '渠道', account: '账号' }[scope] || scope
+}
+
+function scopeIdLabel(row) {
+  if (row.scope === 'channel') return catalog.channelLabel(row.scope_id)
+  if (row.scope === 'account') return catalog.accountLabel(row.scope_id)
+  return '-'
 }
 
 function scopeTag(scope) {
@@ -315,7 +340,10 @@ async function remove(row) {
   }
 }
 
-onMounted(fetchList)
+onMounted(async () => {
+  catalog.ensure()
+  await fetchList()
+})
 </script>
 
 <style scoped>

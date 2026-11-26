@@ -94,16 +94,22 @@
           show-overflow-tooltip
         />
         <el-table-column
-          prop="source_channel"
           label="来源渠道"
           width="120"
-        />
+        >
+          <template #default="{ row }">
+            {{ catalog.channelLabel(row.source_channel) || '-' }}
+          </template>
+        </el-table-column>
         <el-table-column
-          prop="source_account_id"
           label="来源账号"
           min-width="160"
           show-overflow-tooltip
-        />
+        >
+          <template #default="{ row }">
+            {{ catalog.accountLabel(row.source_account_id) || '-' }}
+          </template>
+        </el-table-column>
         <el-table-column
           prop="company_id"
           label="公司ID"
@@ -133,6 +139,9 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { crossAccountSearchApi } from '@/api/crossAccountSearch'
+import { useChannelCatalogStore } from '@/stores/channelCatalog'
+
+const catalog = useChannelCatalogStore()
 
 const loading = ref(false)
 const rows = ref([])
@@ -189,7 +198,10 @@ function reset() {
   search()
 }
 
-onMounted(search)
+onMounted(() => {
+  catalog.ensure()
+  search()
+})
 </script>
 
 <style scoped>

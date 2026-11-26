@@ -40,15 +40,21 @@
           </template>
         </el-table-column>
         <el-table-column
-          prop="channel_account_id"
-          label="账号ID"
-          width="90"
-        />
+          label="账号"
+          width="140"
+        >
+          <template #default="{ row }">
+            {{ catalog.accountLabel(row.channel_account_id) }}
+          </template>
+        </el-table-column>
         <el-table-column
-          prop="channel"
           label="渠道"
           width="110"
-        />
+        >
+          <template #default="{ row }">
+            {{ catalog.channelLabel(row.channel) }}
+          </template>
+        </el-table-column>
         <el-table-column
           label="通知人"
           min-width="140"
@@ -113,14 +119,14 @@
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="渠道账号ID">
-          <el-input
-            v-model.number="form.channel_account_id"
+        <el-form-item label="渠道账号">
+          <ChannelAccountSelect
+            v-model="form.channel_account_id"
             placeholder="account 层级必填"
           />
         </el-form-item>
         <el-form-item label="渠道">
-          <el-input
+          <ChannelSelect
             v-model="form.channel"
             placeholder="channel 层级必填"
           />
@@ -177,7 +183,11 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { leadsApi } from '@/api/leads'
+import ChannelSelect from '@/components/ChannelSelect.vue'
+import ChannelAccountSelect from '@/components/ChannelAccountSelect.vue'
+import { useChannelCatalogStore } from '@/stores/channelCatalog'
 
+const catalog = useChannelCatalogStore()
 const loading = ref(false)
 const saving = ref(false)
 const rows = ref([])
@@ -253,7 +263,10 @@ async function remove(row) {
   }
 }
 
-onMounted(fetchList)
+onMounted(async () => {
+  catalog.ensure()
+  await fetchList()
+})
 </script>
 
 <style scoped>

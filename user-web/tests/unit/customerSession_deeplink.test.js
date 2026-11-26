@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ElementPlus, { ElMessage } from 'element-plus'
+import { createPinia } from 'pinia'
 import { settle } from './settle-helper'
 
 // 客户会话页的深链入口腿：CSAT 看板「查看会话」以 /#/customerSession/list?session_id=… 打开本页，
@@ -113,7 +114,7 @@ async function mountPage() {
   const wrapper = mount(List, {
     attachTo: document.body,
     global: {
-      plugins: [ElementPlus, i18n],
+      plugins: [createPinia(), ElementPlus, i18n],
       // 右栏客户 360° 与黑名单弹窗有自己的数据流与端点，这里只测左栏选中这件事。
       stubs: { CustomerProfilePanel: true, BlacklistDialog: true }
     }

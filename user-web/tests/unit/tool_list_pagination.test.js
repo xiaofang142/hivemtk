@@ -1,12 +1,25 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ElementPlus, { ElMessage } from 'element-plus'
+import { createPinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
 import zh from '@/i18n/locales/zh.json'
 import { settle } from './settle-helper'
 
 const api = vi.hoisted(() => ({ listTools: vi.fn(), updateToolStatus: vi.fn(), bindToolAccount: vi.fn() }))
 vi.mock('@/api/aiTool.js', () => api)
+vi.mock('@/api/channelCatalog.js', () => ({ default: {
+  catalog: vi.fn().mockResolvedValue({ channels: [], accounts: [] }),
+  managedAccounts: vi.fn().mockResolvedValue({ list: [] }),
+  setTenantEnabled: vi.fn(),
+  updateManagedAccount: vi.fn(),
+  setAccountStatus: vi.fn()
+} }))
+vi.mock('@/api/channelAccount.js', () => ({ default: {
+  listChannels: vi.fn().mockResolvedValue([]),
+  listAccounts: vi.fn().mockResolvedValue([]),
+  accountOptions: vi.fn().mockResolvedValue([])
+} }))
 import ToolList from '@/views/aiAgent/ToolManagement/ToolList.vue'
 
 const rows = (count) => Array.from({ length: count }, (_, i) => ({
@@ -32,7 +45,7 @@ async function open(count = 21) {
   database = rows(count)
   wrapper = mount(ToolList, {
     attachTo: document.body,
-    global: { plugins: [ElementPlus, createI18n({ legacy: false, locale: 'zh', messages: { zh }, missingWarn: false, fallbackWarn: false })] },
+    global: { plugins: [createPinia(), ElementPlus, createI18n({ legacy: false, locale: 'zh', messages: { zh }, missingWarn: false, fallbackWarn: false })] },
   })
   await settle(wrapper)
 }

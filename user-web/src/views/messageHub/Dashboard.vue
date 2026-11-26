@@ -149,7 +149,7 @@
           width="120"
         >
           <template #default="{ row }">
-            {{ getChannelLabel(row.platform) }}
+            {{ catalog.channelLabel(row.platform) }}
           </template>
         </el-table-column>
         <el-table-column
@@ -212,13 +212,15 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { safeInit, safeDispose } from '@/utils/echarts'
 import { http } from '@/utils/request'
-import { getChannelLabel } from '@/constants/channel'
+import { useChannelCatalogStore } from '@/stores/channelCatalog'
 import { fmtTime } from '@/utils/time'
 
 // 窗口与刷新都只有一处事实源：卡片副标题、图表标题、请求参数三处都从这里长出来，
 // 免得"最近 1 小时"这句文案和实际发出去的时间界各说各话。
 const WINDOW_HOURS = 1
 const REFRESH_MS = 30000
+
+const catalog = useChannelCatalogStore()
 
 const stats = ref({
   total: 0,
@@ -300,7 +302,7 @@ function renderChart() {
       grid: { left: 48, right: 24, top: 32, bottom: 56 },
       xAxis: {
         type: 'category',
-        data: rows.map((r) => getChannelLabel(r.key)),
+        data: rows.map((r) => catalog.channelLabel(r.key)),
         axisLabel: { interval: 0, rotate: rows.length > 6 ? 30 : 0 }
       },
       yAxis: { type: 'value', name: '条数', minInterval: 1 },
@@ -382,7 +384,7 @@ async function batchRetry() {
 async function retryOne(row) {
   try {
     await ElMessageBox.confirm(
-      `确认重试死信 #${row.id}（${getChannelLabel(row.platform)} · ${directionLabel(row.direction)}）？将重新入队投递。`,
+      `确认重试死信 #${row.id}（${catalog.channelLabel(row.platform)} · ${directionLabel(row.direction)}）？将重新入队投递。`,
       '重试死信',
       { type: 'warning', confirmButtonText: '重试', cancelButtonText: '取消' }
     )
@@ -402,7 +404,7 @@ async function dropOne(row) {
   // 丢弃是不可逆删除（DELETE），单击即毁：必须二次确认（2026-11-16 UI 全量回归发现）。
   try {
     await ElMessageBox.confirm(
-      `确认丢弃死信 #${row.id}（${getChannelLabel(row.platform)} · ${directionLabel(row.direction)}）？该记录将被永久删除，不再重试。`,
+      `确认丢弃死信 #${row.id}（${catalog.channelLabel(row.platform)} · ${directionLabel(row.direction)}）？该记录将被永久删除，不再重试。`,
       '丢弃死信',
       { type: 'warning', confirmButtonText: '丢弃', cancelButtonText: '取消' }
     )
@@ -419,6 +421,7 @@ async function dropOne(row) {
 }
 
 onMounted(() => {
+  catalog.ensure()
   load()
   timer = setInterval(load, REFRESH_MS)
 })

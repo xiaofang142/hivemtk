@@ -118,7 +118,7 @@
           :key="platform"
           class="platform-bar-item"
         >
-          <span class="platform-name">{{ platformLabel(platform) }}</span>
+          <span class="platform-name">{{ catalog.channelLabel(platform) || '-' }}</span>
           <div class="bar-track">
             <div
               class="bar-fill"
@@ -138,25 +138,17 @@
         class="search-form-content"
       >
         <el-form-item label="平台">
-          <el-select
+          <ChannelSelect
             v-model="searchForm.platform"
             placeholder="全部平台"
-            clearable
             style="width: 140px"
-          >
-            <el-option
-              v-for="p in platformOptions"
-              :key="p"
-              :label="platformLabel(p)"
-              :value="p"
-            />
-          </el-select>
+          />
         </el-form-item>
         <el-form-item label="账号 ID">
-          <el-input
+          <ChannelAccountSelect
             v-model="searchForm.account_id"
+            :channel="searchForm.platform"
             placeholder="账号 ID"
-            clearable
             style="width: 160px"
           />
         </el-form-item>
@@ -312,16 +304,19 @@
             :type="platformTagType(row.platform)"
             size="small"
           >
-            {{ platformLabel(row.platform) }}
+            {{ catalog.channelLabel(row.platform) || '-' }}
           </el-tag>
         </template>
       </el-table-column>
       <el-table-column
-        prop="account_id"
         label="账号"
         width="120"
         show-overflow-tooltip
-      />
+      >
+        <template #default="{ row }">
+          {{ catalog.accountLabel(row.account_id) || '-' }}
+        </template>
+      </el-table-column>
       <el-table-column
         label="方向"
         width="80"
@@ -539,25 +534,19 @@
           label="平台"
           prop="platform"
         >
-          <el-select
+          <ChannelSelect
             v-model="pushForm.platform"
             placeholder="选择平台"
             style="width: 100%"
-          >
-            <el-option
-              v-for="p in platformOptions"
-              :key="p"
-              :label="platformLabel(p)"
-              :value="p"
-            />
-          </el-select>
+          />
         </el-form-item>
         <el-form-item
           label="账号 ID"
           prop="account_id"
         >
-          <el-input
+          <ChannelAccountSelect
             v-model="pushForm.account_id"
+            :channel="pushForm.platform"
             placeholder="渠道账号 ID"
           />
         </el-form-item>
@@ -713,10 +702,10 @@
               {{ currentMessage.msg_id }}
             </el-descriptions-item>
             <el-descriptions-item label="平台">
-              {{ platformLabel(currentMessage.platform) }}
+              {{ catalog.channelLabel(currentMessage.platform) || '-' }}
             </el-descriptions-item>
             <el-descriptions-item label="账号">
-              {{ currentMessage.account_id }}
+              {{ catalog.accountLabel(currentMessage.account_id) || '-' }}
             </el-descriptions-item>
             <el-descriptions-item label="方向">
               {{ currentMessage.direction === 'inbound' ? '接收' : '发送' }}
@@ -846,9 +835,14 @@ import { Plus, Search, RefreshRight, DataAnalysis, User } from '@element-plus/ic
 import { messageHubApi } from '@/api/messageHub'
 import { getMyAgent } from '@/api/customerService'
 import AgentSocket from '@/utils/agentSocket'
-import { getChannelLabel, getChannelTagType, PLATFORM_GROUP_MEMBERS_REVERSE } from '@/constants/channel';
+import { getChannelTagType, PLATFORM_GROUP_MEMBERS_REVERSE } from '@/constants/channel';
 import { getDirectionLabel, getDirectionTagType } from '@/constants/direction';
 import { getMsgTypeLabel, getMsgTypeTagType } from '@/constants/msgType'
+import ChannelSelect from '@/components/ChannelSelect.vue'
+import ChannelAccountSelect from '@/components/ChannelAccountSelect.vue'
+import { useChannelCatalogStore } from '@/stores/channelCatalog'
+
+const catalog = useChannelCatalogStore()
 
 const loading = ref(false)
 const statsLoading = ref(false)
@@ -865,7 +859,6 @@ let disposed = false
 const messageList = ref([])
 const selectedRows = ref([])
 const stats = ref({})
-const platformOptions = ref([])
 const msgTypeOptions = ref([])
 
 const searchForm = reactive({
@@ -907,7 +900,6 @@ const barWidth = (count) => {
   return Math.round((count / maxPlatformCount.value) * 100)
 }
 
-const platformLabel = (p) => getChannelLabel(p);
 const platformTagType = (p) => getChannelTagType(p)
 
 const formatTime = (t) => {
@@ -982,6 +974,8 @@ const setupRealtime = async () => {
 }
 
 onMounted(async () => {
+  catalog.ensure()
+  // /api/message-hub/platforms 仍为本页业务数据（msg_types）来源；渠道下拉/显示已统一到 catalog。
   await loadPlatforms()
   await Promise.all([fetchMessageList(), loadStats()])
   setupRealtime()
@@ -1000,9 +994,9 @@ const loadPlatforms = async () => {
   try {
     const res = await messageHubApi.getPlatforms()
     // res?. 防同型误报：API 200 但 data 为 null 时 res=null，
-    // 直接 res.platforms 会 TypeError 进 catch 误报「平台选项加载失败」
+    // 直接 res.msg_types 会 TypeError 进 catch 误报「平台选项加载失败」
     // （与 shortLink/List.vue 空数据误报同型，2026-11-13 二次审核补）
-    platformOptions.value = res?.platforms || []
+    // 这里只取本页业务所需的 msg_types；渠道候选项统一由 catalog 提供。
     msgTypeOptions.value = res?.msg_types || []
   } catch (e) {
     console.error('加载平台列表失败', e)
@@ -1144,7 +1138,7 @@ const recallingId = ref(null)
 const handleRecall = async (row) => {
   try {
     await ElMessageBox.confirm(
-      i18n.global.t('messageHubPage.recall.confirm', { id: row.id, platform: platformLabel(row.platform) }),
+      i18n.global.t('messageHubPage.recall.confirm', { id: row.id, platform: catalog.channelLabel(row.platform) || '-' }),
       i18n.global.t('messageHubPage.recall.confirmTitle'),
       { type: 'warning', confirmButtonText: i18n.global.t('messageHubPage.recall.action'), cancelButtonText: '取消' }
     )

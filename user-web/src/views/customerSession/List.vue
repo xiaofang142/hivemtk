@@ -122,7 +122,7 @@
                   size="small"
                   effect="plain"
                 >
-                  {{ getChannelLabel(session.channel) }}
+                  {{ catalog.channelLabel(session.channel) }}
                 </el-tag>
 
                 <el-tag
@@ -155,7 +155,7 @@
             <div class="chat-header">
               <div class="customer-info">
                 <h3>{{ currentSession.customerName }}</h3>
-                <span class="channel">{{ getChannelLabel(currentSession.channel) }}</span>
+                <span class="channel">{{ catalog.channelLabel(currentSession.channel) }}</span>
 
                 <el-tag
                   :type="currentHandler === 'human' ? 'success' : 'info'"
@@ -466,7 +466,7 @@ import { ElMessage } from 'element-plus'
 import { MagicStick, User, ChatLineSquare, Warning } from '@element-plus/icons-vue'
 import { getMyAgent, getOnlineAgents } from '@/api/customerService.js'
 import { getSessions } from '@/api/customerSession.js'
-import { getChannelLabel } from '@/constants/channel'
+import { useChannelCatalogStore } from '@/stores/channelCatalog'
 import { formatTime } from './composables/useSessionFilters'
 import { useSessionFilters } from './composables/useSessionFilters'
 import { useSessionList } from './composables/useSessionList'
@@ -478,6 +478,7 @@ import { fmtTime } from '@/utils/time'
 // —— 共享状态:会话数据源 + 输入框内容(列表/操作/聊天多个职责共同读写) ——
 // 深链入口：CSAT 看板的「查看会话」等按钮以 ?session_id= 打开本页，需在列表就位后选中它
 const route = useRoute()
+const catalog = useChannelCatalogStore()
 const sessions = ref([])
 const inputMsg = ref('')
 // 已结束的会话后端拒收新消息（400「会话状态 closed 不允许发送消息」），
@@ -576,6 +577,7 @@ async function fetchDeepLinkSession(deepLinkId) {
 }
 
 onMounted(async () => {
+  catalog.ensure()
   await loadSessions()
   const deepLinkId = route.query?.session_id
   if (deepLinkId) {
