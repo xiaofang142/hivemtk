@@ -46,8 +46,8 @@ func hasRole(roles []string, want string) bool {
 
 func TestMenuWiring_IndependentChannelsModule(t *testing.T) {
 	node, parent, hits := menuNodeWithParent("channels")
-	if hits != 1 || parent != nil || node == nil {
-		t.Fatalf("渠道应为唯一独立顶级模块：node=%+v parent=%+v hits=%d", node, parent, hits)
+	if hits != 1 || parent == nil || parent.Key != "system" || node == nil {
+		t.Fatalf("渠道应作为系统管理下的二级菜单：node=%+v parent=%+v hits=%d", node, parent, hits)
 	}
 	if len(node.Roles) != 1 || !hasRole(node.Roles, "admin") || OwnerOfMenuKey("channels") != ModuleCore {
 		t.Fatalf("渠道模块须保留管理员边界且属于基座：%+v", node)

@@ -76,7 +76,7 @@ func TestMenuNavigation_AllRoleCeilingsPreserved(t *testing.T) {
 
 // 渠道入口与原八个业务入口必须直接来自后端注册表。
 func TestMenuNavigation_AuthoritativeGroups(t *testing.T) {
-	want := []string{"channels", "workspace", "customer", "leadDiscovery", "aiAgent", "reach", "knowledge", "geoTools", "analytics", "system"}
+	want := []string{"workspace", "customer", "leadDiscovery", "aiAgent", "reach", "knowledge", "geoTools", "analytics", "system"}
 	got := make([]string, 0, len(SystemMenuTree))
 	for _, n := range SystemMenuTree {
 		got = append(got, n.Key)
@@ -117,7 +117,7 @@ func TestMenuNavigation_AuthoritativeGroups(t *testing.T) {
 // 名称按实际页面内容表达，业务 URL 与授权 key 保持稳定。
 func TestMenuNavigation_BusinessLabelsAndPaths(t *testing.T) {
 	want := map[string][2]string{
-		"customer": {"客户与销售", ""}, "aiAgent": {"智能体与客服", ""}, "system": {"系统管理", ""},
+		"customer": {"客户与销售", ""}, "aiAgent": {"客服智能体", ""}, "leadDiscovery": {"线索智能体", ""}, "system": {"系统管理", ""},
 		"geoTools": {"GEO 增长", "/geo-tools/keyword-mining"}, "permissionGroup": {"渠道与集成", ""},
 		"geoBrandConfig":    {"AI 爬虫访问文件", "/geo-tools/brand-config"},
 		"geoConfig":         {"品牌与站点资料", "/geo-tools/config"},

@@ -41,16 +41,6 @@ func (RoleMenuPermission) TableName() string {
 // tests/unit/router_*.test.js 用它把每个菜单 path 与对应路由模块钉在一起。
 var SystemMenuTree = []SystemMenuNode{
 	{
-		Key: "channels", Title: "渠道", Icon: "Connection",
-		Roles: []string{"admin"},
-		Children: []SystemMenuNode{
-			// 保留权限键和深链；前端投影为一个入口，模块内部切换管理面。
-			{Key: "channelManage", Title: "渠道", Icon: "SetUp", Path: "/channels/manage", Roles: []string{"admin"}},
-			{Key: "channelAccount", Title: "渠道账号", Icon: "Connection", Path: "/channels/accounts", Roles: []string{"admin"}},
-			{Key: "channelIdentifyCode", Title: "识别码", Icon: "Key", Path: "/channels/identify-codes", Roles: []string{"admin"}},
-		},
-	},
-	{
 		Key: "workspace", Title: "工作台", Icon: "Monitor",
 		Roles: []string{"admin", "viewer", "staff"},
 		Children: []SystemMenuNode{
@@ -100,7 +90,7 @@ var SystemMenuTree = []SystemMenuNode{
 		// 线索发现：2026-11-26 从「客户与销售」抽出为独立顶级模块，统一收口
 		// 线索发掘、判定、归档、规则、智能体与通知路由。key 与深链保持不变，
 		// 仅变更父分组，避免已有角色授权行失效。
-		Key: "leadDiscovery", Title: "线索发现", Icon: "Search",
+		Key: "leadDiscovery", Title: "线索智能体", Icon: "Search",
 		Roles: []string{"admin", "viewer", "staff"},
 		Children: []SystemMenuNode{
 			{Key: "leadMining", Title: "线索挖掘", Icon: "Search", Path: "/lead-mining/index"},
@@ -115,7 +105,7 @@ var SystemMenuTree = []SystemMenuNode{
 		},
 	},
 	{
-		Key: "aiAgent", Title: "智能体与客服", Icon: "Cpu",
+		Key: "aiAgent", Title: "客服智能体", Icon: "Cpu",
 		Roles: []string{"admin", "customer_service", "staff"},
 		Children: []SystemMenuNode{
 			{
@@ -411,6 +401,16 @@ var SystemMenuTree = []SystemMenuNode{
 		Key: "system", Title: "系统管理", Icon: "Setting",
 		Roles: []string{"admin", "viewer", "staff"},
 		Children: []SystemMenuNode{
+			{
+				Key: "channels", Title: "渠道", Icon: "Connection",
+				Roles: []string{"admin"},
+				Children: []SystemMenuNode{
+					// 保留权限键和深链；前端投影为一个入口，模块内部切换管理面。
+					{Key: "channelManage", Title: "渠道", Icon: "SetUp", Path: "/channels/manage", Roles: []string{"admin"}},
+					{Key: "channelAccount", Title: "渠道账号", Icon: "Connection", Path: "/channels/accounts", Roles: []string{"admin"}},
+					{Key: "channelIdentifyCode", Title: "识别码", Icon: "Key", Path: "/channels/identify-codes", Roles: []string{"admin"}},
+				},
+			},
 			{
 				Key: "siteConfig", Title: "系统配置与运维", Icon: "Tools",
 				Roles: []string{"admin"},
