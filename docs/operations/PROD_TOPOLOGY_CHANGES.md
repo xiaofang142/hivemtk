@@ -1131,3 +1131,21 @@ follow_user_channels 扩为八渠道（生产库实值已更新）。链 B 从�
 - 链 D：`user-web npm run build` buildId `c2f9de425-1795702549986`；备份 `user-web.snapshot-20261126-221602.tgz` 后 rsync dist → `/www/wwwroot/hivemtk/user-web/`（`.user.ini` 宝塔保护文件告警无害）；公网 `index-CCCR9QS4.js` 与本地 index.html 一致，asset HTTP 200，version.json buildId 一致。
 
 **线上核验（ego-browser TaskSpace `hivemtk-online`）**：见本文件末尾 T03 线上核验段（catalog 200、managed 账号带标记、表单逐元素点验）。
+
+## 2026-11-26 22:3x 链 A — T01 去全局兜底的 6 个 service 回归修复（HEAD `153c7ea39`）
+
+**口径修正**：上条 T03 发布段把 6 个 lead 用例判为「存量问题」；主智能体随后以同一测试口令在 T01 前基线 `cde3da34a` 逐例实测全 PASS、当前 HEAD 全 FAIL，确认为 **T01 回归**，本条按回归修复重新登记（migration `v3.116.0 xhs_web enum` 一项仍是存量，未改）。
+
+**变更**：`buildLeadJudgeContext` 的共享上下文/摘要账号改由可信 `historyScope` 提供，不再复用可注入的规则目标 `ruleTargetFor`（生产无注入路径行为不变，未恢复 global/legacy 兜底）；6 个回归用例夹具注入内存 account/channel 两级规则；`routes_user.tsv` 同步已下线的 `/api/lead-mining/config` 两行为 `GET /api/manage/leads/rules`，清单覆盖下界 738 保持绿。commit `153c7ea39`，push `gitee-upstream` + `upstream`（均 0fecf7a71..153c7ea39）。
+
+**验证**：
+- 6 个回归用例逐例 `--- PASS`（CanonicalAccountAliases / DBAccountScope / FullPipeline / NotLead / AsyncEnqueue / Debounce），`ok .../service 1.687s`；`go test ./internal/service/ -count=1` 全量 `ok 220.605s`；`TestE2EInventoryMatchesLiveRoutes` PASS（749 行命中，覆盖 738）。
+- `go build ./...` rc=0、`go vet ./...` rc=0、`python3 scripts/check-layer-boundary.py` 0 违规（1793 非测试 .go）。
+- **发布门说明**：链 A 全量 `go test ./internal/... ./cmd/...` 含存量 `TestFullMigrationChainUpThenRollback`（`invalid input value for enum channel_type_enum: "xhs_web"`，在 T01 前基线同样失败），故按脚本文档用 `--skip-tests` 显式跳过，**不宣称发布门内 go test 全绿**；上述 service 全量/定向测试是单独实跑的证据。
+
+**发布**：`./deploy/deploy-api.sh --skip-tests` 退出码 0；线上二进制 sha256 `c3daff2c7d658afc2f42e7b2dcf0c48f2f819d68be15bf00f2914a05c0aa38c3`（双端一致），运行镜像 `sha256:00124f1e2ad0f6483230b518ab5c7c33b43c62ed929ae3ee662a0f0adf17d2ff`，容器启动 `2026-11-26T14:39:14.406972777Z`，容器内与公网 health 200 / ok，默认口令探针 GREEN（401）；state 写入 `2026-11-26T22:39:24+08:00`。回滚点镜像 `mtk-user-server:rollback-20261126-223851` / 二进制 `/www/wwwroot/hivemtk/user-server/user-server.bak-20261126-223851`。
+
+**线上核验（ego-browser TaskSpace `hivemtk-online` space 87，登录态复用 admin）**：
+- `page.fetch` 同源 `/api/lead-mining/config` GET/POST → 404 `{"error":"not found"}`（路由已下线）。
+- `GET /api/manage/leads/rules` → 200 `code=0`，5 条规则；`POST /api/manage/leads/rules` `{scope:"global"}` → 400 `INVALID_PARAM_1001`（fail-closed，未写入；全局行仍为 13:29 的存量 id=12，未被本次 POST 创建或修改）。
+- 本轮只改 user-server，未走链 D/B/C。
