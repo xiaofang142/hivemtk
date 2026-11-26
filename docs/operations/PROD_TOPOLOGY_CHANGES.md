@@ -1075,3 +1075,15 @@ follow_user_channels 扩为八渠道（生产库实值已更新）。链 B 从�
 **发布**：
 - 链 A：`./deploy/deploy-api.sh` 成功，线上二进制 sha256 `2c5e1ca00f7ddd8e…`，运行镜像 `ff50700f96ba94e8868`，容器启动 `2026-11-26T11:03:28Z`，回滚点镜像 `mtk-user-server:rollback-20261126-190117` / 二进制 `user-server.bak-20261126-190117`，容器内+公网 health 200，默认口令探针 GREEN。
 - 链 D：前端 `npm run build` 成功，rsync 到 `/www/wwwroot/hivemtk/user-web/`，index.html sha256 `3da503762f509055e2d547f23a34308c78063ceedd0e05d093b571b0ad016e67` 本地/远端一致。
+
+## 2026-11-26 20:0x 全量发布 — 渠道统一 + 工作区路径清理 + 商户默认开源版
+
+**改动**：渠道统一（HEAD `7280b50ca`，含 catalog API / 租户开关 / 账号授权 / 历史编码归一）与工作区路径清理（HEAD `7aef0fcbd`）；平台端商户版本类型默认 opensource（HEAD `6db1e9e`）；assetdpo 安全客户端 SSRF 加固（HEAD `818b08f`）。四仓提交均已推送，发布前四仓 `git status --porcelain` 全 0。
+
+**发布**：工作区 `deploy/deploy.sh all` 首次在 user-server 的 `.env` 幂等更新处遇一次 SSH 超时中断（官网、user-web、embed-sdk 已完成）；重跑 `user-server` 并补跑 `platform-web`、`platform-contributor`、`platform-server`，六个目标全部成功。
+- 官网 / 用户端前端 / 平台前端 / 开发者站：构建并 rsync，公网健康检查均 200；user-web buildId `7aef0fcbd-1795694551989`，`GET /api/channels/catalog` 匿名返回 401（新路由已上线，非 404）。
+- user-server：线上二进制 sha256 `e2d809038f20ed78bb012f75ef5f9da064ef33d35bcdb4598f4a77caeaa7ed1d`，运行镜像 `mtk-user-server:latest`，本机 8204 与公网 health 均 200。
+- platform-server：线上二进制 sha256 `7d99743c4eaacde5fc0c344d1431e70bd71bee1322b79d2d3b91adf711ed57f5`，镜像 `mtk-platform-server:latest`，本机 8205 liveness/readiness 与公网 health 均 200；平台迁移 `043_merchant_version_type_default.sql` 新应用 1（`version_type` 默认 opensource、存量空值回填），其余 11 个跳过。
+- 发布后 `deploy.sh check` 七项全绿。
+
+**注**：本轮未做浏览器人工点验；HiveBridge 1.3.11 已在此前链 B/C 发布，本轮 bridge 源码无改动，未重发扩展。
