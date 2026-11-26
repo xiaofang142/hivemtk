@@ -326,7 +326,7 @@ user-web/src/
 ├── api/              110 个 API 模块（与后端域对应）
 ├── views/            87 个业务视图目录（+ 4 个根级 .vue：Login/Profile/Notifications/NotFound）
 ├── router/modules/   81 个路由模块（index.js 汇总）
-├── stores/           Pinia：app / user / permission / dictionary / material / geo / browserAutomation / runtimeConfig
+├── stores/           Pinia：app / user / permission / dictionary / geo / runtimeConfig
 ├── i18n/locales/     9 语言：ar de en es fr ja pt ru zh
 ├── layout/Layout.vue 主框架
 └── components/ config/ constants/ types/ utils/ styles/

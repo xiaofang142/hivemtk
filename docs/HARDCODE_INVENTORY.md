@@ -505,7 +505,7 @@ alignment 五维应合并成 1 张 `alignment_dimension_weight` 字典项，不�
 | `MAX_RECONNECT_DELAY_MS` | `30000` | 同上 `:13` / `:5` | `frontend_ws.max_reconnect_delay_ms` | 已接（两个文件**共用一个键**：值同为 30000，且退避上限必须是同一个数） |
 | `PING_INTERVAL_MS` | `25000` | 同上 `:14` / `:7` | `frontend_ws.agent_ping_interval_ms` / `chat_ping_interval_ms` | 已接 |
 | `ACK_BATCH_INTERVAL_MS` | `200` | 同上 `:15` / `:8` | `frontend_ws.agent_ack_batch_interval_ms` / `chat_ack_batch_interval_ms` | 已接 |
-| `MAX_HISTORY` / `MAX_QUEUE` / `FLUSH_INTERVAL_MS` | `50` / `100` / `30` | `utils/journeyTracker.js:8`、`:9`、`:10` | `frontend_ws.journey_history_max` / `journey_queue_max` / `journey_flush_interval_ms` | 已接 |
+| 访客轨迹历史 / 队列 / 刷报间隔 | — | 未接入的 `journeyTracker.js` 已删除（2026-11-26） | `frontend_ws.journey_history_max` / `journey_queue_max` / `journey_flush_interval_ms` | 已下架：无生产入口与读取点 |
 | `COUNTS_POLL_MS` | `30000` | `views/approvalTask/List.vue:371` | `frontend_ui.approval_counts_poll_ms` | 已接 |
 | `STATS_POLL_MS` | `30000` | `views/badCase/List.vue:551` | `frontend_ui.bad_case_stats_poll_ms` | 已接 |
 | `REFRESH_MS` | `30000` | `views/messageHub/Dashboard.vue:112`（`:273` 的 `setInterval(load, REFRESH_MS)` 直用常量） | — | **未接**（`TUNE`/待接候选；与上面两条同值但不同语义，没并键） |
@@ -518,6 +518,8 @@ alignment 五维应合并成 1 张 `alignment_dimension_weight` 字典项，不�
 「前端真实读取点 17」**——两个 17 不是同一个数，前者是常量声明行、后者含 `material_max_size_mb`
 这种字面量兜底的读取点，别把它们当成一处对账（`agentSocket.js`/`chatSocket.js` 各 6 处调用、
 `journeyTracker.js` 3 处、五个视图各 1 处 = 20 处调用折成 17 个坐标）。
+
+上述计数为 2026-10-12 的扫描快照；2026-11-26 删除未接入的旅程追踪模块后，其三个读取点已移除、参数已下架。现状以 `scripts/check-config-param-readpoints.py` 输出为准。
 
 前端自己发明的默认分页/时间窗另有 **1754 处**（`TUNE` 桶），集中在 `src/api/*.js`
 （`limit=20/50`、`days=7/30`）与 `views/**`（`pageSize||20`）。这些**不是常量声明**，

@@ -16,7 +16,7 @@
 | `/badCase/list` | Bad Case 队列 | `views/badCase/List.vue` | ✅ |
 | `/batchOperation/list` | 批量操作 | `views/batchOperation/List.vue` | ✅ |
 | `/bridge/extension` | 扩展安装包 | `views/bridge/ExtensionPackage.vue` | ✅ |
-| `/bridge/token` | 桥接凭证 | `views/bridge/TokenManagement.vue` | ⚠️ 无菜单 |
+| `/bridge/token` | 旧桥接凭证入口 | 重定向 `/channels/identify-codes` | ⚠️ 无菜单 |
 | `/businessAccountAuth/list` | 业务账号授权 | `views/businessAccountAuth/List.vue` | ✅ |
 | `/churnPrediction/list` | 流失预警 | `views/churnPrediction/List.vue` | ✅ |
 | `/community/list` | 社群管理 | `views/community/List.vue` | ✅ |

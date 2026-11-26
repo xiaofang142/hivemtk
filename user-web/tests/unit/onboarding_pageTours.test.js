@@ -186,7 +186,6 @@ describe('页面导览注册表 · 不变量', () => {
       '/backup/list': 'views/backup/List.vue',
       '/badCase/list': 'views/badCase/List.vue',
       '/batchOperation/list': 'views/batchOperation/List.vue',
-      '/bridge/token': 'views/bridge/TokenManagement.vue',
       '/browser-automation/tasks': 'views/browserAutomation/List.vue',
       '/browser-automation/tasks/create': 'views/browserAutomation/Editor.vue',
       '/browser-automation/tasks/:id/edit': 'views/browserAutomation/Editor.vue',

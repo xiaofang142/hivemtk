@@ -123,7 +123,6 @@ GROUP_RULES: list[tuple[str, str]] = [
     # user-web 前端运行期阈值：独立成一个 group，避免和后端 misc 混在一起互相污染 key
     ("user-web/src/utils/agentSocket", "frontend_ws"),
     ("user-web/src/utils/chatSocket", "frontend_ws"),
-    ("user-web/src/utils/journeyTracker", "frontend_ws"),
     ("user-web/src/", "frontend_ui"),
 ]
 DEFAULT_GROUP = "misc"

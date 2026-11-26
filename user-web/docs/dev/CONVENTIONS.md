@@ -223,9 +223,9 @@ const onConfirm = () => emit('confirm', { id: 1, name: 'foo' })
 
 ### 4.1 Pinia store 命名
 
-- 文件名：`{业务域}.js`，如 `user.js` / `permission.js` / `material.js` / `app.js`
+- 文件名：`{业务域}.js`，如 `user.js` / `permission.js` / `app.js`
 - store id：与文件名一致，`defineStore('user', () => {...})`、`defineStore('permission', ...)`
-- 使用处：`useUserStore` / `usePermissionStore` / `useMaterialStore` / `useAppStore`（与 id 对应的 camelCase）
+- 使用处：`useUserStore` / `usePermissionStore` / `useAppStore`（与 id 对应的 camelCase）
 
 ### 4.2 state / getters / actions 划分
 

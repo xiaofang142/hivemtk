@@ -28,7 +28,7 @@ import (
 // 新增组/键要在这里显式登记，并写清楚为什么前端需要它。
 var runtimePublicGroups = map[string]struct{}{
 	// 前端自己实现的 WS 客户端重连/心跳/ACK 批次等旋钮
-	// （utils/agentSocket.js、utils/chatSocket.js、utils/journeyTracker.js）。
+	// （utils/agentSocket.js、utils/chatSocket.js）。
 	"frontend_ws": {},
 	// 前端视图里的阈值类常量（轮询间隔、扫描页大小、失败上限等）。
 	"frontend_ui": {},

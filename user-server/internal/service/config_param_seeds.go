@@ -909,8 +909,8 @@ func DefaultParamDefs() []ParamDef {
 			Description: "一轮自动优化 AB 实验的持续时间（秒）。写大＝样本充足、结论可信，但劣化方案在线时间也长；写小＝ 快速换方案，但可能测不出真实差异。默认 7 天。0 值回落默认 604800s",
 			ValueType:   "duration", DefaultValue: "604800", Min: strPtr("3600"), Max: strPtr("2592000"), Step: strPtr("3600"), Restart: true},
 		// ── frontend_ws 组：前端 WS 客户端的重连/心跳/ACK 旋钮 ─────────────
-		// 后端没有读取点：这些常量活在 user-web/src/utils/{agentSocket,chatSocket,
-		// journeyTracker}.js 里，前端经 GET /api/config/runtime 拉取值。
+		// 后端没有读取点：这些常量活在 user-web/src/utils/{agentSocket,chatSocket}.js
+		// 里，前端经 GET /api/config/runtime 拉取值。
 		// 它们登记进 runtimePublicGroups（controller/config_param_runtime.go），
 		// 由 scripts/check-config-param-readpoints.py 按 group.key 粒度核对该份清单。
 		{Group: "frontend_ws", Key: "agent_max_reconnect_attempts", Name: "坐席 WS 最大重连次数",
@@ -940,15 +940,18 @@ func DefaultParamDefs() []ParamDef {
 		{Group: "frontend_ws", Key: "chat_ack_batch_interval_ms", Name: "聊天 WS ACK 合批间隔",
 			Description: "客服聊天窗口 WebSocket 的 ACK 合批间隔（毫秒）。同坐席那条：这是「消息到底显示出来了没有的确认延迟，调太大会让重复投递窗口变长」",
 			ValueType:   "int", Unit: "毫秒", DefaultValue: "200", Min: strPtr("10"), Max: strPtr("5000"), Step: strPtr("10"), Restart: false},
-		{Group: "frontend_ws", Key: "journey_history_max", Name: "访客轨迹本地保留条数",
-			Description: "journeyTracker 在 localStorage 里保留的访客轨迹条数。写大＝本地存储占用上升（超过约 5MB 会被浏览器静默截断，那之后新轨迹全写不进去）；写小＝回看时更早丢历史",
-			ValueType:   "int", Unit: "条", DefaultValue: "50", Min: strPtr("10"), Max: strPtr("2000"), Step: strPtr("10"), Restart: false},
-		{Group: "frontend_ws", Key: "journey_queue_max", Name: "访客轨迹上报队列上限",
-			Description: "journeyTracker 断网时本地堆积的上报事件条数。写大＝弱网/离线更久后恢复时能补发更多；写小＝离线期间的轨迹被更早丢弃（表现为访客行为路径缺一段）",
-			ValueType:   "int", Unit: "条", DefaultValue: "100", Min: strPtr("10"), Max: strPtr("5000"), Step: strPtr("10"), Restart: false},
-		{Group: "frontend_ws", Key: "journey_flush_interval_ms", Name: "访客轨迹刷报间隔",
-			Description: "journeyTracker 定时把队列里的轨迹事件上报的间隔（毫秒）。默认 30s：写小＝上行请求频繁（移动端流量与电量）；写大＝页面关掉前的轨迹更容易没发出去",
-			ValueType:   "int", Unit: "毫秒", DefaultValue: "30000", Min: strPtr("1000"), Max: strPtr("300000"), Step: strPtr("1000"), Restart: false},
+		{Group: "frontend_ws", Key: "journey_history_max", Name: "访客轨迹本地保留条数（已下架）",
+			Description: "已删除的未接入访客轨迹模块的本地历史条数。",
+			ValueType:   "int", Unit: "条", DefaultValue: "50", Min: strPtr("10"), Max: strPtr("2000"), Step: strPtr("10"), Restart: false,
+			Deprecated: true, DeprecatedReason: "journeyTracker.js 无导入、启动或动态加载入口，已删除；本参数无生产读取点。保留定义用于已有参数行下架，不再向管理端和 runtime 暴露。"},
+		{Group: "frontend_ws", Key: "journey_queue_max", Name: "访客轨迹上报队列上限（已下架）",
+			Description: "已删除的未接入访客轨迹模块的上报队列条数。",
+			ValueType:   "int", Unit: "条", DefaultValue: "100", Min: strPtr("10"), Max: strPtr("5000"), Step: strPtr("10"), Restart: false,
+			Deprecated: true, DeprecatedReason: "journeyTracker.js 无导入、启动或动态加载入口，已删除；本参数无生产读取点。保留定义用于已有参数行下架，不再向管理端和 runtime 暴露。"},
+		{Group: "frontend_ws", Key: "journey_flush_interval_ms", Name: "访客轨迹刷报间隔（已下架）",
+			Description: "已删除的未接入访客轨迹模块的刷报间隔（毫秒）。",
+			ValueType:   "int", Unit: "毫秒", DefaultValue: "30000", Min: strPtr("1000"), Max: strPtr("300000"), Step: strPtr("1000"), Restart: false,
+			Deprecated: true, DeprecatedReason: "journeyTracker.js 无导入、启动或动态加载入口，已删除；本参数无生产读取点。保留定义用于已有参数行下架，不再向管理端和 runtime 暴露。"},
 
 		// ── frontend_ui 组：前端视图里的阈值常量 ──────────────────────────
 		{Group: "frontend_ui", Key: "approval_counts_poll_ms", Name: "审批待办轮询间隔",

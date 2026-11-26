@@ -255,7 +255,6 @@
 | 素材库（系统内） | `/system/material-library` | `material.js` | `views/system/MaterialLibrary.vue` | 图片/视频/音频/文档素材集中管理 |
 | 模板市场 | `/templateMarket/list` | —（独立） | `views/templateMarket/List.vue` | 营销模板市场，可订阅行业模板 |
 | 素材选择对话框 | —（组件） | `material.js` | `components/dialogs/MaterialSelectDialog.vue` | 跨页面素材选择器 |
-| 公域素材管理 | —（嵌入页面） | `material.js` | — | 由 `useMaterialStore` 缓存素材/话题/分类列表 |
 
 ## 十二、API 模块完整清单
 
