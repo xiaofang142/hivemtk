@@ -288,10 +288,18 @@ func newTestService(t *testing.T, cfg *model.LeadMiningConfig, j *fakeJudge) *Se
 		hitsProvider: func(context.Context, DetectionInput) ([]model.LeadMiningHit, error) {
 			return []model.LeadMiningHit{{ID: 1, Type: "keyword", Complete: true}}, nil
 		},
-		custRepo:        newFakeCustRepo(),
-		clueRepo:        newFakeClueRepo(),
-		cfgRepo:         &fakeCfgRepo{cfg: cfg},
-		lastJudge:       map[string]time.Time{},
+		custRepo: newFakeCustRepo(),
+		clueRepo: newFakeClueRepo(),
+		cfgRepo:  &fakeCfgRepo{cfg: cfg},
+		// T01：规则是唯一真实入口。单测无真实渠道账号仓储，显式注入规则目标与启用规则，
+		// 不走任何全局默认兜底。
+		ruleTargetFor: func(context.Context, *model.MessageHub) LeadRuleTarget {
+			return LeadRuleTarget{ChannelAccountID: 1, ChannelID: 1}
+		},
+		ruleService: NewLeadRuleServiceWithRepo(&lmRuleRepoStub{rows: map[string]*model.LeadMiningRule{
+			"account": {Scope: "account", Enabled: true, Keywords: model.JSONStrings{"购买", "报价"}},
+		}}),
+		lastJudge: map[string]time.Time{},
 	}
 }
 
@@ -318,26 +326,6 @@ func TestMergeTags(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("mergeTags[%d]=%s want %s", i, got[i], want[i])
 		}
-	}
-}
-
-func TestChannelEnabled(t *testing.T) {
-	// P0-c：默认全纳入（Channels 空 = 不表达关闭），显式名单 = 关闭名单。
-	cfg := &model.LeadMiningConfig{}
-	for _, platform := range []string{"douyin", "telegram", "wechat", "qq"} {
-		if !channelEnabled(cfg, platform) {
-			t.Fatalf("空渠道配置应放行全部渠道，实际拦截 %s", platform)
-		}
-	}
-	cfg2 := &model.LeadMiningConfig{Channels: []string{"telegram", "douyin"}}
-	if channelEnabled(cfg2, "telegram") {
-		t.Fatal("telegram 在显式关闭名单内，应拦截")
-	}
-	if channelEnabled(cfg2, "douyin") {
-		t.Fatal("douyin 在显式关闭名单内，应拦截")
-	}
-	if !channelEnabled(cfg2, "wechat") {
-		t.Fatal("wechat 不在关闭名单内，应默认放行")
 	}
 }
 
@@ -430,28 +418,33 @@ func TestProcess_NotLead(t *testing.T) {
 	}
 }
 
-func TestProcess_ChannelDisabled(t *testing.T) {
-	// P0-c：Channels 是显式关闭名单。douyin 被显式关闭 ⇒ 不触发判定。
-	cfg := &model.LeadMiningConfig{Enabled: true, Channels: []string{"douyin"}, MinIntentScore: 50}
+func TestProcess_NoAccountOrChannelRuleFailsClosed(t *testing.T) {
+	// T01：账号/渠道都没有规则时不再回退全局默认或 legacy 配置，直接不发掘。
+	cfg := &model.LeadMiningConfig{Enabled: true, MinIntentScore: 50}
 	j := &fakeJudge{resp: &LeadJudgement{IsLead: true, IntentScore: 90}}
 	s := newTestService(t, cfg, j)
+	s.ruleService = NewLeadRuleServiceWithRepo(&lmRuleRepoStub{rows: map[string]*model.LeadMiningRule{}})
 
 	s.process(context.Background(), sampleHub("douyin", "u4", "我想购买"))
 
 	if j.calls != 0 {
-		t.Fatalf("显式关闭渠道不应触发判定，实际判定 %d 次", j.calls)
+		t.Fatalf("缺失账号/渠道规则不应触发判定，实际判定 %d 次", j.calls)
 	}
 }
 
-func TestProcess_Disabled(t *testing.T) {
-	cfg := &model.LeadMiningConfig{Enabled: false, MinIntentScore: 50}
+func TestProcess_DisabledRuleFailsClosed(t *testing.T) {
+	// 规则自身关闭即 fail-closed；legacy cfg.Enabled=true 不得反向开启。
+	cfg := &model.LeadMiningConfig{Enabled: true, MinIntentScore: 50}
 	j := &fakeJudge{resp: &LeadJudgement{IsLead: true, IntentScore: 90}}
 	s := newTestService(t, cfg, j)
+	s.ruleService = NewLeadRuleServiceWithRepo(&lmRuleRepoStub{rows: map[string]*model.LeadMiningRule{
+		"account": {Scope: "account", Enabled: false},
+	}})
 
 	s.process(context.Background(), sampleHub("telegram", "u5", "我想购买"))
 
 	if j.calls != 0 {
-		t.Fatalf("未启用不应触发判定，实际 %d", j.calls)
+		t.Fatalf("规则关闭不应触发判定，实际 %d", j.calls)
 	}
 }
 

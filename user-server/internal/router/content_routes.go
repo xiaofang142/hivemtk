@@ -72,14 +72,12 @@ func setupClueRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 
 func setupLeadMiningRoutes(auth *gin.RouterGroup) {
 	ctrl := controller.NewLeadMiningController()
-	auth.GET("/lead-mining/config", ctrl.GetConfig)
 	auth.GET("/lead-mining/status", ctrl.GetStatus)
 	auth.GET("/lead-mining/judgements", ctrl.GetJudgements)
 	auth.GET("/lead-mining/judgements/:judgement_id", ctrl.GetJudgementDetail)
 	auth.GET("/lead-mining/clue-stats", ctrl.GetClueStats)
 	auth.GET("/lead-mining/quality-stats", ctrl.GetQualityStats)
 	admin := auth.Group("/lead-mining", middleware.AdminAuthMiddleware())
-	admin.POST("/config", ctrl.SaveConfig)
 	admin.POST("/judgements/:judgement_id/feedback", ctrl.SubmitJudgementFeedback)
 	notifyCtrl := controller.NewLeadMiningNotifyRouteController()
 	notifyCtrl.RegisterRoutes(auth, admin)

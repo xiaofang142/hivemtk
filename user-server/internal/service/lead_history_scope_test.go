@@ -239,6 +239,13 @@ func TestLeadHistory_ProcessAccountDebounce(t *testing.T) {
 		t.Run("dedup="+hash, func(t *testing.T) {
 			j := &leadScopeJudge{}
 			s := &Service{judge: j, cfgRepo: &fakeCfgRepo{cfg: &model.LeadMiningConfig{Enabled: true}},
+				// T01：显式注入内存 account 规则，缺失规则不再回退 legacy 配置。
+				ruleTargetFor: func(context.Context, *model.MessageHub) LeadRuleTarget {
+					return LeadRuleTarget{ChannelAccountID: 1, ChannelID: 1}
+				},
+				ruleService: NewLeadRuleServiceWithRepo(&lmRuleRepoStub{rows: map[string]*model.LeadMiningRule{
+					"account": {Scope: "account", Enabled: true},
+				}}),
 				historyFetcher: cannedHistory(), lastJudge: map[string]time.Time{}}
 			a := sampleHub("telegram", "peer", "A")
 			a.TenantID, a.AccountID = 51, "unknown-a"

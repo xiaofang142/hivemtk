@@ -64,7 +64,7 @@
     },
     "leadsRules": {
       "title": "Lead rules and governance workflow",
-      "summary": "Rules match in account → channel → global priority. Define scope and keywords before creating or editing a rule; lead discovery agents execute discovery tasks.",
+      "summary": "Rules match in account → channel priority; no rule at either level means no discovery. Define scope and keywords before creating or editing a rule; lead discovery agents execute discovery tasks.",
       "records": "Check each rule’s scope and enabled status. Use permitted notification routes, evidence, archive and scoped lead lists to manage delivery destinations, trace sources, review history and select leads for follow-up."
     }
   }

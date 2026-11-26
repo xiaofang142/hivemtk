@@ -97,10 +97,14 @@ func p1TestService(judge LLMJudge, clueRepo repository.ClueRepository) *Service 
 		hitsProvider:    func(context.Context, DetectionInput) ([]model.LeadMiningHit, error) { return []model.LeadMiningHit{{ID: 9, Complete: true}}, nil },
 		custRepo:        newFakeCustRepo(),
 		clueRepo:        clueRepo,
-		cfgRepo:         &fakeCfgRepo{cfg: &model.LeadMiningConfig{Enabled: true, Keywords: []string{"购买"}, MinIntentScore: 50}},
-		// 显式空仓库：规则解析返回 ErrLeadRuleNotFound，稳定回退 legacy 判据，
-		// 避免并行测试装配的真实 dbstate 改变发掘开关导致假阴性。
-		ruleService:     &LeadRuleService{},
+		cfgRepo:         &fakeCfgRepo{cfg: &model.LeadMiningConfig{Enabled: true, MinIntentScore: 50}},
+		// T01：规则是唯一真实入口，显式注入内存 account 规则，不依赖真实 dbstate。
+		ruleTargetFor: func(context.Context, *model.MessageHub) LeadRuleTarget {
+			return LeadRuleTarget{ChannelAccountID: 1, ChannelID: 1}
+		},
+		ruleService: NewLeadRuleServiceWithRepo(&lmRuleRepoStub{rows: map[string]*model.LeadMiningRule{
+			"account": {Scope: "account", Enabled: true, Keywords: model.JSONStrings{"购买"}},
+		}}),
 		channelResolver: NewChannelResolverWithRepos(nil, nil),
 		lastJudge:       map[string]time.Time{},
 	}

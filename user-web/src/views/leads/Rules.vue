@@ -5,7 +5,7 @@
         <h2 class="page-title">
           线索三粒度规则
         </h2>
-        <span class="page-sub">按 account → channel → global 优先级匹配；列表按当前租户隔离</span>
+        <span class="page-sub">按 account → channel 优先级匹配；列表按当前租户隔离</span>
       </div>
       <div class="page-actions">
         <el-button @click="$router.push('/leads/notify-routes')">
@@ -43,7 +43,7 @@
       class="mb12"
     >
       <template #title>
-        命中优先级：账号（account） &gt; 渠道（channel） &gt; 全局（global），取第一条启用的规则即停止；账号级 scope_id 是渠道账号 ID，渠道级是渠道 ID。
+        命中优先级：账号（account） &gt; 渠道（channel），取第一条启用的规则即停止；账号级 scope_id 是渠道账号 ID，渠道级是渠道 ID。两级都没有启用规则时不会发掘，不设全局兜底。
       </template>
     </el-alert>
     <el-card shadow="never">
@@ -120,6 +120,8 @@
             <el-button
               link
               type="primary"
+              :disabled="row.scope === 'global'"
+              :title="row.scope === 'global' ? '全局规则为历史数据，已停用写入' : ''"
               @click="openEdit(row)"
             >
               编辑
@@ -148,10 +150,6 @@
         <el-form-item label="粒度">
           <el-select v-model="form.scope">
             <el-option
-              label="全局"
-              value="global"
-            />
-            <el-option
               label="渠道"
               value="channel"
             />
@@ -161,7 +159,7 @@
             />
           </el-select>
         </el-form-item>
-        <el-form-item :label="form.scope === 'global' ? '范围' : '范围选择'">
+        <el-form-item label="范围选择">
           <ChannelSelect
             v-if="form.scope === 'channel'"
             v-model="form.scope_id"
@@ -169,14 +167,9 @@
             placeholder="请选择渠道"
           />
           <ChannelAccountSelect
-            v-else-if="form.scope === 'account'"
+            v-else
             v-model="form.scope_id"
             placeholder="请选择账号"
-          />
-          <el-input
-            v-else
-            :model-value="'全部渠道'"
-            disabled
           />
         </el-form-item>
         <el-form-item label="关键词">
@@ -246,12 +239,13 @@ const rows = ref([])
 const dialogVisible = ref(false)
 const editing = ref(false)
 const form = reactive({
-  id: 0, scope: 'global', scope_id: 0,
+  id: 0, scope: 'account', scope_id: 0,
   keywords: '', semantic_keywords: '', system_description: '', enabled: true
 })
 
 function scopeLabel(scope) {
-  return { global: '全局', channel: '渠道', account: '账号' }[scope] || scope
+  // global 仅作历史数据展示，不参与解析，也不允许新建/编辑写入。
+  return { global: '全局（历史）', channel: '渠道', account: '账号' }[scope] || scope
 }
 
 function scopeIdLabel(row) {
@@ -261,7 +255,7 @@ function scopeIdLabel(row) {
 }
 
 function scopeTag(scope) {
-  return { account: 'success', channel: 'warning', global: '' }[scope] || 'info'
+  return { account: 'success', channel: 'warning' }[scope] || 'info'
 }
 
 function join(list) {
@@ -274,7 +268,7 @@ function split(text) {
 
 function emptyForm() {
   Object.assign(form, {
-    id: 0, scope: 'global', scope_id: 0,
+    id: 0, scope: 'account', scope_id: 0,
     keywords: '', semantic_keywords: '', system_description: '', enabled: true
   })
 }
@@ -308,7 +302,7 @@ function openEdit(row) {
 }
 
 async function save() {
-  if (form.scope !== 'global' && !form.scope_id) {
+  if (!form.scope_id) {
     ElMessage.warning('channel/account 粒度必须填写范围ID')
     return
   }

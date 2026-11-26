@@ -63,7 +63,7 @@ func NewLeadDetectionService() *LeadDetectionService {
 // 规则为空或消息为空时 fail-closed 返回错误，不产出"空命中"伪证据。
 func (s *LeadDetectionService) Run(ctx context.Context, in DetectionInput) ([]model.LeadMiningHit, error) {
 	if in.Rule == nil {
-		return nil, fmt.Errorf("检测缺少三粒度规则")
+		return nil, fmt.Errorf("检测缺少账号/渠道规则")
 	}
 	if len(in.Messages) == 0 {
 		return nil, fmt.Errorf("检测缺少消息上下文")

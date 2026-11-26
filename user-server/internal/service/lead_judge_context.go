@@ -155,7 +155,7 @@ func (in SharedBusinessInput) empty() bool {
 
 // LeadJudgeContext 二次 LLM 汇总判断的富上下文（FR-013）。
 //
-// 相比旧的 Judge(cfg, history)，本上下文额外携带：三粒度规则、三路检测证据、
+// 相比旧的 Judge(cfg, history)，本上下文额外携带：账号/渠道两级规则、三路检测证据、
 // ConversationContext 多轮/历史消息与成员角色分类。dispatcherJudge 新增
 // JudgeWithContext 使用本结构；测试注入的 fake LLMJudge 未实现该可选方法，
 // 走原有 Judge 路径，保持向后兼容。
@@ -428,15 +428,11 @@ func (s *Service) buildLeadJudgeContext(ctx context.Context, hub *model.MessageH
 
 	target := s.processRuleTarget(ctx, hub)
 	jctx.ChannelAccountID = target.ChannelAccountID
-	rule, err := NewLeadRuleService().Resolve(ctx, target)
+	// 规则只读账号/渠道两级；解析失败不再合成 global 规则、也不拿 legacy 配置兜底。
+	// jctx.Rule 留空 ⇒ 三路检测器按「规则为空」标记证据不完整（fail-visible）。
+	rule, err := s.resolveProcessRule(ctx, hub)
 	if err != nil {
-		logger.Ctx(ctx).Warn().Err(err).Str("account", hub.AccountID).Msg("[lead-mining] 三粒度规则解析失败，使用配置兜底")
-		rule = &model.LeadMiningRule{
-			Scope: "global", Enabled: true,
-			Keywords:          []string(s.cfgRepoSafeKeywords(ctx)),
-			SemanticKeywords:  model.JSONStrings{},
-			SystemDescription: s.configRequirement(ctx),
-		}
+		logger.Ctx(ctx).Warn().Err(err).Str("account", hub.AccountID).Msg("[lead-mining] 账号/渠道规则解析失败，不启用全局兜底")
 	}
 	jctx.Rule = rule
 
@@ -531,32 +527,6 @@ func (s *Service) buildLeadJudgeContext(ctx context.Context, hub *model.MessageH
 		jctx.Hits = hits
 	}
 	return jctx
-}
-
-// cfgRepoSafeKeywords / configRequirement 仅在规则解析失败时提供旧配置兜底，
-// 不新建规则行；关键词来自既有 lead_mining_configs，不是硬编码。
-// 必须走 loadConfig 命中按租户隔离的 cfgCache，不得直调 cfgRepo.GetSingleton——
-// 否则每次 process 都会绕过缓存重复读配置，破坏「每租户读一次」的隔离语义。
-func (s *Service) cfgRepoSafeKeywords(ctx context.Context) []string {
-	if s == nil || s.cfgRepo == nil {
-		return nil
-	}
-	cfg := s.loadConfig(ctx)
-	if cfg == nil {
-		return nil
-	}
-	return []string(cfg.Keywords)
-}
-
-func (s *Service) configRequirement(ctx context.Context) string {
-	if s == nil || s.cfgRepo == nil {
-		return ""
-	}
-	cfg := s.loadConfig(ctx)
-	if cfg == nil {
-		return ""
-	}
-	return cfg.Requirement
 }
 
 // EvidenceComplete 判定快照的必需证据是否齐全：三路命中完整、群聚合成功且 ReAct 未降级。

@@ -23,7 +23,7 @@ func (s *lmAgentReaderStub) Get(context.Context, uint) (*model.AIAgent, error) {
 func TestLeadMiningConfigResolver_AgentConfigIsLive(t *testing.T) {
 	ctx := context.Background()
 	r := NewLeadMiningConfigResolverWithDeps(&lmRuleRepoStub{rows: map[string]*model.LeadMiningRule{
-		"global": {Scope: "global", Enabled: true, SystemDescription: "rule"},
+		"account": {Scope: "account", Enabled: true, SystemDescription: "rule"},
 	}}, &lmConfigRepoStub{cfg: &model.LeadMiningConfig{Enabled: true, MinIntentScore: 50, Model: "legacy-model"}})
 	r.SetAgentReader(&lmAgentReaderStub{agent: &model.AIAgent{
 		ID: 51, AgentType: string(model.AgentTypeLeadMining), AgentMode: "active", Status: 1,

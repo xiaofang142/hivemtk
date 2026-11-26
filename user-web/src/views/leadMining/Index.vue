@@ -41,99 +41,6 @@
         <AccountMatrix />
       </el-tab-pane>
       <el-tab-pane
-        label="全局默认（兜底）"
-        name="setting"
-      >
-        <el-alert
-          type="warning"
-          :closable="false"
-          show-icon
-          class="mb16"
-        >
-          <template #title>
-            这里只配置全局兜底值：账号或渠道已有规则时，真实命中的关键词/启用状态取账号级规则（见「账号级配置」tab），改这里不会影响它们。
-          </template>
-        </el-alert>
-        <el-card shadow="never">
-          <el-form
-            :model="form"
-            label-width="120px"
-            class="setting-form"
-          >
-            <el-form-item label="启用发掘">
-              <el-switch v-model="form.enabled" />
-              <span class="hint">关闭后不再对消息做线索判断（已发掘线索保留）</span>
-            </el-form-item>
-            <el-form-item label="监测渠道">
-              <el-checkbox-group v-model="form.channels">
-                <el-checkbox
-                  v-for="c in channelOptions"
-                  :key="c.value"
-                  :label="c.value"
-                >
-                  {{ c.label }}
-                </el-checkbox>
-              </el-checkbox-group>
-              <div class="hint">
-                不勾选任何渠道 = 监测全部渠道
-              </div>
-            </el-form-item>
-            <el-form-item label="关键词">
-              <el-input
-                v-model="keywordsText"
-                type="textarea"
-                :rows="3"
-                placeholder="多个关键词用逗号或换行分隔"
-              />
-            </el-form-item>
-            <el-form-item label="线索标签">
-              <el-input
-                v-model="tagsText"
-                type="textarea"
-                :rows="2"
-                placeholder="命中线索后打给客户的标签，逗号分隔"
-              />
-            </el-form-item>
-            <el-form-item label="线索要求">
-              <el-input
-                v-model="form.requirement"
-                type="textarea"
-                :rows="4"
-                placeholder="用自然语言描述什么算线索"
-              />
-            </el-form-item>
-            <el-form-item label="意向分阈值">
-              <el-input-number
-                v-model="form.min_intent_score"
-                :min="0"
-                :max="100"
-                :step="5"
-              />
-            </el-form-item>
-            <el-form-item label="指定模型">
-              <el-input
-                v-model="form.model"
-                placeholder="留空使用默认推理模型"
-                style="max-width: 320px"
-              />
-            </el-form-item>
-            <el-form-item>
-              <el-button
-                type="primary"
-                :loading="saving"
-                @click="onSave"
-              >
-                保存设置
-              </el-button>
-              <el-button @click="loadConfig">
-                重置
-              </el-button>
-            </el-form-item>
-          </el-form>
-        </el-card>
-      </el-tab-pane>
-
-      <el-tab-pane
         label="通知路由"
         name="routes"
       >
@@ -913,10 +820,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  getLeadMiningConfig, saveLeadMiningConfig, getLeadMiningStatus,
+  getLeadMiningStatus,
   getLeadMiningJudgements, getLeadMiningClueStats, getLeadMiningJudgementDetail,
   submitLeadMiningJudgementFeedback, getLeadMiningQualityStats,
   getLeadMiningNotifyRoutes, createLeadMiningNotifyRoute, deleteLeadMiningNotifyRoute
@@ -930,17 +837,8 @@ import { useChannelCatalogStore } from '@/stores/channelCatalog'
 const catalog = useChannelCatalogStore()
 
 const activeTab = ref('matrix')
-const saving = ref(false)
-const keywordsText = ref('')
-const tagsText = ref('')
-const form = reactive({ enabled: false, channels: [], requirement: '', min_intent_score: 50, model: '' })
 const status = ref({})
 
-// 监测渠道多选的候选也统一走目录（只列已开启渠道），不再维护本地硬编码表。
-const channelOptions = computed(() => catalog.channels.map((c) => ({
-  value: c.code,
-  label: c.label || c.name || c.code
-})))
 const leadRoleOptions = [
   { value: 'demand', label: '需求方' },
   { value: 'supply', label: '供货方' },
@@ -962,7 +860,6 @@ function routeAccountLabel(row) {
   if (!row.account_id) return '（默认/全部）'
   return catalog.accountLabel(row.account_id) || row.account_id
 }
-function parseList(text) { return (text || '').split(/[\n,，、]/).map(s => s.trim()).filter(Boolean) }
 function formatTime(t) {
   if (!t) return '-'
   const d = new Date(typeof t === 'number' && t < 1e12 ? t * 1000 : t)
@@ -971,35 +868,8 @@ function formatTime(t) {
   return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
 }
 
-async function loadConfig() {
-  try {
-    const res = await getLeadMiningConfig()
-    const data = unwrap(res)
-    form.enabled = !!data.enabled
-    form.channels = data.channels || []
-    form.requirement = data.requirement || ''
-    form.min_intent_score = data.min_intent_score || 50
-    form.model = data.model || ''
-    keywordsText.value = (data.keywords || []).join(', ')
-    tagsText.value = (data.tags || []).join(', ')
-  } catch (e) { ElMessage.error('加载配置失败：' + (e.message || e)) }
-}
-
 async function loadStatus() {
   try { status.value = unwrap(await getLeadMiningStatus()) } catch { status.value = {} }
-}
-
-async function onSave() {
-  saving.value = true
-  try {
-    await saveLeadMiningConfig({
-      enabled: form.enabled, channels: form.channels, requirement: form.requirement,
-      min_intent_score: form.min_intent_score, model: form.model,
-      keywords: parseList(keywordsText.value), tags: parseList(tagsText.value)
-    })
-    ElMessage.success('保存成功')
-  } catch (e) { ElMessage.error('保存失败：' + (e.message || e)) }
-  finally { saving.value = false }
 }
 
 // notify routes
@@ -1152,7 +1022,7 @@ function resetLeadFilter() {
 }
 
 function refreshAll() {
-  loadConfig(); loadStatus(); loadRoutes(); loadJudgements(judgementPage.value); loadQualityStats(); loadLeads(leadPage.value)
+  loadStatus(); loadRoutes(); loadJudgements(judgementPage.value); loadQualityStats(); loadLeads(leadPage.value)
 }
 
 onMounted(() => {
@@ -1168,8 +1038,6 @@ onMounted(() => {
 .title { margin: 0; font-size: 20px; }
 .sub { color: #909399; font-size: 13px; margin-top: 4px; }
 .status-tags { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.setting-form { max-width: 760px; }
-.hint { color: #909399; font-size: 12px; margin-left: 10px; }
 .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .stats-inline { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 .muted { color: #909399; font-size: 12px; }

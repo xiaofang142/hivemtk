@@ -130,6 +130,13 @@ func newTenantScopedLeadMiningServiceWithRepos(repo *leadMiningTenantConfigRepo,
 		lastJudge:      make(map[string]time.Time),
 		cfgCache:       make(map[uint]leadMiningConfigCacheEntry),
 		cfgGeneration:  make(map[uint]uint64),
+		// T01：规则是唯一真实入口；显式注入内存 account 规则，不依赖真实 dbstate。
+		ruleTargetFor: func(context.Context, *model.MessageHub) LeadRuleTarget {
+			return LeadRuleTarget{ChannelAccountID: 1, ChannelID: 1}
+		},
+		ruleService: NewLeadRuleServiceWithRepo(&lmRuleRepoStub{rows: map[string]*model.LeadMiningRule{
+			"account": {Scope: "account", Enabled: true, Keywords: model.JSONStrings{"A", "B"}},
+		}}),
 		// 本测试只验证租户隔离，不涉及证据完整性；注入一条完整命中，
 		// 避免副作用闸按新口径把空证据场景挡在仓储之外。
 		hitsProvider: func(context.Context, DetectionInput) ([]model.LeadMiningHit, error) {

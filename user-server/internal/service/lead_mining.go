@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"hivemtk-user/internal/aiagent/llm"
-	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
 
 	"hivemtk-user/internal/pkg/tenant"
@@ -89,10 +88,10 @@ type Service struct {
 	// notifier 由 Router 装配点注入；单测构造 Service 时可不注入，此时
 	// notifyLeadDiscovery 只记日志跳过，不再在 Service 内部隐式造带 DB 的服务。
 	notifier CustomerOwnerNotifier
-	// ruleService 三粒度规则解析（P0-a：发掘开关/渠道/阈值的唯一来源）。
+	// ruleService 账号/渠道两级规则解析（T01：发掘开关与关键词的唯一来源）。
 	// 不注入时按全局 DB 构造；单测可注入替身。
 	ruleService *LeadRuleService
-	// ruleTargetFor 把消息解析为规则目标（account > channel > global）。
+	// ruleTargetFor 把消息解析为规则目标（account > channel，无 global 兜底）。
 	// 不注入时走 ChannelResolver.ResolveByAccountRef；单测可注入替身避免依赖 DB。
 	ruleTargetFor func(context.Context, *model.MessageHub) LeadRuleTarget
 	// hitsProvider 仅供纯单测注入三路证据；生产为 nil，走真实 LeadDetectionService。
@@ -271,18 +270,6 @@ func (s *Service) invalidateConfigCacheLocked(tenantID *uint) {
 	s.cfgGeneration[*tenantID]++
 }
 
-// GetLeadMiningConfig 读取线索发掘全局配置（controller 层入口，避免 controller 直连 repository/model）
-func GetLeadMiningConfig(ctx context.Context) (*dto.LeadMiningConfig, error) {
-	cfg, err := repository.NewLeadMiningConfigRepository().GetSingleton(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if cfg == nil {
-		return &dto.LeadMiningConfig{}, nil
-	}
-	return leadMiningConfigToDTO(cfg), nil
-}
-
 // GetStatus 返回线索挖掘服务运行时状态
 func GetStatus() map[string]any {
 	s := singleton
@@ -300,18 +287,6 @@ func GetStatus() map[string]any {
 		"recent_processed": recent,
 		"cfg_loaded":       configLoaded,
 	}
-}
-
-func SaveLeadMiningConfig(ctx context.Context, in *dto.LeadMiningConfig) error {
-	if err := repository.NewLeadMiningConfigRepository().Save(ctx, leadMiningConfigFromDTO(in)); err != nil {
-		return err
-	}
-	if tenantID, ok := tenant.FromContext(ctx); ok {
-		ReloadConfigCacheForTenant(tenantID)
-	} else {
-		ReloadConfigCache()
-	}
-	return nil
 }
 
 // ListLeadMiningJudgements 返回判定记录列表（最小只读 API，LM-PR5）。
@@ -352,34 +327,6 @@ func GetLeadMiningJudgementDetailScoped(ctx context.Context, judgementID string,
 		return repo.GetByID(ctx, judgementID)
 	}
 	return repo.GetByIDScoped(ctx, judgementID, accounts)
-}
-
-func leadMiningConfigToDTO(m *model.LeadMiningConfig) *dto.LeadMiningConfig {
-	return &dto.LeadMiningConfig{
-		ID:             m.ID,
-		Enabled:        m.Enabled,
-		Keywords:       []string(m.Keywords),
-		Tags:           []string(m.Tags),
-		Requirement:    m.Requirement,
-		Channels:       []string(m.Channels),
-		MinIntentScore: m.MinIntentScore,
-		Model:          m.Model,
-		CreatedAt:      m.CreatedAt,
-		UpdatedAt:      m.UpdatedAt,
-	}
-}
-
-func leadMiningConfigFromDTO(d *dto.LeadMiningConfig) *model.LeadMiningConfig {
-	return &model.LeadMiningConfig{
-		ID:             d.ID,
-		Enabled:        d.Enabled,
-		Keywords:       model.JSONStrings(d.Keywords),
-		Tags:           model.JSONStrings(d.Tags),
-		Requirement:    d.Requirement,
-		Channels:       model.JSONStrings(d.Channels),
-		MinIntentScore: d.MinIntentScore,
-		Model:          d.Model,
-	}
 }
 
 // Stop 停止服务（进程退出时）
@@ -593,15 +540,14 @@ func (s *Service) process(ctx context.Context, hub *model.MessageHub, force ...b
 	}
 
 	cfg := s.loadConfig(ctx)
-	// P0-a 配置源合并：三粒度规则是发掘开关/渠道准入/阈值的唯一权威源。
-	// legacy 单例配置退化为默认值与兼容读（关键词/标签/阈值），不再单独用
-	// cfg.Enabled / channelEnabled 阻断一条已启用的账号级规则（对抗审核 P0-1）。
+	// 账号/渠道级规则是发掘开关的唯一权威源；legacy 单例配置只保留阈值/模型等参数默认值。
+	// 规则缺失或查询失败一律 fail-closed：不发掘、不回退全局默认（T01）。
 	rule, ruleErr := s.resolveProcessRule(ctx, hub)
-	gate := leadMiningGateFor(cfg, rule, hub.Platform)
-	if ruleErr != nil && !errors.Is(ruleErr, ErrLeadRuleNotFound) {
-		// 仓储未装配/不可用属于环境态，降级到 legacy 判据；用 Debug 避免刷屏。
-		logger.Debugf("[lead-mining] 三粒度规则解析失败，回退 legacy 判据 account=%s: %v", hub.AccountID, ruleErr)
+	if ruleErr != nil {
+		logger.Debugf("[lead-mining] 账号/渠道规则缺失或解析失败，不发掘 account=%s: %v", hub.AccountID, ruleErr)
+		return
 	}
+	gate := leadMiningGateFor(cfg, rule, hub.Platform)
 	if !gate.enabled {
 		return
 	}
@@ -618,9 +564,8 @@ func (s *Service) process(ctx context.Context, hub *model.MessageHub, force ...b
 			logger.Warnf("[lead-mining] 有效配置解析失败，fail-closed 不发掘 account=%s: %v", hub.AccountID, snapErr)
 			return
 		}
-		// 没有配置任何规则时沿用 legacy 判据，避免未迁移租户被快照整体关闭；
-		// 已配置规则时以快照为唯一权威，规则关闭立即生效。
-		if snap.RuleScope != "" && !snap.Enabled {
+		// 上面已保证规则存在；快照是本次分析的唯一权威，规则关闭或智能体失效立即生效。
+		if !snap.Enabled {
 			return
 		}
 		if snap.MinIntentScore > gate.minIntentScore {
@@ -729,8 +674,7 @@ func applyLeadMiningSnapshotToConfig(cfg *model.LeadMiningConfig, snap *LeadMini
 	return out
 }
 
-// leadMiningGate 发掘准入判据（P0-a）。rule 命中时为唯一权威源；
-// legacy 配置仅在无规则行时提供兼容判据与默认阈值。
+// leadMiningGate 发掘准入判据：rule 是唯一开关来源，cfg 只提供默认阈值。
 type leadMiningGate struct {
 	enabled        bool
 	minIntentScore int
@@ -738,23 +682,20 @@ type leadMiningGate struct {
 
 // leadMiningGateFor 计算一条消息是否进入发掘链路。
 //
-// 三粒度规则存在 ⇒ rule.enabled 是开关（cfg.Enabled 不得单独阻断）；渠道默认全纳入，
-// legacy 的 channels 白名单不得误挡已启用规则（显式关闭语义随 P0-c 的 MineMode 落地）。
-// 规则表当前没有 min_intent_score/channels 列，阈值仍从 legacy 配置取默认值；
-// 无规则行 ⇒ 完全按 legacy enabled + channelEnabled 走，保证存量行为不变。
+// 无 rule ⇒ disabled（fail-closed，不再按 legacy cfg.Enabled/channels 放行）；
+// rule.enabled 是唯一开关；阈值仍从 legacy 配置取参数默认值（非规则兜底）。
 func leadMiningGateFor(cfg *model.LeadMiningConfig, rule *model.LeadMiningRule, platform string) leadMiningGate {
 	score := 50
 	if cfg != nil && cfg.MinIntentScore > 0 {
 		score = cfg.MinIntentScore
 	}
-	if rule != nil {
-		return leadMiningGate{enabled: rule.Enabled, minIntentScore: score}
+	if rule == nil {
+		return leadMiningGate{minIntentScore: score}
 	}
-	enabled := cfg != nil && cfg.Enabled && leadMiningEnabledFor(cfg, platform)
-	return leadMiningGate{enabled: enabled, minIntentScore: score}
+	return leadMiningGate{enabled: rule.Enabled, minIntentScore: score}
 }
 
-// resolveProcessRule 用三粒度规则解析本条消息的发掘规则。
+// resolveProcessRule 用账号/渠道两级规则解析本条消息的发掘规则。
 // ruleTargetFor 是可注入的消息→规则目标解析通道（测试替身用）；生产走 ChannelResolver。
 func (s *Service) resolveProcessRule(ctx context.Context, hub *model.MessageHub) (*model.LeadMiningRule, error) {
 	rs := s.ruleService
@@ -780,7 +721,7 @@ func (s *Service) processRuleTarget(ctx context.Context, hub *model.MessageHub) 
 }
 
 // processLeadAgentID 取本条消息所属渠道账号绑定的线索发现智能体 ID（FR-026）。
-// 账号解析失败/歧义时返回 0：解析器退化为仅用三粒度规则字段，不阻断发掘主链。
+// 账号解析失败/歧义时返回 0：解析器退化为仅用账号/渠道规则字段，不阻断发掘主链。
 // historyScope 在同一次分析内按 context 缓存，重复调用不会重复查库。
 func (s *Service) processLeadAgentID(ctx context.Context, hub *model.MessageHub) uint {
 	if s == nil || hub == nil {
@@ -1395,28 +1336,6 @@ func (s *Service) tagCustomer(ctx context.Context, customer *model.Customer, new
 // （channelgw 投影的 MineMode != none 集合）的渠道都参与；租户配置只表达显式关闭
 // 某渠道（cfg.Channels 作为关闭名单），不再把「名单非空但漏一个」解读成静默全关。
 // capability 集合为空（装配异常/单测）时不阻断——保留 legacy 行为，避免断链。
-func channelEnabled(cfg *model.LeadMiningConfig, platform string) bool {
-	if cfg == nil || len(cfg.Channels) == 0 {
-		return true
-	}
-	for _, c := range cfg.Channels {
-		if strings.EqualFold(strings.TrimSpace(c), strings.TrimSpace(platform)) {
-			return false // 显式关闭
-		}
-	}
-	return true
-}
-
-// leadMiningEnabledFor 综合渠道资格与显式关闭判据（P0-c）。
-// capability 集合非空时必须命中注册表投影；为空（单测/装配异常）时不阻断，
-// 保持与 legacy channelEnabled 一致的兼容行为。
-func leadMiningEnabledFor(cfg *model.LeadMiningConfig, platform string) bool {
-	if len(LeadMiningChannels()) > 0 && !leadMiningChannelCapable(platform) {
-		return false
-	}
-	return channelEnabled(cfg, platform)
-}
-
 func mergeTags(a, b []string) []string {
 	set := map[string]string{}
 	add := func(t string) {

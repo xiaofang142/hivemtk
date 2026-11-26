@@ -7,12 +7,12 @@
       class="mb12"
     >
       <template #title>
-        账号级配置是真实生效入口：这里改关键词、语义词、两类智能体和开关会立即影响命中；「全局默认」只在账号/渠道都没有规则时兜底。
+        账号级配置是真实生效入口：这里改关键词、语义词、两类智能体和开关会立即影响命中；账号和渠道都没有规则时不会发掘，不设全局兜底。
       </template>
     </el-alert>
 
     <div class="matrix-head">
-      <span class="hint">规则优先级：账号 &gt; 渠道 &gt; 全局（命中第一条即停止）</span>
+      <span class="hint">规则匹配顺序：账号 &gt; 渠道（命中第一条即停止；都无规则则不发掘）</span>
       <el-button
         size="small"
         :loading="loading"
@@ -272,25 +272,22 @@ function channelRule(channelID) {
   return rules.value.find((r) => r.scope === 'channel' && Number(r.scope_id) === Number(channelID))
 }
 
-function globalRule() {
-  return rules.value.find((r) => r.scope === 'global')
-}
-
 function activeRuleFor(row) {
-  return accountRule(row.id) || channelRule(row.channel_id) || globalRule()
+  // 只认账号/渠道两级规则；缺失即不命中，不再回退全局兜底。
+  return accountRule(row.id) || channelRule(row.channel_id)
 }
 
 function ruleScopeLabel(row) {
   const rule = activeRuleFor(row)
-  if (!rule) return '无规则'
-  const name = { account: '账号级', channel: '渠道级', global: '全局兜底' }[rule.scope] || rule.scope
+  if (!rule) return '无规则（不发掘）'
+  const name = { account: '账号级', channel: '渠道级' }[rule.scope] || rule.scope
   return rule.enabled ? name : `${name}（已停用）`
 }
 
 function ruleTagType(row) {
   const rule = activeRuleFor(row)
   if (!rule || !rule.enabled) return 'info'
-  return { account: 'success', channel: 'warning', global: '' }[rule.scope] || ''
+  return { account: 'success', channel: 'warning' }[rule.scope] || ''
 }
 
 async function loadAll() {
