@@ -426,8 +426,15 @@ func (s *Service) buildLeadJudgeContext(ctx context.Context, hub *model.MessageH
 		GroupID:     hub.GroupID,
 	}
 
-	target := s.processRuleTarget(ctx, hub)
-	jctx.ChannelAccountID = target.ChannelAccountID
+	// 共享上下文/会话摘要必须写入可信作用域解析出的真实渠道账号。
+	// ruleTargetFor 只是规则解析的可注入目标（测试替身），不是真实账号来源；
+	// 把它当真实账号会让摘要写到错误账号下（T01 回归）。process 已在 ctx 冻结
+	// historyScope，此处复用缓存不会重复查库；无真实账号时保持 0 不写共享上下文。
+	var channelAccountID uint
+	if scope, scopeErr := s.historyScope(ctx, hub); scopeErr == nil && scope != nil {
+		channelAccountID = scope.accountID
+	}
+	jctx.ChannelAccountID = channelAccountID
 	// 规则只读账号/渠道两级；解析失败不再合成 global 规则、也不拿 legacy 配置兜底。
 	// jctx.Rule 留空 ⇒ 三路检测器按「规则为空」标记证据不完整（fail-visible）。
 	rule, err := s.resolveProcessRule(ctx, hub)
@@ -454,7 +461,7 @@ func (s *Service) buildLeadJudgeContext(ctx context.Context, hub *model.MessageH
 	// 共享上下文：写入本轮消息并读取多轮历史 + 成员角色（T033/T039）。
 	ctxRepo := repository.NewConversationContextRepository()
 	conversationID := leadHistoryConversationID(hub)
-	if conv, cerr := leadScopedConversation(ctx, ctxRepo, target.ChannelAccountID, conversationID); cerr == nil && conv != nil {
+	if conv, cerr := leadScopedConversation(ctx, ctxRepo, channelAccountID, conversationID); cerr == nil && conv != nil {
 		conv.Messages = append(conv.Messages, model.ConversationMessage{
 			MessageID: hub.MsgID, Role: "user", SenderID: hub.SenderID,
 			Content: strings.TrimSpace(hub.Content),
@@ -480,9 +487,9 @@ func (s *Service) buildLeadJudgeContext(ctx context.Context, hub *model.MessageH
 	// 群聊富化：用 AggregateGroupContext 给每条历史消息补 [角色:发送者] 前缀，
 	// 并把成员角色计数写进判定提示，让「谁求购/谁供货」在证据里可辨。
 	// 失败时保留原始消息并标注证据不完整（fail-visible，不静默吞错）。
-	if hub.IsGroup && target.ChannelAccountID > 0 && conversationID != "" {
+	if hub.IsGroup && channelAccountID > 0 && conversationID != "" {
 		enriched, counts, aerr := NewConversationContextServiceWithRepo(ctxRepo).
-			AggregateGroupContext(ctx, target.ChannelAccountID, hub.ConversationID, ConversationContextScope{Platform: hub.Platform, IsGroup: hub.IsGroup, GroupID: hub.GroupID})
+			AggregateGroupContext(ctx, channelAccountID, hub.ConversationID, ConversationContextScope{Platform: hub.Platform, IsGroup: hub.IsGroup, GroupID: hub.GroupID})
 		if aerr != nil {
 			jctx.GroupAggregateFailed = true
 			logger.Ctx(ctx).Warn().Err(aerr).Msg("[lead-mining] 群聊上下文聚合失败，判定提示标注证据不完整")

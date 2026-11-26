@@ -690,8 +690,7 @@ user	POST	/api/clue/score-all
 user	GET	/api/clue/score/:clue_id
 user	GET	/api/clue/score/list
 user	POST	/api/clue/engagement
-user	GET	/api/lead-mining/config
-user	POST	/api/lead-mining/config
+user	GET	/api/manage/leads/rules
 user	POST	/api/customer-rfm/compute
 user	POST	/api/customer-rfm/compute-all
 user	GET	/api/customer-rfm/:customer_id

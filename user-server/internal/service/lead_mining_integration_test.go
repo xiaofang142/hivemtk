@@ -64,6 +64,15 @@ func leadIntegrationResolver(database *gorm.DB) *ChannelResolver {
 	return NewChannelResolverWithRepos(repository.NewChannelAccountRepositoryWithDB(database), repository.NewChannelRepositoryWithDB(database))
 }
 
+// T01：规则是发掘开关的唯一权威源。集成夹具不依赖真实规则表，注入内存
+// account/channel 两级启用规则；关键词按 legacy 配置原样提供，不引入全局兜底。
+func integrationRuleService(keywords model.JSONStrings) *LeadRuleService {
+	return NewLeadRuleServiceWithRepo(&lmRuleRepoStub{rows: map[string]*model.LeadMiningRule{
+		"account": {Scope: "account", Enabled: true, Keywords: keywords},
+		"channel": {Scope: "channel", Enabled: true, Keywords: keywords},
+	}})
+}
+
 // 真实管道构造：配置落库 + 多轮消息落库 + 真实 fetchHistoryDB + 真实写库
 func TestLeadMining_Integration_FullPipeline(t *testing.T) {
 	database := newLeadIntegrationDB(t, "telegram")
@@ -128,6 +137,7 @@ func TestLeadMining_Integration_FullPipeline(t *testing.T) {
 		clueRepo:        repository.NewClueRepositoryWithDB(database),
 		cfgRepo:         cfgRepo,
 		hubRepo:         hubRepo,
+		ruleService:     integrationRuleService(cfg.Keywords),
 		lastJudge:       map[string]time.Time{},
 	}
 
@@ -201,6 +211,7 @@ func TestLeadMining_Integration_NotLead(t *testing.T) {
 		clueRepo:        repository.NewClueRepositoryWithDB(database),
 		cfgRepo:         cfgRepo,
 		hubRepo:         repository.NewMessageHubRepositoryWithDB(database),
+		ruleService:     integrationRuleService(nil),
 		lastJudge:       map[string]time.Time{},
 	}
 	s.process(ctx, &msg)
@@ -247,6 +258,7 @@ func TestLeadMining_Integration_AsyncEnqueue(t *testing.T) {
 		clueRepo:        repository.NewClueRepositoryWithDB(database),
 		cfgRepo:         cfgRepo,
 		hubRepo:         hubRepo,
+		ruleService:     integrationRuleService(nil),
 		cancel:          cancel,
 		lastJudge:       map[string]time.Time{},
 	}
@@ -305,6 +317,7 @@ func TestLeadMining_Integration_Debounce(t *testing.T) {
 		clueRepo:        repository.NewClueRepositoryWithDB(database),
 		cfgRepo:         cfgRepo,
 		hubRepo:         hubRepo,
+		ruleService:     integrationRuleService(nil),
 		lastJudge:       map[string]time.Time{},
 	}
 	for i := 1; i <= 3; i++ {

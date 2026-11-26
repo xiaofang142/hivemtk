@@ -84,7 +84,16 @@ func TestLeadHistory_CanonicalAccountAliases(t *testing.T) {
 		}
 	}
 	resolver := NewChannelResolverWithRepos(repository.NewChannelAccountRepositoryWithDB(database), repository.NewChannelRepositoryWithDB(database))
-	s := &Service{hubRepo: repository.NewMessageHubRepositoryWithDB(database), channelResolver: resolver}
+	s := &Service{
+		hubRepo:         repository.NewMessageHubRepositoryWithDB(database),
+		channelResolver: resolver,
+		// T01：规则是发掘开关的唯一权威源。注入内存 account/channel 规则，
+		// 用真实 historyScope 解析出的账号/渠道目标；无规则时 fail-closed 不判定。
+		ruleService: NewLeadRuleServiceWithRepo(&lmRuleRepoStub{rows: map[string]*model.LeadMiningRule{
+			"account": {Scope: "account", Enabled: true},
+			"channel": {Scope: "channel", Enabled: true},
+		}}),
+	}
 	// 生产构造默认解析器；此处显式仓储注入，避免其他测试的全局 DB 污染。
 	hub := &model.MessageHub{TenantID: 51, Platform: "telegram", AccountID: a.Name, ConversationID: "same",
 		SenderID: "peer", Direction: "inbound", Content: "A本轮消息", MsgID: "current-a"}
