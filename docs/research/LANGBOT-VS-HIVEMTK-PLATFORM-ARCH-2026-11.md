@@ -187,7 +187,7 @@ actor/subject 推断、回复目标推断。**同一平台的不同事件可以�
 
 **若平台协议不在预期内**（LangBot 的 `http_bot.py` 思路）：优先把 `custom` 渠道补成
 正式入口——固定信封（event_id/channel/conversation_id/sender/content/msg_type/timestamp）
-+ HMAC 验签 + `IngressHandler`，第三方按信封对接即可，不必为每个长尾平台写 Go 适配器。
+\+ HMAC 验签 + `IngressHandler`，第三方按信封对接即可，不必为每个长尾平台写 Go 适配器。
 
 # G. 本轮交付与待立项
 

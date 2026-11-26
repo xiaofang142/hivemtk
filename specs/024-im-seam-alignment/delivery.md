@@ -53,7 +53,7 @@
 
 - **R1 金样顺序依赖（严重，已修）**：feishu/wecom/wechat api_err 样例依赖 ok_text 暖 token 缓存、
   qq msg_seq 跨样例递增 → 单样例 `-run` 必红。修：每样例独立 svc + DB token 清缓存 + qq 唯一 msg_id
-  + 冻结比对改按标签（子集可校验）。验证：全量冻结绿 ×2，三样例单独 `-run` 绿。
+  \+ 冻结比对改按标签（子集可校验）。验证：全量冻结绿 ×2，三样例单独 `-run` 绿。
 - **R2 重放测试空断言（已修）**：`TestSendOutbound_DelayedReplayNoRetry` 改 DB-backed + 负对照
   （非重放入队 1 行证明夹具有牙，重放 0 新增）。
 - **R3 触点脚本死代码（已修）**：`model_channel_constants` 双遍循环收敛为单遍。

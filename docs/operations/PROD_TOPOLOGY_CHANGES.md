@@ -4,6 +4,16 @@
 > 否则换机 / 重建部署时会静默丢失（2026-11-04 二次审核发现：`deploy/` 目录
 > 不入库，上传卷与 nginx 分流改完只存在于当前机器）。
 
+## 2026-11-26 · 用户端八组导航、权限与页面数据口径发布（链 A/D 1bb9ead90）
+
+- **授权与源码**：用户授权全部自动处理导航、页面、前后端及线上鉴权和模块依赖。发布提交 `1bb9ead90ad793c1612dbc3b09c1da07e127d71c` 已推双远端，保留已发布的可信身份修复；从整合上游的干净 master 副本构建，未纳入其他会话在途改动。两端 pre-push 两道秘密门均通过。
+- **验证门禁**：前端 145 文件、1329 项和 Go 195 包全量通过，build/vet/lint、完整 `make audit`、跨栈权限门和九语种检查通过。生产构建 37.43 秒，709 个实际文件，产物秘密门私有真值、source map、有效 sourceMappingURL 均为 0。覆盖率、跨仓端口比对和 Graphify 的环境限制另列于本轮测试报告。
+- **API 交付**：链 A `--skip-tests` 仅跳过已完成的全量测试，保留 vet 等发布门；`2026-11-26T10:20:47+08:00` 写入部署 state。产物 SHA-256 `07a38057c9316470049f9ae7df49ce18beae329c9f64d1d49a901424a61f88d4`，宿主、容器及 `/proc/1/exe` 三处独立读回一致。运行镜像 `sha256:3d13f536ccd68be906f7e394f71319e304e7337c5e94c4750bf25ee9883d6c9e`，启动 `2026-11-26T02:20:36.20078595Z`；内外健康检查均 HTTP 200 / ok，公开 seed 默认口令 HTTP 401。
+- **API 回滚点**：镜像 `mtk-user-server:rollback-20261126-100858`，二进制 `/www/wwwroot/hivemtk/user-server/user-server.bak-20261126-100858`；独立读回为发布前镜像 `sha256:0630703c75ad8763b0b563662dbf25093c920ca47db311e08282cfdb6ed7f96f` 和二进制 `8e5c52c053559c6cf4261f6f47b6da7d06fa4bc37f6de8648e132c12a414ecf3`。
+- **SPA 交付与回滚点**：链 D 快照 `/www/wwwroot/hivemtk/user-web.snapshot-navigation-20261126-100505.tgz`（SHA-256 `34b8bdfbeb268e3fa3c906fbd533f1f8352b3f6b13081b21384d9f62db61f352`）后增量同步，保留旧 hash 资源。远端 709 文件摘要全部匹配，公网 12 项资源均 HTTP 200 且摘要一致。buildId `1bb9ead90-1795658076649`，入口 `assets/index-C8-bN_lV.js`；index SHA-256 `1e5928abda2c7d5ebf06728b0daf053e94488872baf7cfc3879545e4975dc02f`。
+- **数据库与页面**：生产 GEO source 列非空、默认 `unknown`，`(tenant_id, source, created_at)` 索引存在；1,150,460 条历史无来源记录仍为 unknown。现有登录态逐个切换八组，CRM／线索入口、驾驶舱、模块导览、GEO 两类预览和来源刷新、大屏示例及公开／私有确认取消验收通过，证据与范围见 [发布验收](../../.specify/bugs/user-web-navigation-content-20261126/production-verification.md)。生产接口当前为 8 条 UA、8 分组、30 天窗口，来源明确 active_ua_probe；未触发主动探测、客户消息、购买或大屏实际保存。平台目录同步见本文件下方独立记录。
+- **状态回写**：确认主仓 ignored 部署 state 仍是发布前状态且读取期间不变后，备份原始字节并原子同步本轮 state，回读一致；主仓与原修复工作树的其他改动和暂存区未动。重启续作只补页面证据与验收文档，未重复构建、全测或发布。
+
 ## 2026-11-26 · 深入审计：可信身份与消费回执发布（链 A 7b4839e6d）
 
 - **授权与源码**：用户明确要求「推送并部署」。`hivemtk-user` `7b4839e6decc3ab499fd21b08f3b2f9d0eb1eeb0` 已推 `gitee-upstream/master` + `upstream/master`，两个远端均执行并通过 pre-push 两道密钥检查。本次仅提交本会话的入站身份、消息上限、回执与模块闸门修复及回归记录；并行 CRM 工作区未纳入提交，构建取自该提交的干净副本。
@@ -197,8 +207,8 @@
 ## 2026-11-19 · 链 A 终发：二次审核批+platform-link 并行批（7d4ee5d58）
 
 - **发布内容**：审核修复批（channelcaps/capregistry/v3.98.0 枚举迁移/对齐总闸/渲染实证）
-  + 并行会话 platform-link 批（部署形态上报/心跳机器快照，rebase 对齐 upstream 2b5786229）
-  + wire 契约双侧重生成（租户清单追平 client_machine/deploy_mode；平台侧由并行会话
+  \+ 并行会话 platform-link 批（部署形态上报/心跳机器快照，rebase 对齐 upstream 2b5786229）
+  \+ wire 契约双侧重生成（租户清单追平 client_machine/deploy_mode；平台侧由并行会话
   8875f36 收口，本地重复修复已弃）。check-wire-contract.py ✅ 无漂移。
 - **线上实证**：health 200；`[migration] 同步迁移完成`；channel_type_enum 实查已含
   taobao/shopee/walmart_us（五值落地）；二进制 sha256=ece9dccacfdedeee…；
@@ -336,7 +346,7 @@
 - **验签闸负例**：POST 无 secret → 401 `verify error: missing X-Telegram-Bot-Api-Secret-Token`
   （路由通、fail-closed 生效）。
 - **回滚**：线上 `DELETE FROM telegram_group_gates WHERE id=3; DELETE FROM telegram_accounts WHERE id=2;`
-  + Telegram deleteWebhook（token=本地 id=5 行）。
+  \+ Telegram deleteWebhook（token=本地 id=5 行）。
 - **换机注意**：TG webhook 依赖 work.xapptool.cn vhost 的 /api/ 反代到 user-server；若换域名
   需同步 setWebhook+DB webhook_url 两处。
 
@@ -867,7 +877,7 @@ agent 18（本轮新增 bilibili/xianyu 绑定，闲鱼页签已重开心跳恢�
 
 **端到端时延解剖**（生产 trace 分段，douyin 真实对话 8 轮）：服务端 ingest→dispatch→
 enqueue **同刻 0ms**；35-40s 全部在扩展端（切换会话 3-5s + 拟人键入 ∝ 字数 90ms/字
-+ 回查 2.5s，均为风控红线设计）+ 采集 ≤30s（巡检节奏）+ debounce 12s（单条也全额延迟）。
+\+ 回查 2.5s，均为风控红线设计）+ 采集 ≤30s（巡检节奏）+ debounce 12s（单条也全额延迟）。
 
 **修复**：自适应合并窗——上一条同会话 inbound 距本条 < 合并窗（客户连发中）才进窗
 合并；**静默后首条消息跳过窗立即触发**（PrevInboundCreatedAt 按时间排除本条）。

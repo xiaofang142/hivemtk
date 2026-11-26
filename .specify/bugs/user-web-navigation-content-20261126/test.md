@@ -4,11 +4,11 @@
 - **Tested**: 2026-11-26
 - **Assessment**: [assessment.md](assessment.md)
 - **Fix**: [fix.md](fix.md)
-- **Result**: partial
+- **Result**: pass（本轮修复、发布与下列关键页面验收；环境未执行项另列）
 
 ## Summary
 
-导航、页面内容、探测来源与引导的专项回归、前后端全量和完整静态审计已通过，平台模块目录已同步并完成数据库对账。实际发布及发布后页面验证待完成，本报告按实际结果继续补充。
+导航、页面内容、探测来源与引导的专项回归、前后端全量和完整静态审计已通过，平台模块目录已同步并完成数据库对账。API 和 SPA 已发布，二进制、运行镜像、709 个前端产物及公网资源已独立核对；发布后八组切换及关键页面交互逐元素验收通过，见 [发布验收](production-verification.md)。环境未执行项不包含在通过结论中。>>>>>>> gitee-upstream/master
 
 ## Checks Performed
 
@@ -25,7 +25,8 @@
 | 前端全量 | `npm test -- --maxWorkers=1` | pass | 最终 145 文件、1329 项全部通过，257.28 秒；包含导览修复，未放大测试超时 |
 | 前端 lint | `npx eslint src --max-warnings 80` | pass | 退出 0、无输出；最终接线缩进已统一 |
 | i18n 总门 | `python3 scripts/check-i18n-coverage.py` | pass | 9 语言、2434 调用键、无法解析 0、孤儿 0；基线未放宽 |
-| 生产构建 | `npm run build` | pass | 分包接线修复后构建通过；发布前须用最终提交重新构建 |
+| 生产构建 | 最终提交下 `npm run build` | pass | 37.43 秒；buildId `1bb9ead90-1795658076649`；709 个实际产物，PWA 706 个预缓存条目 |
+| 最终产物秘密门 | `bash scripts/check-secrets-artifacts.sh <主仓 .env> user-web/dist` | pass | 7 枚真值、709 个文件；私有真值、source map 和有效 sourceMappingURL 均为 0 |>>>>>>> gitee-upstream/master
 | Go 构建与静态检查 | `go build ./... && go vet ./...`、Go lint | pass | 构建和 vet 退出 0，lint 0 issues |
 | 分层与架构 | `python3 scripts/check-layer-boundary.py` 及五层架构检查 | pass | 1785 个非测试 Go 文件，跨层违规 0 |
 | Go 全量 | 专用 PostgreSQL 8217 下 `make test-go` | pass | 认证预检与全部测试成功；195 个包全部出现在结果中，缺失 0、失败 0；前次中断不计通过 |
@@ -34,8 +35,11 @@
 | 秘密与默认口令门 | `scripts/pre-push-secrets.sh`、本地默认口令探针 | pass | A+B 与 containment 均通过；本地 8204 对公开 seed 口令返回 401 |
 | 平台同步 | 管理员会话 `POST /platform/module-catalog/seed` 后只读查库 | pass | HTTP 200；24 模块、250 绑定、53 依赖；目录价格和 589 条授权逐行不变 |
 | Graphify | 规定的 `_rebuild_code(Path('.'))` 命令 | not-run | 实际尝试报 `ModuleNotFoundError: No module named 'graphify'`，图谱未刷新 |
-| API / SPA 发布 | 链 A / 链 D | not-run | 等最终验证与提交推送 |
-| 线上页面 | ego-browser 逐元素验证 | not-run | 现有管理员会话可用，发布前仍为旧七组菜单 |
+| API / SPA 发布 | 链 A / 链 D | pass | 双远端发布提交一致；API 内外 HTTP 200、默认口令 401，运行进程摘要一致；SPA 709 个远端文件与 12 个公网资源摘要匹配，回滚点已留存 |
+| 线上 GEO 迁移 | 生产库只读核验列、索引及来源分布 | pass | source 非空默认 unknown；复合索引存在；1,150,460 条历史记录保留 unknown |
+| 线上页面 | ego-browser 逐元素验证 | pass | 八组分别切换；CRM／线索入口、驾驶舱、模块导览、两类 GEO 预览、来源与刷新、大屏示例及公开／私有确认取消均有页面证据；不含真实业务写入与受限角色点验 |
+| 收尾文档格式 | `npx -y markdownlint-cli2` | pass | 835 个文件，0 issues；修正 12 处既有加号转义和末尾换行，正文含义不变 |
+| 收尾文档链接 | `python3 scripts/check-md-links-offline.py` | pass | 848 个已纳入索引的 Markdown 文件，断链 0 |>>>>>>> gitee-upstream/master
 
 ## Output Excerpts
 
@@ -56,9 +60,9 @@ catalog_unchanged=true / dependencies_unchanged=true / grants_unchanged=true
 ## Residual Risks
 
 - 本地覆盖率没有 profile，跨仓端口比对缺少相邻目录中的对端，均未判定。
-- 新分组及实际页面尚未发布后验证；未向生产发起 UA 探测或发送客户消息。
+- 页面验证使用现有管理员会话，未在生产新建受限角色、注入预览失败、发起 UA 探测、发送客户消息、购买或实际保存大屏；相关权限与失败行为的自动回归另列于上表。>>>>>>> gitee-upstream/master
 - Graphify 因缺少本机 Python 模块未更新。
 
 ## Recommendation
 
-完成发布，以真实健康检查、资源摘要和逐元素页面证据更新结论。
+本轮修复及既定关键页面验收通过。保留自动回归、产物摘要、平台授权对账和逐元素页面证据；三个环境未执行项不计通过。重启续作阶段只完成点验与文档，未重复构建、全测或发布。>>>>>>> gitee-upstream/master

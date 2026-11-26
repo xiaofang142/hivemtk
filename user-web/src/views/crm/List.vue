@@ -7,32 +7,6 @@
         </h2>
         <span class="page-sub">列表按账号 / 行业 / 负责人数据权限自动过滤</span>
       </div>
-      <div class="page-actions">
-        <el-button @click="$router.push('/crm/dedupe')">
-          客户去重
-        </el-button>
-        <el-button @click="$router.push('/crm/import-export')">
-          导入导出
-        </el-button>
-        <el-button @click="$router.push('/crm/contacts')">
-          联系人
-        </el-button>
-        <el-button @click="$router.push('/crm/companies')">
-          公司
-        </el-button>
-        <el-button @click="$router.push('/crm/suppliers')">
-          供应商
-        </el-button>
-        <el-button @click="$router.push('/crm/service-providers')">
-          服务商
-        </el-button>
-        <el-button
-          type="primary"
-          @click="openCreate"
-        >
-          新增客户
-        </el-button>
-      </div>
     </div>
 
     <WorkflowNavigation
