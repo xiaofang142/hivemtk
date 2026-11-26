@@ -4,6 +4,17 @@
 > 否则换机 / 重建部署时会静默丢失（2026-11-04 二次审核发现：`deploy/` 目录
 > 不入库，上传卷与 nginx 分流改完只存在于当前机器）。
 
+## 2026-11-26 · T02 线索智能体族菜单去重与统一布局正式发布
+
+- **范围/裁决**：仅做菜单分组、去重与事实源统一，不实现 T05 的「线索通知配置 vs 系统通知员工」语义分离。三必答结论：①「线索发现智能体」= AI 智能体注册表/CRUD（FR-026，`/api/manage/lead-mining-agents`，线上页 `线索智能体 / 线索配置 / 线索发现智能体`，含「新增智能体」，页注「独立管理线索发现智能体，与自动回复智能体剥离（FR-026）」）；「线索挖掘」= 发掘工作台（`线索智能体 / 线索挖掘`，5 个 tab，`/lead-mining/index`）；「线索列表」= clues 表管理页（`/clue/list`）。②能力不同，不做页面硬合并；合并的是菜单分组、统一命名与重复可写入口——工作台「通知路由」tab 与独立页曾对同一张 `lead_mining_notify_routes` 各有一套 CRUD（同显 `t18_default`），现改为 tab 仅入口跳转，唯一可写页 `/leads/notify-routes`。③族下改为「线索挖掘」直达 + 两个子目录：「线索配置」（线索发现智能体 / 线索治理 / 线索通知路由）、「判定与线索」（判定与证据 / 线索列表 / 线索统计 / 线索归档 / 权限内客户与消息）；所有原 key / Path / Roles 保留，旧路由不 404。
+- **源码**：用户端 `hivemtk-user@71623f75e`（14 files，+93/-227）已推 `gitee-upstream/master` + `upstream/master`；平台端 `hivemtk-platform@194c672`（2 files，seed 重导 259 keys）已推 `origin/master`。新增两个纯布局容器 key `leadConfigGroup`（admin）/ `leadEvidenceGroup`（admin/viewer/staff），i18n 同步 9 语种。
+- **API 链 A**：`./deploy/deploy-api.sh` 退出码 0，开始 `2026-11-26T21:24:36+08:00`；二进制 SHA-256 `daf89b89b71b359fac436648bf609c3e4f1ec0cfadd6ce3fdb43a5c08f50e6eb`，镜像 `sha256:dcecba18388513dc7adc497ce4a2cd58db3ea697f3af30ff14ca386bfbaf971a`，容器启动 `2026-11-26T13:24:26.632916404Z`；回滚点 `mtk-user-server:rollback-20261126-212245`，二进制备份 `user-server.bak-20261126-212245`；容器内与公网 `/health` 均 200/ok，默认口令探针 ok。
+- **SPA 链 D**：构建 `71623f75e-1795699365854`，主资源 `assets/index-A-N-CHaU.js`；备份 `user-web.snapshot-20261126-212446.tgz`；公网 `https://work.xapptool.cn/` 入口 hash 与本地 dist 一致（`.user.ini` 宝塔保护文件 unlink 失败无害忽略）。线上 SPA 有缓存，验证须用 `?t=<时间戳>` 穿透，确认加载 `index-A-N-CHaU.js`。
+- **平台端**：工作区根 `deploy/deploy.sh platform-server` 成功，镜像 `sha256:495dbbde750d4b96b06c0772b13741a76d7a47ed56db66cc3f77378a7821a0ce`，本机 `/health`、`/api/health` 通过，迁移新应用 0 / 跳过 12，seed 259 keys（两份 seed 同 sha `e0e09273…`）。
+- **线上验收**：`page.fetch('/api/menus')` status 200，`leadDiscovery` 返回新嵌套结构（`leadConfigGroup` / `leadEvidenceGroup`）。逐元素 ego-browser 点验：工作台「通知路由」tab（ref=82）仅显示入口卡片「前往配置」（ref=99），点后跳 `/leads/notify-routes` 显示唯一可写页与 `t18_default`；逐叶子点验 `判定与证据`→`/leads/evidence`、`线索列表`→`/clue/list`、`线索统计`→`/clue/statistics`、`线索归档`→`/leads/archive`、`权限内客户与消息`→`/leads/scoped-list`、`线索发现智能体`→`/leads/mining-agents`、`线索治理`→`/leads/rules`（新「发掘工作台」按钮跳回 `/lead-mining/index`），面包屑层级正确。证据：快照文本 + `t02-evidence.png` / `t02-workbench.png`。
+- **本地门**：vitest 147 files/1338 tests 全绿；eslint 0 errors / 5 warnings（基线）；`go test ./internal/model/ -run TestMenuNavigation` ok；平台 `go test ./internal/service -run TestSeedMenuKeyCoverage` ok；`go build ./...` + `go vet ./...` + `check-layer-boundary.py` 0 违规；`npm run i18n:check` 通过。完整 DB 依赖套件因环境缺 `POSTGRES_TEST_PASSWORD` 失败（非代码问题）；i18n 8 语种缺预存量 `回复未送达`（基线噪声）。
+- **留位说明**：T05 的「线索通知配置与系统通知员工语义分离」未纳入本轮；`/leads/notify-routes` 已是唯一事实源入口，T05 可在此页与系统通知设置之间做语义切分，无需再动菜单结构。
+
 ## 2026-11-26 · CRM24 账号 × 行业 × 角色配对授权正式发布
 
 - 正式源码：`b60564342489ba89540cdac64607fa79cdfd95f2`；本地 master 已提交并同步双远端，发布与验收均对应同一源码。
