@@ -292,10 +292,6 @@ func newTestService(t *testing.T, cfg *model.LeadMiningConfig, j *fakeJudge) *Se
 		clueRepo:        newFakeClueRepo(),
 		cfgRepo:         &fakeCfgRepo{cfg: cfg},
 		lastJudge:       map[string]time.Time{},
-		// 本组验证判定后的客户/线索、防抖与去重；检测完整性由专门回归覆盖。
-		hitsProvider: func(context.Context, DetectionInput) ([]model.LeadMiningHit, error) {
-			return []model.LeadMiningHit{{Type: "keyword", Complete: true}}, nil
-		},
 	}
 }
 
