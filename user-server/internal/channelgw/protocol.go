@@ -229,12 +229,24 @@ type IngestResult struct {
 	Reason    string `json:"reason,omitempty"`
 }
 
+// IngestAck 统一网关 ACK 条目（与 sagex/wechat-listener 与 qq-listener 的
+// AckValidator、浏览器扩展的 hivemtk.channel.v1 契约对齐）。status 取值：
+// accepted / duplicate / retry / rejected。
+type IngestAck struct {
+	EventID string `json:"event_id"`
+	Status  string `json:"status"`
+}
+
 type IngestResponse struct {
 	OK         bool            `json:"ok"`
 	Ingested   []*IngestResult `json:"ingested"`
-	SessionID  string          `json:"session_id,omitempty"`
-	Reason     string          `json:"reason,omitempty"`
-	ServerTime int64           `json:"server_time"`
+	// 以下两字段为 additve 兼容：桌面桥接扩展仍读 ingested；
+	// SageX Android 客户端只认 schema_version + acks，缺一即判 ACK_INVALID 暂停上报。
+	SchemaVersion string       `json:"schema_version,omitempty"`
+	Acks          []*IngestAck `json:"acks,omitempty"`
+	SessionID     string       `json:"session_id,omitempty"`
+	Reason        string       `json:"reason,omitempty"`
+	ServerTime    int64        `json:"server_time"`
 }
 
 // OutboundReply 服务器 -> 渠道 下行统一回复（WS outbound_reply 帧载荷）。

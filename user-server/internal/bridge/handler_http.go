@@ -720,6 +720,11 @@ func (h *BridgeIngestHandler) HandleHTTPIngest(c *gin.Context) {
 	// Accepted也可能代表自回显/重复，不在HTTP路径据此调用矿工。
 
 	ingestedCount := len(resp.Ingested)
+	// 统一网关契约（hivemtk.channel.v1）：SageX Android 客户端的 AckValidator
+	// 只接受 schema_version + acks[{event_id,status}]，缺 acks 即 ACK_INVALID 暂停。
+	// 这里按已落库结果生成 ACK，additive 附加到既有 ingested 响应，浏览器扩展不受影响。
+	resp.SchemaVersion = "hivemtk.channel.v1"
+	resp.Acks = buildIngestAcks(resp.Ingested)
 	logger.Ctx(ctx).Info().
 		Str("module", "bridge").
 		Str("event", "http_ingest_response").
@@ -737,6 +742,22 @@ func (h *BridgeIngestHandler) HandleHTTPIngest(c *gin.Context) {
 	bm.IngestDuration.WithLabel(channelNorm).Observe(float64(time.Since(start).Milliseconds()))
 
 	c.JSON(http.StatusOK, resp)
+}
+
+// buildIngestAcks 把落库结果映射为统一网关 ACK，供 SageX Android 客户端
+// 的 AckValidator 消费。Duplicate→duplicate、未接收→retry、其余→accepted。
+func buildIngestAcks(results []*HTTPIngestResult) []*channelgw.IngestAck {
+	acks := make([]*channelgw.IngestAck, 0, len(results))
+	for _, item := range results {
+		status := "accepted"
+		if item.Duplicate {
+			status = "duplicate"
+		} else if !item.Accepted {
+			status = "retry"
+		}
+		acks = append(acks, &channelgw.IngestAck{EventID: item.EventID, Status: status})
+	}
+	return acks
 }
 
 // BridgeOutboxMessage 下发队列中的一条待发消息（别名 channelgw.OutboxMessage，HTTP/WS 共用序列化）。
