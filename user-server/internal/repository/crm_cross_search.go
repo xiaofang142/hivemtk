@@ -152,9 +152,9 @@ func (r *crmCrossSearchRepository) ListScoped(ctx context.Context, f CRMCrossSea
 		SourceRef  string `gorm:"column:source_ref"`
 		Industry   string `gorm:"column:industry"`
 	}
-	if err := q.Select(table + ".id AS id, " + table + ".name AS name, " + table + ".customer_id AS customer_id, " +
-		table + ".source_ref AS source_ref, " +
-		"(SELECT industry FROM customers WHERE customers.id = " + table + ".customer_id) AS industry").
+	if err := q.Select(table+".id AS id, "+table+".name AS name, "+table+".customer_id AS customer_id, "+
+		table+".source_ref AS source_ref, "+
+		"(SELECT industry FROM customers WHERE customers.tenant_id = ? AND customers.id = "+table+".customer_id) AS industry", tid).
 		Order(table + ".id DESC").Offset((page - 1) * pageSize).Limit(pageSize).Scan(&raw).Error; err != nil {
 		return nil, 0, err
 	}
