@@ -970,3 +970,19 @@ follow_user_channels 扩为八渠道（生产库实值已更新）。链 B 从�
 - 观察窗：edition 在 23:58/00:01/00:04 三次心跳保持 custom，无回摆；user_db `channels` 租户 18 共 11 行；公网 `/health` HTTP 200。
 
 **未做/边界**：未改 user-server Go 代码（链 A 不触发）；未发 bridge 扩展（链 B/C 不触发）；平台的测试口令安全门缺 `POSTGRES_TEST_PASSWORD`，`TestSeedIdempotent` 被 env 门拒绝（非代码失败），seed 覆盖用 JSON 直接核对 250/250 无重复；平台后台登录口令与 env `PLATFORM_ADMIN_PASSWORD` 不一致（登录 401），配置改走服务器本地 DB 直连；未对任何真实客户发消息。
+
+## 2026-11-26 16:06 未完成任务清单代码层统一收口发布（链 A，HEAD `59041bafb`）
+
+**口径**：仅 Go API 变更，走链 A；bridge/SPA 本轮无源码改动（扩展仅原地重载 1.3.10），链 B/C/D 不触发。
+
+**发布内容**：把 `docs/未完成任务清单.md` 中 20261125 时间标记任务的 P0/P1/P2 代码级缺口一次性合入并上线，覆盖 CH 识别码原子轮换/可信身份、CRM 企业/导入/跟进/跨租户、LM/LEAD 评分与证据门、SX 授权码 v2 与发布 fail-closed。发布前完成与远端 `542c6befb` 的 rebase，保留本地 CH-07 账号消歧和 SageX stub 修复；发布门修复两处：`fa72917d5` 移除失效的 `lead_notify_repository_test.go` 并去掉重复 `hitsProvider`，`59041bafb` 为 CRM 跨库子查询补 `tenant_id` 相关式条件（修复 S-18 租户隔离扫描）。
+
+**验证证据**：
+- 发布预检 `go vet` + `go test ./...` 全绿（需导出 `POSTGRES_TEST_PASSWORD`；缺省时 E2E 会被 DB 安全门拒绝，非代码回归）。
+- 仓库分层边界脚本 0 违规。
+- 线上二进制 sha256 `1accc80d8115b4a1…`，运行镜像 `mtk-user-server:96472492138761a1163`，容器启动 `2026-11-26T08:12:57.590233671Z`；容器内 `/health` 与公网 `https://workapi.xapptool.cn/health` 均 200 `{"code":0,"message":"ok"}`；默认口令探针 GREEN。
+- 回滚点：镜像 `mtk-user-server:rollback-20261126-160634`，二进制 `/www/wwwroot/hivemtk/user-server/user-server.bak-20261126-160634`。
+
+**线上四渠道核对（ee lite 逐元素 + 生产库直读）**：`channels` 表 20 微信/21 QQ/22 抖音/23 小红书全部启用；租户 18 四个账号 10~13 均启用且自动回复/线索发现开；识别码 `cid_t18_wx_maagex`/`cid_t18_qq_magex`/`cid_t18_douyin_hivemtk`/`cid_t18_xhs_hivemtk` 均已配置。消息中台 MQ 页面可见四渠道各 1 条入站消息（微信/QQ 会话带 `sagex:` 前缀，抖音/小红书走桥接会话）。
+
+**未闭环**：真实外部渠道持续消息、正式签名发布、生产 UI 全量点验与全量任务复选框翻转仍需对应证据，本轮不翻转 `- [ ]`。
