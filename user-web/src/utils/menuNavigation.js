@@ -87,7 +87,13 @@ export function projectNavigation(menus) {
 
   const navigation = prune(menus)
   if (grantedChannels.length) {
-    navigation.push({ key: 'channels', icon: 'Connection', path: grantedChannels[0], channelPaths: grantedChannels })
+    const channelsNode = { key: 'channels', icon: 'Connection', path: grantedChannels[0], channelPaths: grantedChannels }
+    const systemNode = navigation.find(node => node.key === 'system')
+    if (systemNode) {
+      systemNode.children = [...(systemNode.children || []), channelsNode]
+    } else {
+      navigation.push(channelsNode)
+    }
   }
   return navigation
 }
@@ -109,12 +115,23 @@ export function getNavigationPath(route) {
   return ((matched && !matched.includes(':') ? matched : route.path).replace(/\/+$/, '') || '/')
 }
 
+function findChannelsNode(nodes, path) {
+  for (const node of nodes) {
+    if (node.key === 'channels' && node.channelPaths?.includes(path)) return node
+    if (node.children?.length) {
+      const found = findChannelsNode(node.children, path)
+      if (found) return found
+    }
+  }
+  return null
+}
+
 export function findNavigationTrail(menus, route) {
   const path = getNavigationPath(route)
   const trails = new Map(Array.from(menuTrails(menus), trail => [trail.at(-1).path, trail]))
   if (trails.has(path)) return trails.get(path)
 
-  const channels = menus.find(node => node.key === 'channels' && node.channelPaths?.includes(path))
+  const channels = findChannelsNode(menus, path)
   if (channels) return [channels]
 
   const action = listActions.get(path)
