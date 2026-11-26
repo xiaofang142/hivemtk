@@ -1239,6 +1239,10 @@ type UnifiedGatewayMessage struct {
 	ConversationID string         `json:"conversation_id"`
 	SenderID       string         `json:"sender_id"`
 	SenderName     string         `json:"sender_name"`
+	// SenderAvatar 发言者头像 URL（统一上报格式字段，与 channelgw.IngestMessage.SenderAvatar
+	// 同名同义）。QQ/微信等拿不到头像的渠道留空——空串是合法兜底，不编造占位值。
+	// JSON tag 带 omitempty：旧客户端缺此键时反序列化为零值，向后兼容。
+	SenderAvatar   string         `json:"sender_avatar,omitempty"`
 	SenderType     string         `json:"sender_type"`
 	ReceiverID     string         `json:"receiver_id"`
 	Content        string         `json:"content"`
@@ -1330,7 +1334,7 @@ func (h *BridgeIngestHandler) handleGatewayReport(c *gin.Context, req *UnifiedCh
 				conv = ing.ConversationID
 			}
 			ing.Messages = append(ing.Messages, &HTTPIngestMessage{
-				EventID: m.EventID, SenderID: m.SenderID, SenderName: m.SenderName, SenderType: m.SenderType,
+				EventID: m.EventID, SenderID: m.SenderID, SenderName: m.SenderName, SenderAvatar: m.SenderAvatar, SenderType: m.SenderType,
 				Content: m.Content, MsgType: m.MsgType, MediaURL: m.MediaURL, ConversationID: conv,
 				IsGroup: m.IsGroup, GroupID: m.GroupID, GroupName: m.GroupName, Timestamp: m.Timestamp, Extra: m.Extra,
 			})
@@ -1406,7 +1410,7 @@ func (h *BridgeIngestHandler) handleGatewayBridgeIngest(c *gin.Context, channel,
 			conv = ing.ConversationID
 		}
 		ing.Messages = append(ing.Messages, &HTTPIngestMessage{
-			EventID: m.EventID, SenderID: m.SenderID, SenderName: m.SenderName, SenderType: m.SenderType,
+			EventID: m.EventID, SenderID: m.SenderID, SenderName: m.SenderName, SenderAvatar: m.SenderAvatar, SenderType: m.SenderType,
 			Content: m.Content, MsgType: m.MsgType, MediaURL: m.MediaURL, ConversationID: conv,
 			IsGroup: m.IsGroup, GroupID: m.GroupID, GroupName: m.GroupName, Timestamp: m.Timestamp, Extra: m.Extra,
 		})
@@ -1448,8 +1452,15 @@ func gatewayMessageToEvent(channel, accountID string, tenantID uint, m UnifiedGa
 	if receiver == "" {
 		receiver = accountID
 	}
+	// 统一上报格式（群聊字段）：MessageEvent 无独立 GroupName 列，群名与 channelgw.ToEvent
+	// 同口径落 Extra["group_name"]，供统一收件箱/客户资料展示。群 ID/IsGroup 走顶层字段。
+	if m.GroupName != "" {
+		extra["group_name"] = m.GroupName
+	}
 	return &model.MessageEvent{
 		EventID: eventID, Channel: channel, SenderID: m.SenderID, SenderName: m.SenderName,
+		// SenderAvatar 与 media_url 同列宽口径，入库前收口；QQ/微信拿不到时为空串（合法兜底）。
+		SenderAvatar: model.TruncateMediaURL(m.SenderAvatar),
 		SenderType: senderType, ReceiverID: receiver, MsgType: msgType, Content: m.Content,
 		MediaURL: m.MediaURL, ConversationID: conv, IsGroup: m.IsGroup, GroupID: m.GroupID,
 		Extra: extra, Timestamp: time.UnixMilli(ts),

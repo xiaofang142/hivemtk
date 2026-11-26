@@ -42,6 +42,45 @@ func TestGatewayMessagePinsTrustedIdentity(t *testing.T) {
 	}
 }
 
+// TestGatewayMessageCarriesUnifiedReportFields 统一上报格式判据（T09）：
+// 网关入口与 channelgw.IngestMessage 同构——发言者头像逐字透传并按 media_url 列宽截断；
+// 群聊 is_group/group_id 走顶层字段，group_name 落 Extra（MessageEvent 无独立列），
+// 与 channelgw.ToEvent 口径一致。QQ/微信抓不到头像时为空串，不编造占位值。
+func TestGatewayMessageCarriesUnifiedReportFields(t *testing.T) {
+	const avatar = "https://p3-sign.douyinpic.com/avatar.jpeg?x-expires=1"
+	m := UnifiedGatewayMessage{
+		EventID: "t09-group-event", SenderID: "alice", SenderName: "Alice",
+		SenderAvatar: avatar, Content: "在吗", MsgType: "text",
+		IsGroup: true, GroupID: "grp-1", GroupName: "研发群",
+	}
+	ev := gatewayMessageToEvent("wechat", "trusted-account", 7, m)
+	if ev.SenderAvatar != avatar {
+		t.Fatalf("sender_avatar 未逐字透传: got %q want %q", ev.SenderAvatar, avatar)
+	}
+	if !ev.IsGroup || ev.GroupID != "grp-1" {
+		t.Fatalf("群聊字段丢失: is_group=%v group_id=%q", ev.IsGroup, ev.GroupID)
+	}
+	if got := ev.Extra["group_name"]; got != "研发群" {
+		t.Fatalf("group_name 未落 Extra: got %v want %q", got, "研发群")
+	}
+	if ev.SenderType != "customer" {
+		t.Fatalf("sender_type 缺省应为 customer: got %q", ev.SenderType)
+	}
+	assertGatewayIdentity(t, ev, "trusted-account", "7")
+
+	// 空头像（QQ/微信抓不到）保持空串。
+	ev2 := gatewayMessageToEvent("qq", "acct", 7, UnifiedGatewayMessage{EventID: "e2", Content: "hi"})
+	if ev2.SenderAvatar != "" {
+		t.Fatalf("无头像渠道 sender_avatar 必须为空: got %q", ev2.SenderAvatar)
+	}
+	// 超长头像按 media_url 同款列宽截断。
+	long := "https://p3-sign.douyinpic.com/avatar/" + strings.Repeat("a", 600)
+	ev3 := gatewayMessageToEvent("douyin", "acct", 7, UnifiedGatewayMessage{EventID: "e3", SenderAvatar: long})
+	if len([]rune(ev3.SenderAvatar)) != model.MaxMediaURLLen {
+		t.Fatalf("sender_avatar 未截断: %d (want %d)", len([]rune(ev3.SenderAvatar)), model.MaxMediaURLLen)
+	}
+}
+
 func assertGatewayIdentity(t *testing.T, ev *model.MessageEvent, account, tenant string) {
 	t.Helper()
 	if ev.Extra["account_id"] != account || ev.Extra["tenant_id"] != tenant {
