@@ -4,6 +4,24 @@
 > 否则换机 / 重建部署时会静默丢失（2026-11-04 二次审核发现：`deploy/` 目录
 > 不入库，上传卷与 nginx 分流改完只存在于当前机器）。
 
+## 2026-11-26 · 深入审计：可信身份与消费回执发布（链 A 7b4839e6d）
+
+- **授权与源码**：用户明确要求「推送并部署」。`hivemtk-user` `7b4839e6decc3ab499fd21b08f3b2f9d0eb1eeb0` 已推 `gitee-upstream/master` + `upstream/master`，两个远端均执行并通过 pre-push 两道密钥检查。本次仅提交本会话的入站身份、消息上限、回执与模块闸门修复及回归记录；并行 CRM 工作区未纳入提交，构建取自该提交的干净副本。
+- **发布门禁**：干净副本 service / bridge / middleware 定向 `-race` 分别通过（2.474s / 2.006s / 1.857s），`go build ./...` 与 `go vet ./...` 通过。服务重启中断后只补跑尚无退出证据的 vet，退出 0；恢复验证未重复定向 race 与 build。链 A 使用 `--skip-tests` 避免宽 service 套件调用外部模型，保留发布脚本的 vet、Linux 构建、双端摘要、备份和健康检查；不将其描述为全量测试通过。
+- **实际交付**：链 A 从上次基线 `ad8d940c5870bc5ceaed2126ef7122d02f65b6d7` 发布至上述干净提交，含 2 个 `user-server` 路径提交（本轮 `7b4839e6d` 与此前已提交的 `e1e0a6298`）。产物 SHA-256 `8e5c52c053559c6cf4261f6f47b6da7d06fa4bc37f6de8648e132c12a414ecf3`，运行镜像 `sha256:0630703c75ad8763b0b563662dbf25093c920ca47db311e08282cfdb6ed7f96f`，容器启动 `2026-11-26T01:15:56.96814629Z`。09:17 独立读取宿主机、容器 `/app/user-server` 及运行进程 `/proc/1/exe`，三者摘要均与产物一致；内网 `127.0.0.1:8204/api/health` 和正常 TLS 的公网 `https://workapi.xapptool.cn/api/health` 均 HTTP 200 / ok，同时复核平台两个公网入口 HTTP 200 / ready。
+- **回滚点**：镜像 `mtk-user-server:rollback-20261126-091208`（`sha256:458ecf50bf59a426cd46403dc6793efd2998cfc632ae5cd7c544f3452f0d357b`）；二进制 `/www/wwwroot/hivemtk/user-server/user-server.bak-20261126-091208`（SHA-256 `e563289b718f70d551fe174da33fd556a15d8823da6d0b6756956486d641ee33`），均独立回读验证。核验后将新 ignored `deploy/.api-deploy-state.json` 同步回原仓，保留旧状态证据。
+- **默认口令探针**：发布脚本首轮实际请求 HTTP 000，记录为 `inconclusive`，未据此判断口令安全；09:16:59 对公网补做一次默认单次探针，空体预检 HTTP 400、公开 seed 口令 HTTP 401、退出 0，更新 state 为 `ok` 并保留首轮状态与补验时间。本次只证明该公开默认值被拒绝，未执行完整候选梯度或修改账号口令。
+- **范围与边界**：未带入并行 CRM 工作区改动，未发布前端、扩展或 Android 包；渠道/设备/真实数据库业务端到端验收及既有 62 处裸 goroutine 等基线问题继续开放。
+
+## 2026-11-26 · 深入审计：平台 Seed 校验上线（platform e4e4e70）
+
+- **授权与源码**：用户明确要求「推送并部署」。`hivemtk-platform` `e4e4e7089a55f7f268ba29f88107ba29d321a176` 已推 `origin/master`；从该提交的干净副本构建。生产 Seed 入口在仓储调用前校验同一份规范化载荷，coverage 与实际写入采用相同菜单 key 语义，重复绑定兼容行为保留。
+- **发布门禁**：干净副本 87 个 seed 专项叶子用例 `-race` 通过（1.621s），`go build ./...`、`go vet ./...` 通过；使用缓存 Go 1.26.11、离线依赖与 Linux/amd64 交叉编译。产物 SHA-256 `d73116b9426c1405d605803fad6991ec8e4b7243666096ead1f9285629a2e0de`。
+- **实际交付**：沿用手工 Docker 发布口径，仅上传二进制、备份、构建并重建 `platform-server` 服务。运行镜像 `sha256:1396ef265ebd8c4a5cbc5bf3183c7be4a75ad47a6c7ece171fce8662d4730cc3`，容器启动 `2026-11-26T00:36:43.821137945Z`；宿主机和容器 `/app/platform-server` 摘要均与产物一致。内网 `127.0.0.1:8205/api/health` 及公网 `https://manageapi.xapptool.cn/api/health`、`https://manage.xapptool.cn/api/health` 均 HTTP 200 / ready；08:37 独立回读再次核对镜像、二进制和回滚点。
+- **回滚点**：二进制 `/www/wwwroot/hivemtk/platform-server/platform-server.prev-audit-20261126-083635`（SHA-256 `342ddb6ee61f9ad9327ae3a5f375602fbc418c2fc4e3ebf89a794e32c03a2602`），镜像 `mtk-platform-server:rollback-audit-20261126-083635`（`sha256:14c79ac1929cb50510f78865084a154b0e3effe7a0bc5bcc9b9d2ca4d1391ac1`）。发布前现役摘要以实机读取为准，不能由旧台账推断源码版本。
+- **故障恢复证据**：首轮 `20261126-083437` 内网健康通过，但服务器旧版 curl 的公网 TLS 校验报 `Certificate key usage inadequate`；失败分支已恢复旧镜像和旧二进制，并回读验证恢复成功。随后将公网校验放在本机，以正常 TLS 校验重试发布，两个公网域名均成功；未使用跳过证书校验的选项。
+- **范围与边界**：未同步 env/config/migrations，未执行实际 Seed 导入或客户业务操作。数据库提交原子性、真实业务端到端验收及既有架构门禁问题仍开放；此次未发布前端、扩展或 Android 包。
+
 ## 2026-11-26 · 链 D 二次同步（面包屑/多语言文案 85eb12eeb）
 
 - **背景**：二次审核发现本地 dist 构建于 00:20，不含 00:27 `e1e0a6298`、00:35 `c509fe955` 的 i18n 与 Breadcrumb 文案修正（企微账号面包屑「多账号聚合」→「企微账号管理」）；线上 `version.json` 仍为 `4dcf21698`。
