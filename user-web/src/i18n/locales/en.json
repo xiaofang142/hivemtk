@@ -1,4 +1,22 @@
 {
+  "channels": {
+    "serviceBindingLabel": "{name} · SageX connection (QQ / Personal WeChat)",
+    "editBinding": "Edit connection binding",
+    "bindingName": "Company or team name",
+    "bindingCode": "Connection binding code",
+    "legacyBindings": "Legacy connection bindings",
+    "legacyBindingsHint": "These records retain existing account and credential links. SageX connects QQ and personal WeChat; messages use their actual source channel.",
+    "personalWechat": "Personal WeChat",
+    "leadMiningHint": "When off, this account does not identify or archive leads. Auto-reply has its own switch.",
+    "title": "Channels",
+    "description": "Manage channels and accounts by message source. Each channel and account can receive direct and group chats; conversation type is determined per message.",
+    "serviceNote": "QQ and personal WeChat are channels. SageX connects them. Use company or team names to name accounts.",
+    "catalog": "Channels",
+    "accounts": "Accounts",
+    "identifyCodes": "Access codes",
+    "displayName": "Account display name",
+    "displayNamePlaceholder": "For display only, not identity matching"
+  },
   "clue": {
     "updated": "Clue updated",
     "assigned": "Owner assigned"
@@ -561,7 +579,8 @@
     "knowledgeQaCandidates": "QA Review Queue",
     "capabilityMatrix": "Capability Matrix",
     "channelManage": "Channel Management",
-    "channelAccount": "Channel Account Management"
+    "channelAccount": "Channel Account Management",
+    "channels": "Channels"
   },
   "保存": "Save",
   "提交": "Submit",
@@ -1572,7 +1591,6 @@
   "主动触达": "Active Outreach",
   "人员管理": "User Management",
   "域名池": "Domain Pool",
-  "多账号聚合": "Multi-Account Aggregation",
   "客户事件": "Customer Events",
   "客服会话": "Customer Service Sessions",
   "平台账号": "Platform Accounts",
@@ -1961,6 +1979,15 @@
         }
       },
       "page": {
+        "channels": {
+          "title": "Channels",
+          "description": "Each channel and account can receive direct and group messages. The conversation type comes from each message.",
+          "catalog": "Message sources",
+          "catalogGuide": "Manage sources such as QQ and WeChat. SageX is a connection service; company and team names identify accounts.",
+          "accounts": "Channel accounts",
+          "accountsGuide": "Add business accounts and configure automatic replies and lead discovery independently.",
+          "codesGuide": "Identification codes establish connection ownership. Update the sender after rotating a code to avoid interruptions."
+        },
         "merchantConnection": {
           "title": "Shop authorization connection",
           "summary": "Check the target shop, then connect using a verified handoff. Unverified live contracts stay blocked.",

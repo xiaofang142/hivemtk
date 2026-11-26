@@ -130,6 +130,11 @@ func newTenantScopedLeadMiningServiceWithRepos(repo *leadMiningTenantConfigRepo,
 		lastJudge:      make(map[string]time.Time),
 		cfgCache:       make(map[uint]leadMiningConfigCacheEntry),
 		cfgGeneration:  make(map[uint]uint64),
+		// 本测试只验证租户隔离，不涉及证据完整性；注入一条完整命中，
+		// 避免副作用闸按新口径把空证据场景挡在仓储之外。
+		hitsProvider: func(context.Context, DetectionInput) ([]model.LeadMiningHit, error) {
+			return []model.LeadMiningHit{{Type: "keyword", Complete: true}}, nil
+		},
 	}
 }
 

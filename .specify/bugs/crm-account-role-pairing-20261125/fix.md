@@ -5,11 +5,23 @@
 
 ## Changes
 
-- `service/customer_permission.go`：新增 `CustomerAccountRule` 与 `CustomerDataScope.AccountRules`；`Resolve` 按每条 Phase2 授权保留配对（账号引用 + 行业 + 角色），识别码仅用于账号解析不再直接当 ACL 键。
-- `CanAccess` / `ListScoped`：配对存在时按规则逐行精判，A/甲、B/乙允许而交叉拒绝；列表按精判结果分页计数，不泄露被拒行。
-- `service/crm_customer.go`: `AllowsWrite` 同样消费配对，写入不能跨账号组合行业/角色。
-- 旧 scope 零值语义保留，管理员不受配对收敛。
+- `service/customer_permission.go`：`Resolve` 保留每条业务/Phase 2 授权的账号 × 行业 × 角色配对，同账号多条授权继续取并集；不再向全局行业或 owner 字段扩散。稳定 ACL 仅含已验证存在的数字 `ChannelAccountID`，瞬时来源引用保存在对应规则中。
+- `repository/customer_account_reference.go`：验证当前权威码、有效期内旧码及无权威记录的兼容引用；拒绝过期、歧义、跨租户冲突、孤儿账号和数字形别名。权威记录覆盖冗余旧码，重新解析后轮换与撤权立即生效。
+- 权威渠道缺少账号行时仍保留该码的有效声明；有声明的码仅能归属声明租户、渠道下的唯一现存账号，禁止被其他渠道的冗余同码占用。当前码和有效旧码使用同一检查。
+- `repository/customer_crm.go`：共享 SQL 使用 OR-of-AND 配对谓词，分别应用于 count 与 page；列表、导出、客户去重使用同一过滤，按 `created_at DESC, id DESC` 稳定分页。删除内存预取和二次分页逻辑。
+- `CanAccess` / `AllowsWrite` 复用同一按行判定，合法来源别名的读写一致；空授权不能被请求筛选复活，异常行业配置、缺租户和 owner 零身份均拒绝。
+- 受限 scope 的每条规则仍须属于稳定 `AccountIDs` 边界；按行校验与 SQL 过滤转换同时执行此检查。规则不得用另一账号或瞬时别名扩大稳定授权集合，合法数字账号下的已验证别名继续可用；非受限手工规则保留既有兼容语义。
+- `controller/customer_360.go`：客户记录详情、360、通信记录先解析 CRM 权限，再调用 scoped 记录服务；拒绝及内部错误使用统一安全响应。保留既有 DataScopeGuard 与独立 SessionScope 路径。
+- 三类关联实体仓储在 count/page 前过滤数字账号；列表、360、实体去重共用由父客户行业/负责人代入的过滤。更新及删除验证旧实体账号，改挂按最终账号与目标客户校验。未挂账号的旧实体继承已验证父客户，显式账号 0 拒绝。
+- 旧手工 scope 保留适用兼容语义，管理员不受普通账号配对收敛；缺租户仍拒绝。
 
 ## Boundary
 
 不擅改既有 union 为交集（旧字段语义保留），不扩大管理员以外角色权限；不改 RBAC/授权表；无发布/外发/提交。
+
+## Local Verification — 2026-11-26 发布准备
+
+- 用户已授权本项自动集成、提交、测试、部署及线上验收。为保留主工作区的并发改动，独立 master 发布副本仅包含本项 19 个 Go 文件和 3 份报告；双远端与基线 `15376884ae9596d244a7426899bbac355085f262` 一致，无需合并。
+- 独立副本的 build、lint（`0 issues.`）、vet、已暂存 Markdown 链接和真实凭据泄漏检查通过。`make audit` 因 i18n 孤儿词条 `多账号聚合` 失败；其全部检查输入与 HEAD 一致。`make fmt-check` 的 52 个失败测试文件逐一核对均与 HEAD 字节一致，且 HEAD 内容本身即未格式化。
+- 全量测试已复现两项 bridge 租户绑定失败及 SageX 控制器空指针 panic。窄范围 HEAD 对照已完成（rc=1），不含 CRM-24 补丁也复现同样三项失败；官方 `deploy/test_gate.sh` 对该日志判定为 `BLOCK`。完整运行仍待结束。真实测试失败不可作为缺失数据库凭据豁免；未绕过发布测试门、修改任务外文件或更新门禁基线。
+- 尚未 commit/push/deploy。生产仅完成发布前只读基线：复用现有管理员会话，当前用户与 CRM 客户列表均为 HTTP 200/code 0；该结果不代表新代码已上线或生产权限矩阵已验收。

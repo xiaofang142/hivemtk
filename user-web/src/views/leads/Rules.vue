@@ -8,6 +8,18 @@
         <span class="page-sub">按 account → channel → global 优先级匹配；列表按当前租户隔离</span>
       </div>
       <div class="page-actions">
+        <el-button @click="$router.push('/leads/notify-routes')">
+          通知路由
+        </el-button>
+        <el-button @click="$router.push('/leads/evidence')">
+          判定证据
+        </el-button>
+        <el-button @click="$router.push('/leads/archive')">
+          线索归档
+        </el-button>
+        <el-button @click="$router.push('/leads/scoped-list')">
+          权限内列表
+        </el-button>
         <el-button @click="$router.push('/leads/mining-agents')">
           线索发现智能体
         </el-button>
@@ -280,7 +292,7 @@ onMounted(fetchList)
 <style scoped>
 .leads-page { padding: 16px; }
 .page-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-.page-actions { display: flex; align-items: center; gap: 8px; }
+.page-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .page-title { margin: 0; font-size: 18px; }
 .page-sub { color: #909399; font-size: 12px; }
 </style>

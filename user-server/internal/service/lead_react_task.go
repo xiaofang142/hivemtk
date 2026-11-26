@@ -10,13 +10,15 @@ import (
 )
 
 const (
-	leadReactTaskMaxMessages      = 20
-	leadReactTaskMaxMessageRunes  = 1000
-	leadReactTaskMaxCurrentRunes  = 2000
-	leadReactTaskMaxRuleRunes     = 2000
-	leadReactTaskMaxKeywords      = 20
-	leadReactTaskMaxHits          = 20
-	leadReactTaskMaxEvidenceRunes = 2000
+	leadReactTaskMaxMessages        = 20
+	leadReactTaskMaxMessageRunes    = 1000
+	leadReactTaskMaxCurrentRunes    = 2000
+	leadReactTaskMaxRuleRunes       = 2000
+	leadReactTaskMaxKeywords        = 20
+	leadReactTaskMaxHits            = 20
+	leadReactTaskMaxEvidenceRunes   = 2000
+	leadReactTaskMaxIdentifierRunes = 256
+	leadReactTaskMaxAccountIDs      = 20
 )
 
 // LeadReactTask 是单次 ReAct 取证的不可变可信视图。租户不进入该结构，始终只从
@@ -172,8 +174,16 @@ func validLeadReactTaskContext(ctx context.Context, task LeadReactTask) bool {
 	if !ok || tid == 0 || tenant.IsSystemScope(ctx) || !task.ScopeValid || task.Platform == "" || task.SourceRef == "" || len(task.AccountIDs) == 0 {
 		return false
 	}
+	if len(task.AccountIDs) > leadReactTaskMaxAccountIDs ||
+		!boundedLeadReactIdentifier(task.Platform) ||
+		!boundedLeadReactIdentifier(task.SourceRef) ||
+		!boundedLeadReactIdentifier(task.ConversationID) ||
+		!boundedLeadReactIdentifier(task.GroupID) ||
+		!boundedLeadReactIdentifier(task.SenderID) {
+		return false
+	}
 	for _, accountID := range task.AccountIDs {
-		if strings.TrimSpace(accountID) == "" {
+		if strings.TrimSpace(accountID) == "" || !boundedLeadReactIdentifier(accountID) {
 			return false
 		}
 	}
@@ -182,6 +192,10 @@ func validLeadReactTaskContext(ctx context.Context, task LeadReactTask) bool {
 	}
 	canonical := strconv.FormatUint(uint64(task.CanonicalAccountID), 10)
 	return task.CanonicalAccountID > 0 && task.ChannelID > 0 && containsLeadReactString(task.AccountIDs, canonical)
+}
+
+func boundedLeadReactIdentifier(value string) bool {
+	return len([]rune(value)) <= leadReactTaskMaxIdentifierRunes
 }
 
 func boundedLeadReactRuleDescription(rule *model.LeadMiningRule) string {

@@ -5,12 +5,12 @@ import { h } from 'vue'
 import ElementPlus from 'element-plus'
 import { settle } from './settle-helper'
 
-const legacyApi = vi.hoisted(() => ({
-  getBridgeTokenStatus: vi.fn(),
-  resetBridgeToken: vi.fn()
+const http = vi.hoisted(() => ({
+  get: vi.fn(),
+  post: vi.fn()
 }))
 
-vi.mock('@/api/bridgeToken.js', () => legacyApi)
+vi.mock('@/utils/request', () => ({ http }))
 
 import bridgeRoutes from '@/router/modules/bridgeToken.js'
 import channelRoutes from '@/router/modules/channels.js'
@@ -51,14 +51,6 @@ async function navigate(path) {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  legacyApi.getBridgeTokenStatus.mockResolvedValue({
-    retired: true,
-    main_configured: true,
-    prev_configured: true,
-    source: 'db',
-    token: 'legacy-token'
-  })
-  legacyApi.resetBridgeToken.mockResolvedValue({ token: 'legacy-token' })
 })
 
 describe('retired Bridge token routes converge on identify-code management', () => {
@@ -70,8 +62,8 @@ describe('retired Bridge token routes converge on identify-code management', () 
     expect(wrapper.text()).not.toContain('生成新凭证')
     expect(wrapper.text()).not.toContain('灰度窗口')
     expect(wrapper.text()).not.toContain('PREV')
-    expect(legacyApi.getBridgeTokenStatus).not.toHaveBeenCalled()
-    expect(legacyApi.resetBridgeToken).not.toHaveBeenCalled()
+    expect(http.get).not.toHaveBeenCalled()
+    expect(http.post).not.toHaveBeenCalled()
   })
 
   it('old route definitions are redirects, not lazy token components', () => {

@@ -94,9 +94,19 @@ func (s *CRM360Service) View(ctx context.Context, scope CustomerDataScope, custo
 			return nil, err
 		}
 	}
-	view.Contacts, _, _ = s.contacts.ListByCustomer(ctx, customerID, 1, 50)
-	view.Suppliers, _, _ = s.suppliers.ListByCustomer(ctx, customerID, 1, 50)
-	view.ServiceProviders, _, _ = s.providers.ListByCustomer(ctx, customerID, 1, 50)
+	filter := s.permission.EntityAccountFilter(scope, cust)
+	view.Contacts, _, err = s.contacts.ListByCustomer(ctx, customerID, 1, 50, filter)
+	if err != nil {
+		return nil, err
+	}
+	view.Suppliers, _, err = s.suppliers.ListByCustomer(ctx, customerID, 1, 50, filter)
+	if err != nil {
+		return nil, err
+	}
+	view.ServiceProviders, _, err = s.providers.ListByCustomer(ctx, customerID, 1, 50, filter)
+	if err != nil {
+		return nil, err
+	}
 	view.MergeHistory, _ = s.merges.ListByCustomer(ctx, customerID, 50)
 	return view, nil
 }

@@ -7,6 +7,34 @@ import (
 	"hivemtk-user/internal/model"
 )
 
+// 副作用准入必须复用快照的 EvidenceComplete：只有完整且未降级的命中才放行；
+// 三路全降级、群聚合失败或 ReAct 降级时只保留候选，不触发线索副作用。
+func TestLeadJudgeContext_EvidenceCompleteGate(t *testing.T) {
+	cases := []struct {
+		name string
+		ctx  *LeadJudgeContext
+		want bool
+	}{
+		{"无命中阻断", &LeadJudgeContext{}, false},
+		{"完整命中放行", &LeadJudgeContext{Hits: []model.LeadMiningHit{{Type: "keyword", Complete: true}}}, true},
+		{"全部降级阻断", &LeadJudgeContext{Hits: []model.LeadMiningHit{{Type: "keyword", Degraded: true}, {Type: "llm", Degraded: true}}}, false},
+		{"未完整命中阻断", &LeadJudgeContext{Hits: []model.LeadMiningHit{{Type: "llm", Complete: false}}}, false},
+		{"群聚合失败阻断", &LeadJudgeContext{Hits: []model.LeadMiningHit{{Type: "keyword", Complete: true}}, GroupAggregateFailed: true}, false},
+		{"ReAct降级阻断", &LeadJudgeContext{Hits: []model.LeadMiningHit{{Type: "keyword", Complete: true}}, ReactDegraded: true}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tc.ctx.EvidenceComplete()
+			if got != tc.want {
+				t.Fatalf("EvidenceComplete()=%v, want %v", got, tc.want)
+			}
+			if eligible := leadSideEffectsEligible(&LeadJudgement{IsLead: true, IntentScore: 90}, got, 60); eligible != tc.want {
+				t.Fatalf("副作用准入=%v, want %v", eligible, tc.want)
+			}
+		})
+	}
+}
+
 // P0-b 回归：群聊真实多成员历史必须进入判定消息，不被只含当前一条的共享缓存覆盖。
 func TestMergeJudgeMessages_GroupMultiMemberHistoryWins(t *testing.T) {
 	history := []DetectionMessage{

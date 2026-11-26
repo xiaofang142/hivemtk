@@ -44,6 +44,22 @@ func hasRole(roles []string, want string) bool {
 	return false
 }
 
+func TestMenuWiring_IndependentChannelsModule(t *testing.T) {
+	node, parent, hits := menuNodeWithParent("channels")
+	if hits != 1 || parent != nil || node == nil {
+		t.Fatalf("渠道应为唯一独立顶级模块：node=%+v parent=%+v hits=%d", node, parent, hits)
+	}
+	if len(node.Roles) != 1 || !hasRole(node.Roles, "admin") || OwnerOfMenuKey("channels") != ModuleCore {
+		t.Fatalf("渠道模块须保留管理员边界且属于基座：%+v", node)
+	}
+	for key, path := range map[string]string{"channelManage": "/channels/manage", "channelAccount": "/channels/accounts", "channelIdentifyCode": "/channels/identify-codes"} {
+		child, owner, count := menuNodeWithParent(key)
+		if count != 1 || owner == nil || owner.Key != "channels" || child.Path != path {
+			t.Fatalf("保留渠道授权键和深链并归独立模块：key=%s child=%+v parent=%+v", key, child, owner)
+		}
+	}
+}
+
 // TestMenuWiring_ObservabilityDashboardRow 007 的看板入口必须存在且仍是 admin-only。
 //
 // 三件事一起断，因为少任何一件都会「看起来有入口但实际用不了/不该看的人看得到」：

@@ -9,6 +9,7 @@ type ChannelOption struct {
 	Code    string `json:"code"`
 	Type    string `json:"type"`
 	Enabled bool   `json:"enabled"`
+	Remark  string `json:"remark"`
 }
 
 // ChannelAccountOption 渠道账号下拉项（FR-029 唯一出参形态）。

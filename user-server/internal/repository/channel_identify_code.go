@@ -176,7 +176,16 @@ func (r *channelIdentifyCodeRepo) RotateCAS(ctx context.Context, tenantID, chann
 		return ErrChannelStoreUnavailable
 	}
 	if expectVersion <= 0 {
-		return r.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(rec).Error
+		// 并发首次轮转：DoNothing 抑制唯一键冲突但不返回错误；
+		// 必须检查 RowsAffected，否则败者会把库里并不存在的码当成成功返回。
+		res := r.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(rec)
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return ErrIdentifyVersionConflict
+		}
+		return nil
 	}
 	res := r.db.WithContext(ctx).Model(&model.ChannelIdentifyCode{}).
 		Where("tenant_id = ? AND channel_id = ? AND version = ?", tenantID, channelID, expectVersion).

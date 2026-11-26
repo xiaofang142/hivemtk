@@ -45,6 +45,16 @@ func (RoleMenuPermission) TableName() string {
 // 只会白费时间。
 var SystemMenuTree = []SystemMenuNode{
 	{
+		Key: "channels", Title: "渠道", Icon: "Connection",
+		Roles: []string{"admin"},
+		Children: []SystemMenuNode{
+			// 保留权限键和深链；前端投影为一个入口，模块内部切换管理面。
+			{Key: "channelManage", Title: "渠道", Icon: "SetUp", Path: "/channels/manage", Roles: []string{"admin"}},
+			{Key: "channelAccount", Title: "渠道账号", Icon: "Connection", Path: "/channels/accounts", Roles: []string{"admin"}},
+			{Key: "channelIdentifyCode", Title: "识别码", Icon: "Key", Path: "/channels/identify-codes", Roles: []string{"admin"}},
+		},
+	},
+	{
 		Key: "workspace", Title: "工作台", Icon: "Monitor",
 		Roles: []string{"admin", "viewer", "staff"},
 		Children: []SystemMenuNode{
@@ -522,13 +532,6 @@ var SystemMenuTree = []SystemMenuNode{
 				Children: []SystemMenuNode{
 					{Key: "platformAccount", Title: "平台账号", Icon: "Platform", Path: "/platformAccount/list"},
 					{Key: "integration", Title: "第三方对接", Icon: "Connection", Path: "/integration/list"},
-					// T057/T063：旧「桥接凭证」入口已收敛到渠道识别码管理（一次性替换）。
-					{Key: "channelIdentifyCode", Title: "渠道识别码", Icon: "Key", Path: "/channels/identify-codes"},
-					// 2026-11-24 菜单重整：渠道统一治理（渠道预设 + 渠道账号）是今日新增的
-					// 数据表驱动管理面。与渠道识别码同属「渠道接入」这一摊，故同组补齐——
-					// 旧的散落账号配置入口已按 T057 收敛到渠道账号管理。
-					{Key: "channelManage", Title: "渠道管理", Icon: "SetUp", Path: "/channels/manage", Roles: []string{"admin"}},
-					{Key: "channelAccount", Title: "渠道账号管理", Icon: "Connection", Path: "/channels/accounts", Roles: []string{"admin"}},
 					// 桥接扩展安装包（浏览器扩展不上架商店，平台上传、租户下载）。
 					// 放在权限设置组下：它与桥接凭证同属"渠道接入"这一摊，
 					// 而非租户日常经营入口。

@@ -211,7 +211,7 @@ var ModuleMenuBindings = map[string][]string{
 		"permissionGroup", "platformAccount", "integration", "channelIdentifyCode",
 		// 2026-11-24：渠道统一治理（渠道预设 + 渠道账号）与识别码同属渠道接入这一摊，
 		// 归 core（与 T057「旧散落账号配置收敛到渠道账号管理」口径一致）。
-		"channelManage", "channelAccount",
+		"channels", "channelManage", "channelAccount",
 		// bridgeExtension（扩展安装包）与渠道接入同属「桥接」这一摊，
 		// 同为系统基座能力（core）。漏绑会让它落进 enabledForNode 的
 		// 「未绑定 ⇒ 永远放行」分支 —— 模块闸对它完全失效。

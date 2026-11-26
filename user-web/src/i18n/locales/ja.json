@@ -1,4 +1,22 @@
 {
+  "channels": {
+    "title": "チャネル",
+    "description": "同じチャネル・アカウントで個別とグループのメッセージを受信できます。会話の種類は各メッセージで判定します。",
+    "serviceNote": "QQ と個人用 WeChat がチャネルです。SageX は接続サービスです。会社名やチーム名はアカウント名に使用します。",
+    "catalog": "チャネル",
+    "accounts": "アカウント",
+    "identifyCodes": "識別コード",
+    "displayName": "このアカウントの表示名",
+    "displayNamePlaceholder": "表示専用で、送信者の判定には使用しません",
+    "leadMiningHint": "商談の検出・保存を停止します。自動返信は別の設定で制御します。",
+    "legacyBindings": "既存の接続設定",
+    "legacyBindingsHint": "既存のアカウントと識別コードの関連付けを維持します。SageX は QQ と個人用 WeChat を接続し、各メッセージは実際の送信元チャネルに分類されます。",
+    "personalWechat": "個人用 WeChat",
+    "serviceBindingLabel": "{name} · SageX 接続（QQ / 個人用 WeChat）",
+    "editBinding": "接続設定を編集",
+    "bindingName": "会社名またはチーム名",
+    "bindingCode": "接続設定コード"
+  },
   "clue": {
     "updated": "リードを更新しました",
     "assigned": "担当者を割り当てました"
@@ -561,7 +579,8 @@
     "knowledgeQaCandidates": "QAレビューキュー",
     "capabilityMatrix": "ケイパビリティマトリクス",
     "channelManage": "チャネル管理",
-    "channelAccount": "チャネルアカウント管理"
+    "channelAccount": "チャネルアカウント管理",
+    "channels": "チャネル"
   },
   "保存": "保存",
   "提交": "送信",
@@ -1572,7 +1591,6 @@
   "主动触达": "能動的リーチ",
   "人员管理": "ユーザー管理",
   "域名池": "ドメインプール",
-  "多账号聚合": "複数アカウント集約",
   "客户事件": "顧客イベント",
   "客服会话": "カスタマーサービス会話",
   "平台账号": "プラットフォームアカウント",
@@ -1961,6 +1979,15 @@
         }
       },
       "page": {
+        "channels": {
+          "title": "チャネル",
+          "description": "同じチャネル・アカウントで個別とグループのメッセージを受信できます。会話の種類は各メッセージで判定します。",
+          "catalog": "メッセージの送信元",
+          "catalogGuide": "QQ や WeChat などを管理します。SageX は接続サービスで、会社名やチーム名はアカウント名に使用します。",
+          "accounts": "チャネルアカウント",
+          "accountsGuide": "アカウントを追加し、自動返信と見込み客の検出を個別に設定します。",
+          "codesGuide": "識別コードは接続の所属を証明します。コードを更新したら送信側も更新し、受信の中断を防いでください。"
+        },
         "merchantConnection": {
           "title": "店舗の認可接続",
           "summary": "対象店舗の状態を確認し、検証済みの受け渡しで接続します。未検証の実運用契約はブロックされます。",

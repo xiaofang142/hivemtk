@@ -90,6 +90,17 @@ func (c *InboxController) Reply(ctx *gin.Context) {
 	// FA-IM-01：按平台路由到统一出站发送器，分别返回受理/平台确认/送达/失败/无路由，
 	// 不再对所有平台一律回「回复成功」（外部渠道本地消息行不等于真实投递）。
 	outboundSvc := service.NewInboxReplyOutboundService()
+	// B01：给外部渠道出站提供完整 Hub 上下文（会话/收件人/方向/租户），
+	// 缺收件人时发送器应明确拒绝，而不是记录一条本地消息假装已发送。
+	hub := &model.MessageHub{
+		TenantID:       session.TenantID,
+		Platform:       string(session.Platform),
+		AccountID:      session.AccountID,
+		SenderID:       session.UserID,
+		ConversationID: session.SessionID,
+		Direction:      "outbound",
+		Content:        content,
+	}
 	delivery, msg, err := outboundSvc.Reply(ctx.Request.Context(), &service.InboxReplyRequest{
 		Platform:   session.Platform,
 		AccountID:  session.AccountID,
@@ -97,6 +108,7 @@ func (c *InboxController) Reply(ctx *gin.Context) {
 		Content:    content,
 		AgentID:    agentID,
 		SenderName: ctx.GetString("username"),
+		Hub:        hub,
 	})
 	if err != nil {
 		response.Error(ctx, http.StatusBadRequest, err.Error())

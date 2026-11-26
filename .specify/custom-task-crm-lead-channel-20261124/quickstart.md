@@ -3,14 +3,14 @@
 **运行前提**
 - 本文所有仓库相对路径均从工作区下的产品仓 `hivemtk-user/` 执行；工作区根不是 git 仓。
 - Go/Postgres 测试只使用专用快测库 `127.0.0.1:8217`。`POSTGRES_TEST_PASSWORD` 从本地环境注入；不要把口令写入命令历史或文档。
-- `api`、`crm`、`sc001` 会通过 `HIVEMTK_BASE` 写入/删除 CRM 测试数据；运行前确认目标服务连接同一个专用 8217 测试库。DB 清理依赖脚本的 finally 路径，但运行后仍须查看清理报告。
+- `api`、`crm`、`sc001` 会通过 `HIVEMTK_BASE` 写入/删除 CRM 测试数据；运行前确认目标服务连接同一个专用 8217 测试库。三个子命令必须串行运行，禁止并行写同一测试库。DB 清理依赖脚本的 finally 路径，但运行后仍须查看清理报告，并把原始输出归档到当次取证目录。
 - `HIVEMTK_ADMIN_PASS` 必须由本地环境注入。SC-001 默认不调用外部 AI；不要设置 `HIVEMTK_ALLOW_EXTERNAL_AI=1`，除非已明确授权外发。
 - 命令只运行显式选择的子命令；不得运行 `all`/`chain` 代替隔离验收。UI 验证遵守仓库规则 -1，逐元素操作并留证据。
 
 ## 1. 地基（第四部分）
 
 ```bash
-cd hivemtk-user
+# 当前目录应为工作区下的产品仓 hivemtk-user/；不要再重复 cd hivemtk-user
 export POSTGRES_TEST_HOST=127.0.0.1 POSTGRES_TEST_PORT=8217
 ```
 
@@ -29,6 +29,7 @@ export POSTGRES_TEST_HOST=127.0.0.1 POSTGRES_TEST_PORT=8217
 2. 对照员工数据范围核对 `GET /api/manage/crm/customers` 与 `GET /api/manage/crm/customers/:id`；另验证未授权访问按预期拒绝。
 3. 核对 `GET /api/manage/crm/360/:id` 和 `GET /api/manage/crm/cross-industry`。
 4. 在不触发外部 AI 的配置下验证 `POST /api/manage/crm/ai/analyze` 的禁用/降级行为；只有明确授权且目标为本地 mock 时，才启用外部 AI 调用。
+5. 先确认测试租户没有启用的通知路由，再用合成 `clue_id` 调用 `POST /api/manage/crm/clue/archive`，核对关联客户与 `clue_archive_link_customer` 审计；`notified=true` 不等于真实送达。
 
 ## 3. 线索（第二部分）
 
@@ -48,9 +49,14 @@ export POSTGRES_TEST_HOST=127.0.0.1 POSTGRES_TEST_PORT=8217
 从 `hivemtk-user/` 执行；API 服务地址按本地隔离环境显式提供，且必须连接上述 8217 测试库：
 
 ```bash
+: "${POSTGRES_PASSWORD:?请从本地环境注入}"
+: "${HIVEMTK_ADMIN_PASS:?请从本地环境注入}"
 export HIVEMTK_DB_PORT=8217
+export HIVEMTK_DB_PASSWORD="$POSTGRES_PASSWORD"
+export POSTGRES_TEST_PASSWORD="$POSTGRES_PASSWORD"
 export HIVEMTK_BASE=http://127.0.0.1:8204
-export HIVEMTK_EVIDENCE_DIR="$PWD/.artifacts/sc001"
+mkdir -p "${TMPDIR:-/tmp}/opencode"
+export HIVEMTK_EVIDENCE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/opencode/item2-sc001.XXXXXX")"
 python3 scripts/api_verify_full.py api
 python3 scripts/api_verify_full.py crm
 python3 scripts/api_verify_full.py sc001

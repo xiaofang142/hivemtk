@@ -3,7 +3,7 @@
     <el-card shadow="never">
       <template #header>
         <div class="card-header">
-          <span>渠道识别码管理（一次性替换旧 Bridge token）</span>
+          <span>识别码</span>
           <el-alert
             type="warning"
             :closable="false"

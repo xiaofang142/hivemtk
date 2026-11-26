@@ -105,7 +105,11 @@ func (o *ChannelInboundOrchestrator) DeliverAndArchive(ctx context.Context, msg 
 			out.Status, out.Reason = "rejected", "账号身份解析失败"
 			return out, aerr
 		}
-		identity, aerr = o.resolver.IdentifySpeaker(ctx, acc.TenantID, acc.AccountID, msg.Channel, msg.SenderID, "", nil)
+		conversationType := "dm"
+		if msg.IsGroup {
+			conversationType = "group"
+		}
+		identity, aerr = o.resolver.IdentifySpeaker(ctx, acc.TenantID, acc.AccountID, conversationType, msg.SenderID, "", nil)
 		if aerr != nil {
 			out.Status, out.Reason = "rejected", "自他识别失败"
 			return out, aerr

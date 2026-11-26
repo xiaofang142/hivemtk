@@ -848,13 +848,25 @@ const sendAgentReply = async () => {
       `/api/inbox/conversations/${currentConv.value.id}/reply`,
       { content }
     )
+    const delivery = res?.delivery || res?.data?.delivery
     const msg = res?.data?.message || res?.message
     if (msg && msg.id) {
       threadMessages.value = [...threadMessages.value, msg]
       threadPagination.total += 1
     }
+    // 后端按真实投递状态返回文案：失败/无路由不显示"已发送"，保留草稿供重试。
+    const status = delivery?.delivery_status || ''
+    const serverText = res?.data?.message || res?.message || ''
+    if (status === 'failed' || status === 'no_route') {
+      ElMessage.error(serverText || t('回复未送达'))
+      return
+    }
+    if (status === 'platform_confirmed' || status === 'accepted') {
+      ElMessage.warning(serverText || t('回复已发送'))
+    } else {
+      ElMessage.success(serverText || t('回复已发送'))
+    }
     replyDraft.value = ''
-    ElMessage.success(t('回复已发送'))
   } catch {
     // request.js 已统一弹错，这里不再重复提示
   } finally {

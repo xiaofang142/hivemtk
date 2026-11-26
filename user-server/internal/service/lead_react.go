@@ -326,8 +326,8 @@ func buildLeadReactSystemPrompt(task LeadReactTask, tools []LeadReactTool) strin
 	for _, tool := range tools {
 		fmt.Fprintf(&b, "- %s: %s\n", tool.Name, tool.Description)
 	}
-	fmt.Fprintf(&b, "\n【可信范围】platform=%s canonical_account_id=%d channel_id=%d source_ref=%s raw_fallback=%t account_aliases=%v conversation=%s group=%s sender=%s is_group=%t\n",
-		task.Platform, task.CanonicalAccountID, task.ChannelID, task.SourceRef, task.RawFallback, task.AccountIDs,
+	fmt.Fprintf(&b, "\n【可信范围】platform=%s canonical_account_id=%d channel_id=%d raw_fallback=%t conversation=%s group=%s sender=%s is_group=%t\n",
+		task.Platform, task.CanonicalAccountID, task.ChannelID, task.RawFallback,
 		task.ConversationID, task.GroupID, task.SenderID, task.IsGroup)
 	fmt.Fprintf(&b, "【当前消息】%s\n", task.CurrentMessage)
 	if task.RuleDescription != "" || len(task.Keywords) > 0 || len(task.SemanticKeywords) > 0 {

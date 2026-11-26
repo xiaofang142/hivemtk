@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/edition"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/repository"
@@ -127,10 +128,22 @@ func resolveBridgeIdentity(rctx context.Context, channel, accountID, _codeHint, 
 	}
 
 	resolved, err := service.NewChannelResolver().ResolveByIdentifyCode(rctx, identifyCode)
+	if err != nil && !errors.Is(err, service.ErrChannelIdentityUnresolved) {
+		if errors.Is(err, service.ErrChannelIdentityAmbiguous) {
+			return rctx, false, nil, ErrBridgeTenantAmbiguous
+		}
+		if errors.Is(err, service.ErrChannelIdentityInvalid) {
+			return rctx, false, nil, ErrBridgeTenantUnresolved
+		}
+		return rctx, false, nil, err
+	}
 	if err != nil || resolved == nil || resolved.TenantID == 0 {
 		// Fallback: channel-level identify code (channel_identify_codes table).
 		resolved, err = resolveBridgeIdentityByChannelCode(rctx, identifyCode)
-		if err != nil || resolved == nil || resolved.TenantID == 0 {
+		if err != nil {
+			return rctx, false, nil, err
+		}
+		if resolved == nil || resolved.TenantID == 0 {
 			return rctx, false, nil, ErrBridgeTenantUnresolved
 		}
 	}
@@ -156,7 +169,18 @@ func resolveBridgeIdentity(rctx context.Context, channel, accountID, _codeHint, 
 	if resolvedChannel == "" && resolved.ChannelID > 0 {
 		resolvedChannel = NormalizeBridgeChannel(fmt.Sprintf("channel-%d", resolved.ChannelID))
 	}
-	if channel != "" {
+	if resolvedChannel == "sagex" || resolvedChannel == fmt.Sprintf("sagex-t%d", resolved.TenantID) {
+		// 历史 SageX 绑定只证明租户和账号；同一服务会上报 QQ、个人微信。
+		// 必须使用每条消息的真实平台，不能把服务编码写成渠道。
+		switch NormalizeBridgeChannel(channel) {
+		case model.ChannelQQ:
+			resolvedChannel = model.ChannelQQ
+		case model.ChannelPersonalWX:
+			resolvedChannel = model.ChannelPersonalWX
+		default:
+			return rctx, false, nil, ErrBridgeTenantUnresolved
+		}
+	} else if channel != "" {
 		normReq := NormalizeBridgeChannel(channel)
 		if normReq != resolvedChannel && channel != strconv.FormatUint(uint64(resolved.ChannelID), 10) {
 			// identify_code is authoritative; request channel may be a client hint (e.g. wechat/qq).
@@ -182,13 +206,16 @@ func resolveBridgeIdentity(rctx context.Context, channel, accountID, _codeHint, 
 		}
 		return rctx, false, id, nil
 	}
-	return tenant.OnlyTenant(rctx, resolved.TenantID), true, id, nil
+	return bridgeResolvedTenantCtx(rctx, resolved.TenantID), true, id, nil
 }
 
 func resolveBridgeIdentityByChannelCode(rctx context.Context, identifyCode string) (*service.ResolvedChannelAccount, error) {
 	codeRepo := repository.NewChannelIdentifyCodeRepository()
 	rec, err := codeRepo.GetByCode(rctx, identifyCode)
-	if err != nil || rec == nil || rec.TenantID == 0 || rec.ChannelID == 0 {
+	if err != nil {
+		return nil, err
+	}
+	if rec == nil || rec.TenantID == 0 || rec.ChannelID == 0 {
 		return nil, ErrBridgeTenantUnresolved
 	}
 	out := &service.ResolvedChannelAccount{

@@ -6,6 +6,8 @@ const listActions = new Map([
   ['/knowledge/batch-import', { owner: '/knowledge/management', key: 'knowledgeBatchImport' }]
 ])
 
+const channelPaths = ['/channels/manage', '/channels/accounts', '/channels/identify-codes']
+
 // 同一工作流的非子路径；使用路由记录而非猜测 URL 字段或相邻菜单。
 const routeOwners = new Map([
   ['/aiAgent', ['/aiAgent/list']],
@@ -69,18 +71,23 @@ export function getNavigationPaths(menus) {
 
 export function projectNavigation(menus) {
   const visiblePaths = new Set(getNavigationPaths(menus))
+  const grantedChannels = channelPaths.filter(path => visiblePaths.has(path))
   function prune(nodes) {
     return nodes.flatMap(node => {
       if (node.children?.length) {
         const children = prune(node.children)
         return children.length ? [{ ...node, children }] : []
       }
+      if (channelPaths.includes(node.path)) return []
       const action = listActions.get(node.path)
       return node.path && !(action && visiblePaths.has(action.owner)) ? [node] : []
     })
   }
 
   const navigation = prune(menus)
+  if (grantedChannels.length) {
+    navigation.push({ key: 'channels', icon: 'Connection', path: grantedChannels[0], channelPaths: grantedChannels })
+  }
   const analytics = navigation.find(node => node.key === 'analytics')
   const browser = analytics?.children?.find(node => node.key === 'browserAutomation')
   if (!browser) return navigation
@@ -119,6 +126,9 @@ export function findNavigationTrail(menus, route) {
   const path = getNavigationPath(route)
   const trails = new Map(Array.from(menuTrails(menus), trail => [trail.at(-1).path, trail]))
   if (trails.has(path)) return trails.get(path)
+
+  const channels = menus.find(node => node.key === 'channels' && node.channelPaths?.includes(path))
+  if (channels) return [channels]
 
   const action = listActions.get(path)
   const pattern = route.matched?.at(-1)?.path || path

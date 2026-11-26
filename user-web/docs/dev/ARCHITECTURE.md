@@ -282,17 +282,14 @@ graph LR
     UserStore["useUserStore<br/>token / userInfo / isLoggedIn<br/>isAdmin / role"]
     PermStore["usePermissionStore<br/>canAccess / hasRole / hasMenuPermission"]
     AppStore["useAppStore<br/>侧边栏折叠、首次访问标记<br/>账号/素材页刷新状态"]
-    MatStore["useMaterialStore<br/>materials / topics / categorys"]
 
     PermStore -->|storeToRefs(role)| UserStore
     UserStore -->|localStorage: token<br/>user_info| LS[(localStorage)]
-    MatStore -->|内存| Material[(素材/话题<br/>分类列表)]
     AppStore -->|内存| UIState[(UI 状态)]
 
     Views[views/*] --> UserStore
     Views --> PermStore
     Views --> AppStore
-    Views --> MatStore
     RouterGuard["router.beforeEach<br/>requiresAdmin / requiresAuth"] --> UserStore
     Layout["Layout.vue"] --> PermStore
     Layout --> UserStore
@@ -303,7 +300,6 @@ graph LR
 | `user` | `stores/user.js` | token、用户信息、登录态、角色 | `localStorage.token` + `localStorage.user_info` |
 | `permission` | `stores/permission.js` | 角色等级判定（viewer…owner）、菜单可见性 | 无（派生自 user.role） |
 | `app` | `stores/app.js` | UI 折叠、首次访问标记 | 仅内存 |
-| `material` | `stores/material.js` | 素材/话题/分类列表缓存 | 仅内存 |
 
 ## 5. 与 user-server 的交互时序图
 

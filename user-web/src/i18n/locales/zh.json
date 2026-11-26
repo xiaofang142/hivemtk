@@ -1,4 +1,22 @@
 {
+  "channels": {
+    "serviceBindingLabel": "{name} · SageX 接入（QQ / 个人微信）",
+    "editBinding": "编辑接入绑定",
+    "bindingName": "公司或团队名称",
+    "bindingCode": "接入绑定编码",
+    "legacyBindings": "历史接入绑定",
+    "legacyBindingsHint": "这些记录保留已有账号和识别码关联。SageX 为 QQ、个人微信提供接入，消息按实际来源归入对应渠道。",
+    "personalWechat": "个人微信",
+    "leadMiningHint": "关闭后该账号不识别或归档商机，自动回复由独立开关控制。",
+    "title": "渠道",
+    "description": "按消息来源管理渠道和账号。同一渠道、同一账号均可接收单聊与群聊，会话类型由每条消息确定。",
+    "serviceNote": "QQ、个人微信是渠道；SageX 是为它们提供接入的服务。公司或团队名称用于命名账号。",
+    "catalog": "渠道",
+    "accounts": "账号",
+    "identifyCodes": "识别码",
+    "displayName": "本账号显示名称",
+    "displayNamePlaceholder": "用于显示，不作为自他身份判据"
+  },
   "clue": {
     "updated": "线索已更新",
     "assigned": "已分配跟进人"
@@ -561,7 +579,8 @@
     "knowledgeQaCandidates": "QA 审核队列",
     "capabilityMatrix": "能力矩阵",
     "channelManage": "渠道管理",
-    "channelAccount": "渠道账号管理"
+    "channelAccount": "渠道账号管理",
+    "channels": "渠道"
   },
   "保存": "保存",
   "提交": "提交",
@@ -1572,7 +1591,6 @@
   "主动触达": "主动触达",
   "人员管理": "人员管理",
   "域名池": "域名池",
-  "多账号聚合": "多账号聚合",
   "客户事件": "客户事件",
   "客服会话": "客服会话",
   "平台账号": "平台账号",
@@ -1961,6 +1979,15 @@
         }
       },
       "page": {
+        "channels": {
+          "title": "渠道",
+          "description": "同一渠道、同一账号均可接收单聊和群聊，会话类型由每条消息确定。",
+          "catalog": "渠道来源",
+          "catalogGuide": "在此管理 QQ、微信等消息来源。SageX 是接入服务，公司或团队名称用于命名账号。",
+          "accounts": "渠道账号",
+          "accountsGuide": "为渠道添加业务账号，分别配置自动回复和线索发现。",
+          "codesGuide": "识别码用于证明接入归属。重置后须同步更新上报端，避免消息中断。"
+        },
         "merchantConnection": {
           "title": "店铺授权连接",
           "summary": "查询目标店铺状态，再按已核实的回传流程连接。真实契约未验证时保持阻断。",

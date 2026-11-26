@@ -25,8 +25,14 @@ import (
 // 本服务实现 Phase 3 的 CustomerOwnerNotifier，由 Router 通过
 // ClueArchiveService.SetNotifier / LeadClueArchiveService.SetNotifier 注入。
 type LeadNotifyService struct {
-	routes   *repository.LeadMiningNotifyRouteRepository
+	routes   leadNotifyRouteStore
 	accounts repository.ChannelAccountRepository
+}
+
+// leadNotifyRouteStore 是通知服务实际使用的最小路由读写边界，便于验证生产编排行为。
+type leadNotifyRouteStore interface {
+	ListByChannelAccount(ctx context.Context, channelAccountID uint, channel string) ([]model.LeadMiningNotifyRoute, error)
+	AppendDeliveryRecords(ctx context.Context, routeID, records string) error
 }
 
 func NewLeadNotifyService() *LeadNotifyService {
@@ -36,11 +42,19 @@ func NewLeadNotifyService() *LeadNotifyService {
 	}
 }
 
-func NewLeadNotifyServiceWith(routes *repository.LeadMiningNotifyRouteRepository, accounts repository.ChannelAccountRepository) *LeadNotifyService {
+func NewLeadNotifyServiceWith(routes leadNotifyRouteStore, accounts repository.ChannelAccountRepository) *LeadNotifyService {
 	return &LeadNotifyService{routes: routes, accounts: accounts}
 }
 
 var _ CustomerOwnerNotifier = (*LeadNotifyService)(nil)
+
+func marshalLeadNotifyDeliveryRecords(records []model.JSONPayload) (string, error) {
+	raw, err := json.Marshal(records)
+	if err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
 
 // NotifyOwner 实现 CustomerOwnerNotifier：按三级回退找路由并送达。
 func (s *LeadNotifyService) NotifyOwner(ctx context.Context, in ArchiveClueInput, customerID string) error {
@@ -69,7 +83,7 @@ func (s *LeadNotifyService) NotifyOwner(ctx context.Context, in ArchiveClueInput
 	if route == nil {
 		logger.Ctx(ctx).Warn().Str("customer_id", customerID).
 			Msg("[lead-notify] 无可用通知路由（账号/渠道/租户三级均未配置）")
-		return nil
+		return errors.New("无可用通知路由（账号/渠道/租户三级均未配置）")
 	}
 
 	recipients := []string(route.NotifyUserIDs)
@@ -85,10 +99,20 @@ func (s *LeadNotifyService) NotifyOwner(ctx context.Context, in ArchiveClueInput
 
 	title := "发现新线索（已归档）"
 	content := fmt.Sprintf("客户=%s 线索=%s 渠道=%s 摘要=%s", customerID, in.ClueID, in.SourceChannel, in.Summary)
+	// C03：外部渠道（TG/飞书）内容必须先脱敏并附需登录鉴权的站内详情引用；
+	// 站内通知保留原文（接收方已通过站内授权），两者内容策略分开。
+	externalContent, _ := maskLeadNotifySummary(content, in.SourceChannel)
 	records := make([]model.JSONPayload, 0, len(types)*max(1, len(recipients)))
 	for _, notifyType := range types {
 		switch strings.ToLower(strings.TrimSpace(notifyType)) {
 		case "in_app", "inapp", "":
+			if len(recipients) == 0 {
+				records = append(records, model.JSONPayload{
+					"type": "in_app", "success": false, "error": "no_recipient",
+					"at": time.Now().Unix(),
+				})
+				continue
+			}
 			for _, uid := range recipients {
 				userID, convErr := strconv.ParseUint(strings.TrimSpace(uid), 10, 64)
 				r := model.JSONPayload{"type": "in_app", "target": uid, "at": time.Now().Unix()}
@@ -109,16 +133,19 @@ func (s *LeadNotifyService) NotifyOwner(ctx context.Context, in ArchiveClueInput
 				records = append(records, r)
 			}
 		case "telegram", "tg":
-			records = append(records, s.deliverExternal(ctx, "telegram", *route, content)...)
+			records = append(records, s.deliverExternal(ctx, "telegram", *route, externalContent)...)
 		case "feishu", "lark":
-			records = append(records, s.deliverExternal(ctx, "feishu", *route, content)...)
+			records = append(records, s.deliverExternal(ctx, "feishu", *route, externalContent)...)
 		default:
 			records = append(records, model.JSONPayload{"type": notifyType, "success": false, "error": "不支持的通知类型"})
 		}
 	}
 
-	raw, _ := json.Marshal(records)
-	if err := s.routes.UpdateDeliveryRecords(ctx, route.RouteID, string(raw)); err != nil {
+	raw, err := marshalLeadNotifyDeliveryRecords(records)
+	if err != nil {
+		return fmt.Errorf("序列化送达记录失败: %w", err)
+	}
+	if err := s.routes.AppendDeliveryRecords(ctx, route.RouteID, raw); err != nil {
 		logger.Ctx(ctx).Warn().Err(err).Str("route_id", route.RouteID).Msg("[lead-notify] 送达记录落库失败")
 		return fmt.Errorf("送达记录落库失败: %w", err)
 	}

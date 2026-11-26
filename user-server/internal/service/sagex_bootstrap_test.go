@@ -20,8 +20,25 @@ type bootstrapAccountRepo struct {
 	err error
 }
 
+func (r *bootstrapAccountRepo) Available() bool { return r != nil }
+
 func (r *bootstrapAccountRepo) GetByIdentifyCode(context.Context, string) (*model.ChannelAccount, error) {
 	return r.acc, r.err
+}
+
+type bootstrapChannelRepo struct {
+	repository.ChannelRepository
+	channel *model.Channel
+}
+
+func (r *bootstrapChannelRepo) Available() bool { return r != nil }
+
+func (r *bootstrapChannelRepo) GetByID(_ context.Context, tenantID, id uint) (*model.Channel, error) {
+	if r.channel == nil || r.channel.TenantID != tenantID || r.channel.ID != id {
+		return nil, nil
+	}
+	channel := *r.channel
+	return &channel, nil
 }
 
 type bootstrapInstRepo struct {
@@ -88,8 +105,23 @@ func (r *bootstrapInstRepo) GetByTenantAndInstallationID(
 func (r *bootstrapInstRepo) TouchLastSeen(context.Context, uint, time.Time) error { return nil }
 
 func newBootstrapService(repo *bootstrapInstRepo, acc *model.ChannelAccount, resolveErr error) *SageXUploadService {
+	if acc != nil {
+		account := *acc
+		if account.ChannelID == 0 {
+			account.ChannelID = 101
+		}
+		acc = &account
+	}
+	channelTenantID := uint(11)
+	if acc != nil && acc.TenantID != 0 {
+		channelTenantID = acc.TenantID
+	}
+	channel := &model.Channel{TenantID: channelTenantID, ID: 101, Code: "telegram"}
 	svc := NewSageXUploadService(repo, &fakeSageXReceiptRepo{}, &fakeSageXIngress{})
-	svc.SetChannelResolver(NewChannelResolverWithRepos(&bootstrapAccountRepo{acc: acc, err: resolveErr}, nil))
+	svc.SetChannelResolver(NewChannelResolverWithRepos(
+		&bootstrapAccountRepo{acc: acc, err: resolveErr},
+		&bootstrapChannelRepo{channel: channel},
+	))
 	return svc
 }
 
@@ -99,7 +131,7 @@ func TestSageXBootstrapInstallationPinsResolvedTenantForEveryAccess(t *testing.T
 
 	repo := &bootstrapInstRepo{createHook: func(*model.SageXInstallation) {}}
 	svc := newBootstrapService(repo, &model.ChannelAccount{TenantID: 11, ID: 101, IdentifyCode: "code-a"}, nil)
-	ctx := tenant.WithSystemScope(tenant.WithTenantID(context.Background(), 99))
+	ctx := tenant.WithSystemScope(context.Background())
 
 	inst, err := svc.BootstrapInstallation(ctx, "installation-a", "code-a")
 	if err != nil || inst == nil {

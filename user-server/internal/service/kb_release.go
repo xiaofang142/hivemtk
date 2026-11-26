@@ -525,17 +525,19 @@ func (s *KBReleaseService) PublishPending(ctx context.Context, productID, actor 
 	if err != nil {
 		return outcome, nil, err
 	}
-	s.embedApplied(ctx, productID, res)
+	s.embedApplied(ctx, productID, actor, res)
 	logger.Infof("[kb-release] 库 %s 发布完成：v%d → v%d，落库 %d 条变更",
 		productID, res.FromVersion, res.ToVersion, len(res.Applied))
 	return outcome, res, nil
 }
 
 // embedApplied 事务提交后补算向量（best-effort，理由见 PublishPending 第 3 条）。
-func (s *KBReleaseService) embedApplied(ctx context.Context, productID string, res *repository.PublishResult) {
-	if s.embedder == nil || res == nil {
+func (s *KBReleaseService) embedApplied(ctx context.Context, productID, actor string, res *repository.PublishResult) {
+	if res == nil {
 		return
 	}
+	res.EmbeddingStatus = "not_required"
+	res.EmbeddingAuditRecorded = false
 	chunks := make([]model.KnowledgeChunk, 0, len(res.Applied))
 	for _, ap := range res.Applied {
 		if ap.AppliedChunkID == 0 || ap.Content == "" {
@@ -543,13 +545,30 @@ func (s *KBReleaseService) embedApplied(ctx context.Context, productID string, r
 		}
 		chunks = append(chunks, model.KnowledgeChunk{ID: ap.AppliedChunkID, Content: ap.Content})
 	}
-	if len(chunks) == 0 {
+	if len(chunks) > 0 {
+		res.EmbeddingStatus = "unavailable"
+		if s.embedder != nil {
+			res.EmbeddingStatus = "completed"
+			if err := s.embedder.EmbedAndPersistChunks(ctx, productID, chunks); err != nil {
+				res.EmbeddingStatus = "failed"
+				logger.Errorf("[kb-release] 库 %s 版本 v%d 的向量补算失败（%d 条分段，词面检索不受影响，可重放 reindex）: %v",
+					productID, res.ToVersion, len(chunks), err)
+			}
+		}
+	}
+	// 正文已提交；请求取消不能抹掉补算恢复线索，同时为审计设置独立时间上限。
+	auditCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	if err := s.store.RecordAudit(auditCtx, model.KBChangeAuditLog{
+		SubjectKey: "release:" + productID,
+		Action:     model.KBAuditEmbeddingStatus,
+		Actor:      actor,
+		NewValue:   fmt.Sprintf("version=%d chunks=%d status=%s", res.ToVersion, len(chunks), res.EmbeddingStatus),
+	}); err != nil {
+		logger.Errorf("[kb-release] 库 %s 版本 v%d 的补算状态审计保存失败: %v", productID, res.ToVersion, err)
 		return
 	}
-	if err := s.embedder.EmbedAndPersistChunks(ctx, productID, chunks); err != nil {
-		logger.Errorf("[kb-release] 库 %s 版本 v%d 的向量补算失败（%d 条分段，词面检索不受影响，可重放 reindex）: %v",
-			productID, res.ToVersion, len(chunks), err)
-	}
+	res.EmbeddingAuditRecorded = true
 }
 
 // Rollback 回滚一格（纯指针移动）。

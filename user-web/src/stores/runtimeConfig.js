@@ -6,7 +6,7 @@ import { markUserReported } from '@/utils/errorReporting'
 // useRuntimeConfig 一次性拉取运行时配置并缓存。
 //
 // 为什么要有这一层：前端此前把一批阈值写死在组件里（agentSocket 的重连次数、
-// chatSocket 的心跳间隔、journeyTracker 的 flush 周期、MaterialLibrary 的上传上限
+// chatSocket 的心跳间隔、MaterialLibrary 的上传上限
 // 等）。它们在运维侧早有对应参数，但前端读不到，于是"运维在参数中心改了、前端
 // 还是老值"。这一层把 /api/config/runtime 的值接进 Pinia，各组件用 `num()`/`dur()`
 // 读，读不到就落在调用点给的兜底常量上——**兜底常量保留**，因为配置面短暂不可用时

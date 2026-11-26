@@ -24,8 +24,25 @@ type ctrlBootstrapAccountRepo struct {
 	err error
 }
 
+func (r *ctrlBootstrapAccountRepo) Available() bool { return r != nil }
+
 func (r *ctrlBootstrapAccountRepo) GetByIdentifyCode(context.Context, string) (*model.ChannelAccount, error) {
 	return r.acc, r.err
+}
+
+type ctrlBootstrapChannelRepo struct {
+	repository.ChannelRepository
+	channel *model.Channel
+}
+
+func (r *ctrlBootstrapChannelRepo) Available() bool { return r != nil }
+
+func (r *ctrlBootstrapChannelRepo) GetByID(_ context.Context, tenantID, id uint) (*model.Channel, error) {
+	if r.channel == nil || r.channel.TenantID != tenantID || r.channel.ID != id {
+		return nil, nil
+	}
+	channel := *r.channel
+	return &channel, nil
 }
 
 type ctrlBootstrapInstRepo struct {
@@ -95,9 +112,24 @@ func newSageXBootstrapTestController(
 	acc *model.ChannelAccount,
 	resolveErr error,
 ) *gin.Engine {
+	if acc != nil {
+		account := *acc
+		if account.ChannelID == 0 {
+			account.ChannelID = 101
+		}
+		acc = &account
+	}
+	channelTenantID := uint(11)
+	if acc != nil && acc.TenantID != 0 {
+		channelTenantID = acc.TenantID
+	}
+	channel := &model.Channel{TenantID: channelTenantID, ID: 101, Code: "telegram"}
 	gin.SetMode(gin.TestMode)
 	svc := service.NewSageXUploadService(repo, &ctrlSageXReceiptRepo{}, &ctrlSageXIngress{})
-	svc.SetChannelResolver(service.NewChannelResolverWithRepos(&ctrlBootstrapAccountRepo{acc: acc, err: resolveErr}, nil))
+	svc.SetChannelResolver(service.NewChannelResolverWithRepos(
+		&ctrlBootstrapAccountRepo{acc: acc, err: resolveErr},
+		&ctrlBootstrapChannelRepo{channel: channel},
+	))
 	ctrl := NewSageXUploadController(svc)
 	engine := gin.New()
 	engine.POST("/api/integrations/sagex/bootstrap", ctrl.Bootstrap)

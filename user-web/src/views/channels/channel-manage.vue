@@ -3,7 +3,7 @@
     <el-card shadow="never">
       <template #header>
         <div class="card-header">
-          <span>渠道管理（预设表驱动）</span>
+          <span>{{ $t('channels.catalog') }}</span>
           <el-button
             type="primary"
             size="small"
@@ -39,7 +39,7 @@
 
       <el-table
         v-loading="loading"
-        :data="rows"
+        :data="platformRows"
         size="small"
         border
         stripe
@@ -58,11 +58,6 @@
           prop="code"
           label="编码"
           min-width="140"
-        />
-        <el-table-column
-          prop="type"
-          label="类型"
-          width="100"
         />
         <el-table-column
           prop="enabled"
@@ -114,12 +109,37 @@
           </template>
         </el-table-column>
       </el-table>
+
+      <section
+        v-if="serviceBindings.length"
+        class="service-bindings"
+        data-testid="legacy-service-bindings"
+      >
+        <h2>{{ $t('channels.legacyBindings') }}</h2>
+        <p>{{ $t('channels.legacyBindingsHint') }}</p>
+        <ul>
+          <li
+            v-for="binding in serviceBindings"
+            :key="binding.id"
+          >
+            <strong>{{ binding.name }}</strong>
+            <span>SageX · QQ / {{ $t('channels.personalWechat') }}</span>
+            <el-button
+              link
+              type="primary"
+              @click="openEdit(binding)"
+            >
+              {{ $t('channels.editBinding') }}
+            </el-button>
+          </li>
+        </ul>
+      </section>
     </el-card>
 
     <el-dialog
       v-model="dialogVisible"
-      :title="editingId ? '编辑渠道' : '新增渠道'"
-      width="480px"
+      :title="editingServiceBinding ? $t('channels.editBinding') : (editingId ? '编辑渠道' : '新增渠道')"
+      width="min(480px, 94vw)"
     >
       <el-form
         :model="form"
@@ -127,16 +147,16 @@
         size="small"
       >
         <el-form-item
-          label="渠道名称"
+          :label="editingServiceBinding ? $t('channels.bindingName') : '渠道名称'"
           required
         >
           <el-input
             v-model="form.name"
-            placeholder="如 抖音"
+            :placeholder="editingServiceBinding ? $t('channels.bindingName') : '如 抖音'"
           />
         </el-form-item>
         <el-form-item
-          label="渠道编码"
+          :label="editingServiceBinding ? $t('channels.bindingCode') : '渠道编码'"
           required
         >
           <el-input
@@ -144,25 +164,6 @@
             placeholder="如 douyin（全局唯一）"
             :disabled="!!editingId"
           />
-        </el-form-item>
-        <el-form-item label="类型">
-          <el-select
-            v-model="form.type"
-            style="width: 100%"
-          >
-            <el-option
-              label="单聊"
-              value="dm"
-            />
-            <el-option
-              label="群聊"
-              value="group"
-            />
-            <el-option
-              label="客服"
-              value="cs"
-            />
-          </el-select>
         </el-form-item>
         <el-form-item label="启用">
           <el-switch v-model="form.enabled" />
@@ -192,18 +193,22 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { computed, ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import channelAccountApi from '@/api/channelAccount.js'
+import { isLegacyConnectionService } from '@/constants/channel'
 
 const loading = ref(false)
 const saving = ref(false)
 const rows = ref([])
+const platformRows = computed(() => rows.value.filter(row => !isLegacyConnectionService(row.code)))
+const serviceBindings = computed(() => rows.value.filter(row => isLegacyConnectionService(row.code)))
 const filter = reactive({ keyword: '' })
 const dialogVisible = ref(false)
 const editingId = ref(null)
-const form = reactive({ name: '', code: '', type: 'dm', enabled: true, remark: '' })
+const form = reactive({ name: '', code: '', enabled: true, remark: '' })
+const editingServiceBinding = computed(() => !!editingId.value && isLegacyConnectionService(form.code))
 
 async function loadList() {
   loading.value = true
@@ -223,7 +228,7 @@ function resetFilter() {
 }
 
 function resetForm() {
-  Object.assign(form, { name: '', code: '', type: 'dm', enabled: true, remark: '' })
+  Object.assign(form, { name: '', code: '', enabled: true, remark: '' })
 }
 
 function openCreate() {
@@ -235,7 +240,7 @@ function openCreate() {
 function openEdit(row) {
   editingId.value = row.id
   Object.assign(form, {
-    name: row.name, code: row.code, type: row.type || 'dm',
+    name: row.name, code: row.code,
     enabled: !!row.enabled, remark: row.remark || ''
   })
   dialogVisible.value = true
@@ -248,7 +253,7 @@ async function submit() {
   }
   saving.value = true
   try {
-    const payload = { name: form.name, code: form.code, type: form.type, enabled: form.enabled, remark: form.remark }
+    const payload = { name: form.name, code: form.code, enabled: form.enabled, remark: form.remark }
     if (editingId.value) {
       await channelAccountApi.updateChannel(editingId.value, payload)
       ElMessage.success('更新成功')
@@ -267,7 +272,7 @@ async function submit() {
 
 async function toggleEnabled(row) {
   try {
-    await channelAccountApi.updateChannel(row.id, { name: row.name, code: row.code, type: row.type, enabled: !row.enabled, remark: row.remark })
+    await channelAccountApi.updateChannel(row.id, { name: row.name, code: row.code, enabled: !row.enabled, remark: row.remark })
     ElMessage.success(row.enabled ? '已停用' : '已启用')
     loadList()
   } catch (e) {
@@ -291,4 +296,10 @@ onMounted(loadList)
 
 <style scoped>
 .card-header { display: flex; justify-content: space-between; align-items: center; }
+.service-bindings { margin-top: 24px; }
+.service-bindings h2 { margin: 0 0 8px; font-size: 16px; }
+.service-bindings p { color: var(--el-text-color-secondary); line-height: 1.6; }
+.service-bindings ul { margin: 0; padding: 0; list-style: none; }
+.service-bindings li { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 8px 0; }
+.service-bindings li span { color: var(--el-text-color-secondary); }
 </style>

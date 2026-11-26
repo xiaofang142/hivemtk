@@ -100,6 +100,62 @@ func TestLeadReactDispatcherJudge_DegradedOutcomePersisted(t *testing.T) {
 	}
 }
 
+func TestLeadReactDispatcherJudge_StructuredFailurePreservesOutcomeInFallback(t *testing.T) {
+	previous := tenant.CurrentMode()
+	tenant.SetMode(tenant.ModeOn)
+	t.Cleanup(func() { tenant.SetMode(previous) })
+	database := testutil.NewTestDB(t, &model.LeadMiningJudgement{})
+	if database == nil {
+		t.Fatal("真实 PostgreSQL 测试库不可达")
+	}
+	dispatcher, _ := newLeadReactTestDispatcher(t, false,
+		`Action: query_historical_leads
+Action Input: {"query":"u1"}`,
+		"Final Answer: done",
+		"structured judge unavailable",
+	)
+	SetLeadReactHook(LeadReactResolver{
+		HistoricalLeads: func(context.Context, LeadReactTask, string) (string, error) {
+			return "历史采购意向", nil
+		},
+		Customer360: func(context.Context, LeadReactTask, string) (string, error) {
+			return "客户摘要", nil
+		},
+	}, newLeadReactDispatch(dispatcher))
+	t.Cleanup(func() { SetLeadReactHook(LeadReactResolver{}, nil) })
+
+	jctx := &LeadJudgeContext{
+		JudgementID: "lmj_react_structured_failure",
+		Messages:    []DetectionMessage{{Content: "这个能买吗", Role: "user", SenderID: "u1"}},
+		Hits: []model.LeadMiningHit{{
+			Type: "keyword", Complete: true,
+			Payload: map[string]any{"match_count": 1, "matched": []map[string]any{{"keyword": "购买"}}},
+		}},
+	}
+	_, err := (&leadReactDispatcherJudge{dispatcher: dispatcher}).JudgeWithContext(
+		withLeadReactTask(leadReactTestContext(), leadReactTestTask()), jctx,
+	)
+	if err == nil {
+		t.Fatal("structured judge 应返回错误")
+	}
+	fallback := buildDegradedJudgement(jctx, &model.LeadMiningConfig{MinIntentScore: 50}, err)
+	if fallback == nil || !fallback.Degraded {
+		t.Fatalf("本地命中应生成 degraded fallback: %+v", fallback)
+	}
+	if fallback.ReactOutcome == nil || fallback.ReactOutcome.Status != leadReactStatusOK || fallback.ReactOutcome.Degraded || len(fallback.ReactOutcome.Evidence) != 1 {
+		t.Fatalf("structured judge 失败不得丢失成功 ReAct outcome: %+v", fallback.ReactOutcome)
+	}
+	hub := &model.MessageHub{TenantID: 7401, MsgID: "m1", Platform: "telegram", AccountID: "acct-1", SenderID: "u1", ConversationID: "conv-1"}
+	(&Service{}).recordLeadMiningJudgement(leadReactTestContext(), hub, fallback, jctx)
+	got, getErr := repository.NewLeadMiningJudgementRepositoryWithDB(database).GetByID(leadReactTestContext(), jctx.JudgementID)
+	if getErr != nil {
+		t.Fatalf("读取 fallback 判定记录失败: %v", getErr)
+	}
+	if !got.Degraded || got.EvidenceComplete || !strings.Contains(got.ResultJSON, "react_outcome") {
+		t.Fatalf("fallback 未持久化 ReAct outcome/degraded/incomplete: %+v", got)
+	}
+}
+
 func TestLeadReactDispatcherJudge_MissingFrozenTaskDegrades(t *testing.T) {
 	dispatcher, capture := newLeadReactTestDispatcher(t, false,
 		`{"is_lead":true,"intent_score":60,"lead_role":"demand","reason":"候选"}`,

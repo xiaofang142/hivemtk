@@ -7,12 +7,32 @@
         </h2>
         <span class="page-sub">列表按账号 / 行业 / 负责人数据权限自动过滤（US1）</span>
       </div>
-      <el-button
-        type="primary"
-        @click="openCreate"
-      >
-        新增客户
-      </el-button>
+      <div class="page-actions">
+        <el-button @click="$router.push('/crm/dedupe')">
+          客户去重
+        </el-button>
+        <el-button @click="$router.push('/crm/import-export')">
+          导入导出
+        </el-button>
+        <el-button @click="$router.push('/crm/contacts')">
+          联系人
+        </el-button>
+        <el-button @click="$router.push('/crm/companies')">
+          公司
+        </el-button>
+        <el-button @click="$router.push('/crm/suppliers')">
+          供应商
+        </el-button>
+        <el-button @click="$router.push('/crm/service-providers')">
+          服务商
+        </el-button>
+        <el-button
+          type="primary"
+          @click="openCreate"
+        >
+          新增客户
+        </el-button>
+      </div>
     </div>
 
     <el-card shadow="never">
@@ -326,6 +346,7 @@ onMounted(fetchList)
 <style scoped>
 .crm-page { padding: 16px; }
 .page-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.page-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .page-title { font-size: 18px; margin: 0 0 4px; }
 .page-sub { font-size: 12px; color: #909399; }
 .pagination { margin-top: 14px; justify-content: flex-end; }

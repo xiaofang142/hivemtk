@@ -5,9 +5,22 @@ import (
 
 	dbutil "hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/testutil"
+	"hivemtk-user/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
+
+func TestInstallLeadMiningReAct_RequiresCompleteResolver(t *testing.T) {
+	service.SetLeadReactHook(service.LeadReactResolver{}, nil)
+	t.Cleanup(func() { service.SetLeadReactHook(service.LeadReactResolver{}, nil) })
+	if err := installLeadMiningReAct(nil); err == nil {
+		t.Fatal("缺少数据库时不得装配完整 ReAct resolver")
+	}
+	database := testutil.NewTestDB(t)
+	if err := installLeadMiningReAct(database); err != nil {
+		t.Fatalf("生产 Router 应装配完整 ReAct resolver: %v", err)
+	}
+}
 
 func TestSetup_HealthEndpoint(t *testing.T) {
 	database := testutil.NewTestDB(t)

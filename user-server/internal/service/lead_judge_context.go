@@ -452,6 +452,9 @@ func (s *Service) buildLeadJudgeContext(ctx context.Context, hub *model.MessageH
 			logger.Ctx(ctx).Warn().Err(uerr).Msg("[lead-mining] 共享对话上下文写入失败")
 		}
 		jctx.Conversation = conv
+		// LEAD-04：把自动回复侧写入的备注/标签/摘要送进线索判定输入，
+		// 与回复侧 SetSharedBusinessProvider 消费对方信息形成双向交叉引用。
+		jctx.SharedBusiness = SharedBusinessInputFromContext(conv, ContextNoteNamespaceLeadMining, sharedBusinessInputBudget)
 	}
 	var shared model.ConversationMessages
 	if jctx.Conversation != nil {
@@ -494,9 +497,14 @@ func (s *Service) buildLeadJudgeContext(ctx context.Context, hub *model.MessageH
 
 	// 用富化后的 jctx.Messages 跑三路检测，保证关键词/语义/LLM 检测器
 	// 与二次判定看到同一份带 [角色:发送者] 的群聊上下文。
-	hits, derr := NewLeadDetectionService().Run(ctx, DetectionInput{
-		Rule: rule, Messages: jctx.Messages, JudgementID: judgementID,
-	})
+	detection := DetectionInput{Rule: rule, Messages: jctx.Messages, JudgementID: judgementID}
+	var hits []model.LeadMiningHit
+	var derr error
+	if s.hitsProvider != nil {
+		hits, derr = s.hitsProvider(ctx, detection)
+	} else {
+		hits, derr = NewLeadDetectionService().Run(ctx, detection)
+	}
 	if derr != nil {
 		logger.Ctx(ctx).Warn().Err(derr).Msg("[lead-mining] 三路检测落库失败，二次判断标记证据不完整")
 	} else {

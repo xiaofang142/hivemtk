@@ -21,6 +21,7 @@ func TestLeadReactRepositories_ScopeByTenantPlatformAccountAliasesAndBoundary(t 
 	rows := []*model.LeadMiningJudgement{
 		{TenantID: 7101, JudgementID: "canonical-conv", Platform: "telegram", AccountID: "11", ConversationID: "same-conv", SenderID: "same-user", Summary: "规范账号会话"},
 		{TenantID: 7101, JudgementID: "alias-conv", Platform: "telegram", AccountID: "acct-a", ConversationID: "same-conv", SenderID: "same-user", Summary: "别名账号会话"},
+		{TenantID: 7101, JudgementID: "other-sender-conv", Platform: "telegram", AccountID: "acct-a", ConversationID: "same-conv", SenderID: "other-user", Summary: "同会话其他发送人"},
 		{TenantID: 7101, JudgementID: "other-conv", Platform: "telegram", AccountID: "acct-b", ConversationID: "same-conv", SenderID: "same-user", Summary: "其他账号会话"},
 		{TenantID: 7102, JudgementID: "other-tenant", Platform: "telegram", AccountID: "11", ConversationID: "same-conv", SenderID: "same-user", Summary: "其他租户会话"},
 		{TenantID: 7101, JudgementID: "canonical-group", Platform: "telegram", AccountID: "11", ConversationID: "group-conv", GroupID: "same-group", IsGroup: true, SenderID: "member-a", Summary: "规范账号群"},

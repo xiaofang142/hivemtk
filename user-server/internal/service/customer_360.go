@@ -336,6 +336,15 @@ func (s *Customer360Service) resolveSessionsByKey(ctx context.Context, idKey str
 // 即使该客户当前没有关联会话（customer_sessions.one_id 为空是常见情况），也返回客户基本
 // 档案（姓名/电话/邮箱/OneID 等），不再误报 404。
 func (s *Customer360Service) GetCustomer360ByCustomerID(ctx context.Context, customerID string) (*Customer360DTO, error) {
+	return s.getCustomer360ByCustomerID(ctx, nil, customerID)
+}
+
+// GetCustomer360ByCustomerIDScoped 在读取任何关联数据前检查客户档案的 CRM 权限。
+func (s *Customer360Service) GetCustomer360ByCustomerIDScoped(ctx context.Context, scope CustomerDataScope, customerID string) (*Customer360DTO, error) {
+	return s.getCustomer360ByCustomerID(ctx, &scope, customerID)
+}
+
+func (s *Customer360Service) getCustomer360ByCustomerID(ctx context.Context, scope *CustomerDataScope, customerID string) (*Customer360DTO, error) {
 	cust, err := s.customerRepo.GetByID(ctx, customerID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -349,6 +358,9 @@ func (s *Customer360Service) GetCustomer360ByCustomerID(ctx context.Context, cus
 
 	dto := &Customer360DTO{}
 
+	if scope != nil && !(&CustomerPermissionService{}).CanAccess(*scope, cust) {
+		return nil, ErrCRMCustomerForbidden
+	}
 	sessions, err := s.sessionRepo.GetByOneID(ctx, cust.UnifiedID)
 	if err != nil {
 		return nil, err

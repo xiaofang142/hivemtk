@@ -25,6 +25,9 @@ type ArchiveClueInput struct {
 	OwnerUserID     uint                 `json:"owner_user_id,omitempty"`
 	Summary         string               `json:"summary,omitempty"`
 	EvidenceJSON    string               `json:"evidence_json,omitempty"`
+	// SkipNotify 由需要先完成线索终态再通知的调用方设置（US2 归档链）。
+	// 避免客户关联成功但终态写入失败时通知已发出，造成“已通知未归档”。
+	SkipNotify bool `json:"skip_notify,omitempty"`
 }
 
 // ArchiveClueResult 客户侧关联结果。
@@ -64,6 +67,15 @@ func (s *ClueArchiveService) SetNotifier(n CustomerOwnerNotifier) {
 	if n != nil {
 		s.notifier = n
 	}
+}
+
+// Notifier 返回已装配的通知出口，供需要先写终态再通知的调用方复用；
+// 未装配时返回 nil，调用方应按无出口处理而不是自建第二套推送。
+func (s *ClueArchiveService) Notifier() CustomerOwnerNotifier {
+	if s == nil {
+		return nil
+	}
+	return s.notifier
 }
 
 // ArchiveClueAndLinkCustomer 客户侧关联 + 负责人推送桩。
@@ -117,6 +129,9 @@ func (s *ClueArchiveService) ArchiveClueAndLinkCustomer(ctx context.Context, in 
 	result := &ArchiveClueResult{CustomerID: customer.ID, Linked: true}
 	s.writeAudit(ctx, in, customer.ID)
 
+	if in.SkipNotify {
+		return result, nil
+	}
 	if s.notifier != nil {
 		if err := s.notifier.NotifyOwner(ctx, in, customer.ID); err != nil {
 			logger.Warnf("[clue-archive] 负责人推送失败 clue=%s customer=%s: %v", in.ClueID, customer.ID, err)

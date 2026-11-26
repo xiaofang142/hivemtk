@@ -211,14 +211,15 @@ type KBChangeAuditLog struct {
 // TableName 表名
 func (KBChangeAuditLog) TableName() string { return "kb_change_audit_logs" }
 
-// 审计动作值域（一次变更请求的一生 + 一次发布指针的移动）。
+// 审计动作值域（变更请求、发布指针与提交后的补算结果）。
 const (
-	KBAuditSubmitted = "submitted" // 变更入队（同时创建了审批请求）
-	KBAuditWithdrawn = "withdrawn" // 发起人撤回
-	KBAuditPublished = "published" // 一批变更落库 + 生效指针前移
-	KBAuditRollback  = "rollback"  // 生效指针回拨（不碰语料）
-	KBAuditRestored  = "restored"  // 回滚的逆操作
-	KBAuditGoverned  = "governed"  // 启用/停用发布制（governed 翻转）
+	KBAuditSubmitted       = "submitted"        // 变更入队（同时创建了审批请求）
+	KBAuditWithdrawn       = "withdrawn"        // 发起人撤回
+	KBAuditPublished       = "published"        // 一批变更落库 + 生效指针前移
+	KBAuditRollback        = "rollback"         // 生效指针回拨（不碰语料）
+	KBAuditRestored        = "restored"         // 回滚的逆操作
+	KBAuditGoverned        = "governed"         // 启用/停用发布制（governed 翻转）
+	KBAuditEmbeddingStatus = "embedding_status" // 正文提交后的向量补算状态
 )
 
 // KBChangeAuditActions 全部合法动作。
@@ -229,6 +230,7 @@ var KBChangeAuditActions = []string{
 	KBAuditRollback,
 	KBAuditRestored,
 	KBAuditGoverned,
+	KBAuditEmbeddingStatus,
 }
 
 // IsValidKBChangeOp 动作是否合法（service 与表驱动测试共用一份判据，避免两处各写一遍 switch）。

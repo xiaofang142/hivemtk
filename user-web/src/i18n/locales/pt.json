@@ -1,4 +1,22 @@
 {
+  "channels": {
+    "title": "Canais",
+    "description": "Cada canal e conta pode receber mensagens individuais e de grupo. O tipo de conversa é definido por cada mensagem.",
+    "serviceNote": "QQ e WeChat pessoal são canais. O SageX fornece a conexão. Nomes de empresas ou equipes identificam contas.",
+    "catalog": "Canais",
+    "accounts": "Contas",
+    "identifyCodes": "Códigos de identificação",
+    "displayName": "Nome de exibição desta conta",
+    "displayNamePlaceholder": "Apenas para exibição, sem identificar o remetente",
+    "leadMiningHint": "Desativa a detecção e o arquivamento de oportunidades. As respostas automáticas são controladas separadamente.",
+    "legacyBindings": "Vínculos de conexão existentes",
+    "legacyBindingsHint": "As contas e os códigos vinculados são preservados. O SageX conecta QQ e WeChat pessoal; cada mensagem mantém seu canal de origem real.",
+    "personalWechat": "WeChat pessoal",
+    "serviceBindingLabel": "{name} · Conexão SageX (QQ / WeChat pessoal)",
+    "editBinding": "Editar vínculo de conexão",
+    "bindingName": "Nome da empresa ou equipe",
+    "bindingCode": "Código do vínculo de conexão"
+  },
   "clue": {
     "updated": "Lead atualizado",
     "assigned": "Responsável atribuído"
@@ -561,7 +579,8 @@
     "knowledgeQaCandidates": "Fila de Revisão QA",
     "capabilityMatrix": "Matriz de Capacidades",
     "channelManage": "Gerenciamento de Canais",
-    "channelAccount": "Gerenciamento de Contas de Canal"
+    "channelAccount": "Gerenciamento de Contas de Canal",
+    "channels": "Canais"
   },
   "保存": "Save",
   "提交": "Submit",
@@ -1572,7 +1591,6 @@
   "主动触达": "Active Outreach",
   "人员管理": "Gerenciamento de usuários",
   "域名池": "Pool de domínios",
-  "多账号聚合": "Agregação de várias contas",
   "客户事件": "Eventos de clientes",
   "客服会话": "Sessões de atendimento",
   "平台账号": "Contas da plataforma",
@@ -1961,6 +1979,15 @@
         }
       },
       "page": {
+        "channels": {
+          "title": "Canais",
+          "description": "Cada canal e conta recebe mensagens individuais e de grupo. O tipo de conversa vem de cada mensagem.",
+          "catalog": "Fontes de mensagens",
+          "catalogGuide": "Gerencie QQ, WeChat e outras fontes. O SageX fornece a conexão; nomes de empresas ou equipes identificam contas.",
+          "accounts": "Contas de canal",
+          "accountsGuide": "Adicione contas e configure respostas automáticas e descoberta de leads separadamente.",
+          "codesGuide": "Os códigos comprovam o vínculo. Atualize o emissor após renovar um código para evitar interrupções."
+        },
         "merchantConnection": {
           "title": "Autorização da loja",
           "summary": "Consulte o status da loja e conecte usando uma transferência verificada. Contratos reais não verificados permanecem bloqueados.",

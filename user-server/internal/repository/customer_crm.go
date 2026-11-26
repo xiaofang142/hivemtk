@@ -8,7 +8,16 @@ import (
 	"hivemtk-user/internal/pkg/tenant"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
+
+// CustomerAccountScopeRule 是同一账号的来源引用、行业和负责人条件的交集。
+// 多条规则取并集；空来源引用不匹配任何客户。
+type CustomerAccountScopeRule struct {
+	SourceAccountIDs []string
+	Industries       []string
+	OwnerUserID      uint
+}
 
 // CustomerScopeFilter CRM 列表/导出的统一过滤条件。
 // 账号范围、可见行业、负责人均为 AND 叠加；账号范围由数据权限服务解析后传入。
@@ -16,6 +25,7 @@ type CustomerScopeFilter struct {
 	SourceAccountIDs   []string
 	RestrictedAccounts bool // true 且 SourceAccountIDs 为空 => 拒绝全部（fail-closed）
 	Industries         []string
+	AccountRules       []CustomerAccountScopeRule
 	// DenyAll 表示权限交集已明确为空；零值 false 保持“行业不受限”的既有语义。
 	DenyAll       bool
 	OwnerUserID   uint
@@ -43,12 +53,32 @@ func applyCustomerScope(q *gorm.DB, f CustomerScopeFilter) *gorm.DB {
 		return q.Where("1 = 0")
 	}
 	if f.RestrictedAccounts {
-		if len(f.SourceAccountIDs) == 0 {
+		if len(f.SourceAccountIDs) == 0 && len(f.AccountRules) == 0 {
 			return q.Where("1 = 0")
 		}
+	}
+	if len(f.SourceAccountIDs) > 0 {
 		q = q.Where("source_account_id IN ?", f.SourceAccountIDs)
-	} else if len(f.SourceAccountIDs) > 0 {
-		q = q.Where("source_account_id IN ?", f.SourceAccountIDs)
+	}
+	if len(f.AccountRules) > 0 {
+		pairs := make([]clause.Expression, 0, len(f.AccountRules))
+		for _, rule := range f.AccountRules {
+			if len(rule.SourceAccountIDs) == 0 {
+				continue
+			}
+			conditions := []clause.Expression{clause.Expr{SQL: "source_account_id IN ?", Vars: []any{rule.SourceAccountIDs}}}
+			if len(rule.Industries) > 0 {
+				conditions = append(conditions, clause.Expr{SQL: "industry IN ?", Vars: []any{rule.Industries}})
+			}
+			if rule.OwnerUserID > 0 {
+				conditions = append(conditions, clause.Eq{Column: "owner_user_id", Value: rule.OwnerUserID})
+			}
+			pairs = append(pairs, clause.And(conditions...))
+		}
+		if len(pairs) == 0 {
+			return q.Where("1 = 0")
+		}
+		q = q.Where(clause.Or(pairs...))
 	}
 	if len(f.Industries) > 0 {
 		q = q.Where("industry IN ?", f.Industries)
@@ -81,7 +111,7 @@ func (r *crmCustomerRepository) ListScoped(ctx context.Context, f CustomerScopeF
 		return nil, 0, err
 	}
 	var rows []*model.Customer
-	err := q.Order("created_at DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&rows).Error
+	err := q.Order("created_at DESC").Order("id DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&rows).Error
 	return rows, total, err
 }
 

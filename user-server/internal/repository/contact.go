@@ -14,7 +14,7 @@ import (
 type ContactRepository interface {
 	Create(ctx context.Context, row *model.Contact) error
 	GetByID(ctx context.Context, id int64) (*model.Contact, error)
-	ListByCustomer(ctx context.Context, customerID string, page, pageSize int) ([]*model.Contact, int64, error)
+	ListByCustomer(ctx context.Context, customerID string, page, pageSize int, scopes ...CRMEntityAccountFilter) ([]*model.Contact, int64, error)
 	Update(ctx context.Context, row *model.Contact) error
 	Delete(ctx context.Context, id int64) error
 }
@@ -44,7 +44,7 @@ func (r *contactRepository) GetByID(ctx context.Context, id int64) (*model.Conta
 	return &row, nil
 }
 
-func (r *contactRepository) ListByCustomer(ctx context.Context, customerID string, page, pageSize int) ([]*model.Contact, int64, error) {
+func (r *contactRepository) ListByCustomer(ctx context.Context, customerID string, page, pageSize int, scopes ...CRMEntityAccountFilter) ([]*model.Contact, int64, error) {
 	if page <= 0 {
 		page = 1
 	}
@@ -53,6 +53,7 @@ func (r *contactRepository) ListByCustomer(ctx context.Context, customerID strin
 	}
 	q := r.db(ctx).Model(&model.Contact{}).
 		Where("tenant_id = ? AND customer_id = ? AND deleted_at IS NULL", tenant.WriteTenantID(ctx), customerID)
+	q = applyCRMEntityAccounts(q, scopes)
 	var total int64
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err

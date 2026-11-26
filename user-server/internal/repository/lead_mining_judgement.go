@@ -175,6 +175,9 @@ func (r *leadMiningJudgementRepo) ListRecentForReAct(ctx context.Context, platfo
 		q = q.Where("group_id = ?", groupID)
 	} else if conversationID != "" {
 		q = q.Where("conversation_id = ?", conversationID)
+		if senderID != "" {
+			q = q.Where("sender_id = ?", senderID)
+		}
 	} else {
 		q = q.Where("conversation_id = ? AND group_id = ? AND sender_id = ?", "", "", senderID)
 	}

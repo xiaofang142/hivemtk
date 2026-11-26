@@ -32,6 +32,7 @@ var PresetChannelCodes = []struct {
 	{"feishu", "飞书", "group", true},
 	{"wecom", "企业微信", "group", true},
 	{"qq", "QQ", "dm", true},
+	{model.ChannelPersonalWX, "个人微信", "dm", true},
 }
 
 // ErrChannelCodeDisabled 渠道码存在但被关闭（使用方据此 fail-closed 拒绝）。

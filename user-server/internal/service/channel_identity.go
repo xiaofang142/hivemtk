@@ -34,9 +34,6 @@ func (i *ChannelIdentityResolver) IdentifySpeaker(
 		return nil, ErrChannelIdentityUnresolved
 	}
 	typ := strings.ToLower(strings.TrimSpace(conversationType))
-	if typ == "" {
-		typ = "dm"
-	}
 	if typ != "dm" && typ != "single" && typ != "direct" && typ != "private" &&
 		typ != "group" && typ != "group_chat" && typ != "chatroom" {
 		return nil, ErrChannelIdentityUnresolved

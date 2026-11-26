@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -17,10 +18,11 @@ import (
 // CustomerAccountRule 保留单条授权的账号 × 行业 × 角色配对关系。
 // 存在 AccountRules 时，判定以配对为准，禁止把不同账号的行业/角色组合成全局集合后交叉放行。
 type CustomerAccountRule struct {
-	AccountID   string   `json:"account_id"`
-	Industries  []string `json:"industries,omitempty"` // 空表示不限行业
-	Role        string   `json:"role,omitempty"`
-	OwnerUserID uint     `json:"owner_user_id,omitempty"` // >0 表示该账号仅查看此负责人
+	AccountID        string   `json:"account_id"`
+	SourceAccountIDs []string `json:"-"`                    // 本次权限解析验证过的来源引用，不作为持久 ACL
+	Industries       []string `json:"industries,omitempty"` // 空表示不限行业
+	Role             string   `json:"role,omitempty"`
+	OwnerUserID      uint     `json:"owner_user_id,omitempty"` // >0 表示该账号仅查看此负责人
 }
 
 type CustomerDataScope struct {
@@ -63,10 +65,14 @@ func NewCustomerPermissionService() *CustomerPermissionService {
 // Resolve 解析当前用户的数据权限范围。缺租户时仓储层 fail-closed；
 // userID=0（无登录态）一律 restricted+空集合，拒绝全部数据。
 func (s *CustomerPermissionService) Resolve(ctx context.Context, userID uint) (CustomerDataScope, error) {
-	scope := CustomerDataScope{UserID: userID}
+	scope := CustomerDataScope{UserID: userID, RestrictedAccounts: true}
 	if userID == 0 {
 		scope.RestrictedAccounts = true
 		return scope, nil
+	}
+	tid := tenant.WriteTenantID(ctx)
+	if tid == 0 {
+		return scope, errors.New("缺少租户上下文，无法解析客户权限")
 	}
 
 	bizScope, err := s.scopeSvc.Resolve(ctx, userID)
@@ -82,98 +88,116 @@ func (s *CustomerPermissionService) Resolve(ctx context.Context, userID uint) (C
 		scope.AllAccounts = true
 		return scope, nil
 	}
-	bizIDs, bizRestricted := bizScope.AllowedSourceAccountIDs()
-
-	var phase2IDs []string
-	industrySet := make(map[string]bool)
+	bizIDs, _ := bizScope.AllowedSourceAccountIDs()
 	auths, err := s.authRepo.ListByUser(ctx, userID)
 	if err != nil {
 		// fail-closed：同上，授权表读取失败不得退化为不过滤。
 		scope.RestrictedAccounts = true
 		return scope, err
 	}
-	channelIDs := make([]uint, 0, len(auths))
-	ruleByAccount := make(map[string]CustomerAccountRule)
-	for _, a := range auths {
-		if a.Role == "owner" {
-			scope.OnlyOwned = true
-		}
-		inds := parseVisibleIndustries(a.VisibleIndustryScope)
-		for _, ind := range inds {
-			industrySet[ind] = true
-		}
-		if a.ChannelAccountID > 0 {
-			channelIDs = append(channelIDs, a.ChannelAccountID)
-			accountRef := strconv.FormatUint(uint64(a.ChannelAccountID), 10)
-			phase2IDs = append(phase2IDs, accountRef)
-			ruleByAccount[accountRef] = CustomerAccountRule{
-				AccountID: accountRef, Industries: inds, Role: a.Role,
-			}
-		}
-	}
-	// 渠道账号 numeric id 与 customers.source_account_id 的映射：
-	// 识别码是 Phase 2 的权威对外标识，一并加入允许集合；查不到账号时保留数字 id 兜底，
-	// 不让一条授权因关联行缺失而静默失效。
-	if len(channelIDs) > 0 && s.accountRepo != nil && s.accountRepo.Available() {
-		tid, ok := tenant.FromContext(ctx)
-		if !ok || tid == 0 {
-			tid = tenant.WriteTenantID(ctx)
-		}
-		if accounts, aerr := s.accountRepo.GetByIDs(ctx, tid, channelIDs); aerr == nil {
-			for _, acc := range accounts {
-				if acc.IdentifyCode != "" {
-					phase2IDs = append(phase2IDs, acc.IdentifyCode)
-				}
-			}
-		}
-	}
-
-	seen := make(map[string]bool)
-	merged := make([]string, 0, len(bizIDs)+len(phase2IDs))
-	for _, id := range append(append([]string{}, bizIDs...), phase2IDs...) {
-		id = strings.TrimSpace(id)
-		if id == "" || seen[id] {
-			continue
-		}
-		seen[id] = true
-		merged = append(merged, id)
-	}
-
-	// fail-closed：业务授权表判定受限且没有任何账号可授权时，拒绝全部；
-	// 若只有 Phase 2 授权表有数据，同样以它为受限集合。
-	if (bizRestricted || len(phase2IDs) > 0) && len(merged) == 0 {
-		scope.RestrictedAccounts = true
+	if len(auths) == 0 && len(bizIDs) == 0 {
 		return scope, nil
 	}
-	if len(merged) > 0 {
-		scope.RestrictedAccounts = true
-		scope.AccountIDs = merged
+	if s.accountRepo == nil || !s.accountRepo.Available() {
+		return scope, repository.ErrChannelStoreUnavailable
 	}
-	for ind := range industrySet {
-		scope.Industries = append(scope.Industries, ind)
+	channelIDs := make([]uint, 0, len(auths)+len(bizIDs))
+	businessIDs := make(map[string]uint)
+	for _, ref := range bizIDs {
+		if id, err := strconv.ParseUint(ref, 10, strconv.IntSize); err == nil {
+			if id > 0 && strconv.FormatUint(id, 10) == ref {
+				businessIDs[ref] = uint(id)
+				channelIDs = append(channelIDs, uint(id))
+			}
+			continue
+		}
+		account, err := s.accountRepo.GetByIdentifyCode(ctx, ref)
+		if errors.Is(err, repository.ErrAmbiguousIdentifyCode) {
+			continue
+		}
+		if err != nil {
+			return scope, err
+		}
+		if account != nil && account.TenantID == tid {
+			businessIDs[ref] = account.ID
+			channelIDs = append(channelIDs, account.ID)
+		}
 	}
-	for _, rule := range ruleByAccount {
-		scope.AccountRules = append(scope.AccountRules, rule)
+	for _, auth := range auths {
+		if auth.ChannelAccountID > 0 {
+			channelIDs = append(channelIDs, auth.ChannelAccountID)
+		}
 	}
+	accounts, err := s.accountRepo.GetByIDs(ctx, tid, channelIDs)
+	if err != nil {
+		return scope, err
+	}
+	refs := make(map[uint][]string, len(accounts))
+	for _, account := range accounts {
+		refs[account.ID] = []string{strconv.FormatUint(uint64(account.ID), 10)}
+	}
+	if reader, ok := s.accountRepo.(repository.CRMAccountReferenceReader); ok {
+		refs, err = reader.GetCRMSourceReferences(ctx, tid, channelIDs)
+		if err != nil {
+			return scope, err
+		}
+	}
+	var rules []CustomerAccountRule
+	seen := make(map[string]bool)
+	addRule := func(id uint, inds []string, role string) {
+		idRef := strconv.FormatUint(uint64(id), 10)
+		if !containsCRMString(refs[id], idRef) {
+			return
+		}
+		rules = append(rules, CustomerAccountRule{AccountID: idRef, SourceAccountIDs: refs[id], Industries: inds, Role: role})
+		seen[idRef] = true
+	}
+	for _, ref := range bizIDs {
+		if id := businessIDs[ref]; id > 0 && containsCRMString(refs[id], ref) {
+			addRule(id, nil, "viewer")
+		}
+	}
+	for _, auth := range auths {
+		inds, valid := parseVisibleIndustries(auth.VisibleIndustryScope)
+		role := strings.ToLower(strings.TrimSpace(auth.Role))
+		if !valid || (role != "owner" && role != "viewer") {
+			continue
+		}
+		addRule(auth.ChannelAccountID, inds, role)
+	}
+	for id := range seen {
+		scope.AccountIDs = append(scope.AccountIDs, id)
+	}
+	sort.Strings(scope.AccountIDs)
+	scope.AccountRules = rules
 	return scope, nil
 }
 
-func parseVisibleIndustries(raw string) []string {
+func parseVisibleIndustries(raw string) ([]string, bool) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return nil
+		return nil, true
 	}
 	var arr []string
-	if err := json.Unmarshal([]byte(raw), &arr); err == nil {
-		return arr
+	if strings.HasPrefix(raw, "[") {
+		if json.Unmarshal([]byte(raw), &arr) != nil {
+			return nil, false
+		}
+	} else {
+		var obj struct {
+			Industries []string `json:"industries"`
+		}
+		if !strings.HasPrefix(raw, "{") || json.Unmarshal([]byte(raw), &obj) != nil || obj.Industries == nil {
+			return nil, false
+		}
+		arr = obj.Industries
 	}
-	var obj struct {
-		Industries []string `json:"industries"`
+	for _, industry := range arr {
+		if strings.TrimSpace(industry) == "" {
+			return nil, false
+		}
 	}
-	if err := json.Unmarshal([]byte(raw), &obj); err == nil {
-		return obj.Industries
-	}
-	return nil
+	return arr, true
 }
 
 // ToFilter 把权限范围叠加到调用方过滤条件上。
@@ -183,10 +207,44 @@ func (s *CustomerPermissionService) ToFilter(scope CustomerDataScope, base repos
 	}
 	if !scope.AllAccounts {
 		base.RestrictedAccounts = scope.RestrictedAccounts || base.RestrictedAccounts
+		allowedRefs := append([]string{}, scope.AccountIDs...)
+		if len(scope.AccountRules) > 0 {
+			allowedRefs = nil
+			base.AccountRules = make([]repository.CustomerAccountScopeRule, 0, len(scope.AccountRules))
+			for _, rule := range scope.AccountRules {
+				if scope.RestrictedAccounts && !containsCRMString(scope.AccountIDs, rule.AccountID) {
+					continue
+				}
+				refs := rule.SourceAccountIDs
+				if len(refs) == 0 {
+					refs = []string{rule.AccountID}
+				}
+				owner := rule.OwnerUserID
+				if strings.EqualFold(rule.Role, "owner") {
+					if scope.UserID == 0 || (owner > 0 && owner != scope.UserID) {
+						continue
+					}
+					owner = scope.UserID
+				}
+				base.AccountRules = append(base.AccountRules, repository.CustomerAccountScopeRule{
+					SourceAccountIDs: refs, Industries: rule.Industries, OwnerUserID: owner,
+				})
+				allowedRefs = append(allowedRefs, refs...)
+			}
+			if len(base.AccountRules) == 0 {
+				base.DenyAll = true
+			}
+		}
+		if scope.RestrictedAccounts && len(allowedRefs) == 0 {
+			base.DenyAll = true
+		}
 		if scope.RestrictedAccounts && len(base.SourceAccountIDs) == 0 {
-			base.SourceAccountIDs = scope.AccountIDs
-		} else if len(scope.AccountIDs) > 0 {
-			base.SourceAccountIDs = intersectCRMStrings(base.SourceAccountIDs, scope.AccountIDs)
+			base.SourceAccountIDs = allowedRefs
+		} else if len(allowedRefs) > 0 {
+			base.SourceAccountIDs = intersectCRMStrings(base.SourceAccountIDs, allowedRefs)
+			if len(base.SourceAccountIDs) == 0 {
+				base.DenyAll = true
+			}
 		}
 		if len(scope.Industries) > 0 {
 			if len(base.Industries) == 0 {
@@ -199,50 +257,53 @@ func (s *CustomerPermissionService) ToFilter(scope CustomerDataScope, base repos
 			}
 		}
 	}
+	owner := scope.OwnerUserID
 	if scope.OnlyOwned {
-		base.OwnerUserID = scope.UserID
-	} else if scope.OwnerUserID > 0 {
-		base.OwnerUserID = scope.OwnerUserID
+		owner = scope.UserID
+		if owner == 0 {
+			base.DenyAll = true
+		}
+	}
+	if owner > 0 {
+		if base.OwnerUserID > 0 && base.OwnerUserID != owner {
+			base.DenyAll = true
+		}
+		base.OwnerUserID = owner
 	}
 	return base
 }
 
 // ListScoped 按权限范围读取客户列表。
 func (s *CustomerPermissionService) ListScoped(ctx context.Context, scope CustomerDataScope, base repository.CustomerScopeFilter) ([]*model.Customer, int64, error) {
-	if len(scope.AccountRules) == 0 {
-		return s.customers.ListScoped(ctx, s.ToFilter(scope, base))
+	return s.customers.ListScoped(ctx, s.ToFilter(scope, base))
+}
+
+// EntityAccountFilter 将客户的行业和负责人代入每条账号授权，供关联实体的 SQL 过滤复用。
+func (s *CustomerPermissionService) EntityAccountFilter(scope CustomerDataScope, customer *model.Customer) repository.CRMEntityAccountFilter {
+	filter := repository.CRMEntityAccountFilter{RestrictedAccounts: !scope.AllAccounts}
+	if customer == nil || !s.CanAccess(scope, customer) {
+		filter.RestrictedAccounts = true
+		return filter
 	}
-	// 配对存在时逐行精判：SQL 的全局账号/行业集合可能比授权配对更宽。
-	// 先取全量范围内行，按配对过滤后再分页，确保 total 不泄露被拒记录。
-	probe := base
-	probe.Page, probe.PageSize = 1, 10000
-	rows, _, err := s.customers.ListScoped(ctx, s.ToFilter(scope, probe))
-	if err != nil {
-		return nil, 0, err
+	filter.AllowUnassigned = true
+	ids := append([]string(nil), scope.AccountIDs...)
+	for _, rule := range scope.AccountRules {
+		ids = append(ids, rule.AccountID)
 	}
-	allowed := make([]*model.Customer, 0, len(rows))
-	for _, row := range rows {
-		if s.CanAccess(scope, row) {
-			allowed = append(allowed, row)
+	seen := make(map[uint]bool)
+	for _, ref := range ids {
+		id, err := strconv.ParseUint(ref, 10, strconv.IntSize)
+		if err != nil || id == 0 || strconv.FormatUint(id, 10) != ref || seen[uint(id)] {
+			continue
+		}
+		candidate := *customer
+		candidate.SourceAccountID = ref
+		if s.CanAccess(scope, &candidate) {
+			seen[uint(id)] = true
+			filter.AccountIDs = append(filter.AccountIDs, uint(id))
 		}
 	}
-	total := int64(len(allowed))
-	page, pageSize := base.Page, base.PageSize
-	if page <= 0 {
-		page = 1
-	}
-	if pageSize <= 0 {
-		pageSize = 20
-	}
-	start := (page - 1) * pageSize
-	if start >= len(allowed) {
-		return []*model.Customer{}, total, nil
-	}
-	end := start + pageSize
-	if end > len(allowed) {
-		end = len(allowed)
-	}
-	return allowed[start:end], total, nil
+	return filter
 }
 
 // GetByIDScoped 读取单个客户并校验权限（越权返回 ErrCRMCustomerForbidden）。
@@ -268,7 +329,7 @@ func (s *CustomerPermissionService) CanAccess(scope CustomerDataScope, c *model.
 	if scope.AllAccounts {
 		return true
 	}
-	if scope.RestrictedAccounts {
+	if scope.RestrictedAccounts && len(scope.AccountRules) == 0 {
 		if len(scope.AccountIDs) == 0 || !containsCRMString(scope.AccountIDs, c.SourceAccountID) {
 			return false
 		}
@@ -279,7 +340,7 @@ func (s *CustomerPermissionService) CanAccess(scope CustomerDataScope, c *model.
 	// OnlyOwned：无负责人（OwnerUserID=nil）不算「我的客户」。
 	// 若放行 nil，owner 角色可通过详情/360/AI/合并等按 ID 读取的入口
 	// 越权访问未分配客户的资料（列表 SQL 的 owner_user_id=? 已经排除 nil）。
-	if scope.OnlyOwned && (c.OwnerUserID == nil || *c.OwnerUserID != scope.UserID) {
+	if scope.OnlyOwned && (scope.UserID == 0 || c.OwnerUserID == nil || *c.OwnerUserID != scope.UserID) {
 		return false
 	}
 	if scope.OwnerUserID > 0 && (c.OwnerUserID == nil || *c.OwnerUserID != scope.OwnerUserID) {
@@ -288,14 +349,21 @@ func (s *CustomerPermissionService) CanAccess(scope CustomerDataScope, c *model.
 	if len(scope.AccountRules) > 0 {
 		matched := false
 		for _, rule := range scope.AccountRules {
-			if rule.AccountID != c.SourceAccountID {
+			if scope.RestrictedAccounts && !containsCRMString(scope.AccountIDs, rule.AccountID) {
+				continue
+			}
+			refs := rule.SourceAccountIDs
+			if len(refs) == 0 {
+				refs = []string{rule.AccountID}
+			}
+			if !containsCRMString(refs, c.SourceAccountID) {
 				continue
 			}
 			if len(rule.Industries) > 0 && !containsCRMString(rule.Industries, c.Industry) {
 				continue
 			}
 			if strings.EqualFold(rule.Role, "owner") {
-				if c.OwnerUserID == nil || *c.OwnerUserID != scope.UserID {
+				if scope.UserID == 0 || c.OwnerUserID == nil || *c.OwnerUserID != scope.UserID {
 					continue
 				}
 			}

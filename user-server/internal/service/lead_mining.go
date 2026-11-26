@@ -94,8 +94,12 @@ type Service struct {
 	// ruleTargetFor 把消息解析为规则目标（account > channel > global）。
 	// 不注入时走 ChannelResolver.ResolveByAccountRef；单测可注入替身避免依赖 DB。
 	ruleTargetFor func(context.Context, *model.MessageHub) LeadRuleTarget
-	cancel        context.CancelFunc
-	wg            sync.WaitGroup
+	// hitsProvider 仅供纯单测注入三路证据；生产为 nil，走真实 LeadDetectionService。
+	// 副作用闸依赖 EvidenceComplete，租户隔离等不涉及证据完整性的测试用它声明
+	// “本场景证据完整”，避免用空 Hits 误判为降级。
+	hitsProvider func(context.Context, DetectionInput) ([]model.LeadMiningHit, error)
+	cancel       context.CancelFunc
+	wg           sync.WaitGroup
 }
 
 var singleton *Service
@@ -456,9 +460,9 @@ func (s *Service) process(ctx context.Context, hub *model.MessageHub) {
 	// D8：判定成功后把结论写成会话历史摘要（compaction），供多轮/长会话复用。
 	saveCompactSummary(ctx, hub, jctx.ChannelAccountID, jd)
 	// 统一业务副作用准入：判定记录/候选已落库，判定自身降级（含 React 降级）不得触发标签/通知/商机。
-	// 三路证据完整性在判定记录里以 EvidenceComplete 标注、供候选/回放判读；
-	// 可选检测路（如 LLM）降级不构成挡单，避免正常判定被误拦。
-	if !leadSideEffectsEligible(jd, true, gate.minIntentScore) {
+	// 证据完整性统一取 jctx.EvidenceComplete()，与判定记录同一口径；三路全降级、
+	// 群聚合失败或无完整命中时只保留候选/回放，不写线索标签、通知或商机。
+	if !leadSideEffectsEligible(jd, jctx.EvidenceComplete(), gate.minIntentScore) {
 		return
 	}
 
@@ -545,6 +549,11 @@ func buildDegradedJudgement(jctx *LeadJudgeContext, cfg *model.LeadMiningConfig,
 	if signals == 0 {
 		return nil // 无本地正向证据：确无线索信号，不是被 LLM 故障吞掉
 	}
+	var reactOutcome *LeadReactOutcome
+	var reactErr *leadReactJudgeError
+	if errors.As(judgeErr, &reactErr) && reactErr.react != nil {
+		reactOutcome = reactErr.react
+	}
 	score := 60
 	if cfg.MinIntentScore > score {
 		score = cfg.MinIntentScore
@@ -567,6 +576,7 @@ func buildDegradedJudgement(jctx *LeadJudgeContext, cfg *model.LeadMiningConfig,
 		Reason:          reason,
 		LeadRole:        "unknown",
 		Degraded:        true,
+		ReactOutcome:    reactOutcome,
 	}
 }
 

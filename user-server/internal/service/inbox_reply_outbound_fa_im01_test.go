@@ -22,7 +22,7 @@ type faIM01Dispatch struct {
 	err      error
 }
 
-func (f *faIM01Dispatch) fn(ctx context.Context, ch WebhookChannel, accountID, eventID, content string) (bool, string, error) {
+func (f *faIM01Dispatch) fn(ctx context.Context, ch WebhookChannel, accountID, eventID, content string, hub *model.MessageHub) (bool, string, error) {
 	f.calls++
 	f.channel, f.account, f.eventID, f.content = ch, accountID, eventID, content
 	return f.sent, f.platMsg, f.err

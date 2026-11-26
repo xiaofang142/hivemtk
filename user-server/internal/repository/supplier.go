@@ -14,7 +14,7 @@ import (
 type SupplierRepository interface {
 	Create(ctx context.Context, row *model.Supplier) error
 	GetByID(ctx context.Context, id int64) (*model.Supplier, error)
-	ListByCustomer(ctx context.Context, customerID string, page, pageSize int) ([]*model.Supplier, int64, error)
+	ListByCustomer(ctx context.Context, customerID string, page, pageSize int, scopes ...CRMEntityAccountFilter) ([]*model.Supplier, int64, error)
 	Update(ctx context.Context, row *model.Supplier) error
 	Delete(ctx context.Context, id int64) error
 }
@@ -44,7 +44,7 @@ func (r *supplierRepository) GetByID(ctx context.Context, id int64) (*model.Supp
 	return &row, nil
 }
 
-func (r *supplierRepository) ListByCustomer(ctx context.Context, customerID string, page, pageSize int) ([]*model.Supplier, int64, error) {
+func (r *supplierRepository) ListByCustomer(ctx context.Context, customerID string, page, pageSize int, scopes ...CRMEntityAccountFilter) ([]*model.Supplier, int64, error) {
 	if page <= 0 {
 		page = 1
 	}
@@ -53,6 +53,7 @@ func (r *supplierRepository) ListByCustomer(ctx context.Context, customerID stri
 	}
 	q := r.db(ctx).Model(&model.Supplier{}).
 		Where("tenant_id = ? AND customer_id = ? AND deleted_at IS NULL", tenant.WriteTenantID(ctx), customerID)
+	q = applyCRMEntityAccounts(q, scopes)
 	var total int64
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err

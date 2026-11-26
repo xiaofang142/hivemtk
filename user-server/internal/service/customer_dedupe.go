@@ -272,7 +272,7 @@ func (s *CustomerDedupeService) FindEntitiesDuplicates(ctx context.Context, opts
 			continue
 		}
 		for _, cust := range visible {
-			rows, err := s.entityRowsForCustomer(ctx, kind, cust.ID)
+			rows, err := s.entityRowsForCustomer(ctx, kind, cust.ID, s.permission.EntityAccountFilter(opts.Scope, cust))
 			if err != nil {
 				return nil, err
 			}
@@ -354,12 +354,12 @@ func (s *CustomerDedupeService) visibleDedupeCustomers(ctx context.Context, scop
 }
 
 // entityRowsForCustomer 把某客户下某类实体读成统一判定记录（只取授权客户下的实体）。
-func (s *CustomerDedupeService) entityRowsForCustomer(ctx context.Context, kind, customerID string) ([]dedupeEntityRecord, error) {
+func (s *CustomerDedupeService) entityRowsForCustomer(ctx context.Context, kind, customerID string, filter repository.CRMEntityAccountFilter) ([]dedupeEntityRecord, error) {
 	out := make([]dedupeEntityRecord, 0)
 	for page := 1; page <= 100; page++ {
 		switch kind {
 		case DedupeEntityContact:
-			rows, _, err := s.contacts.ListByCustomer(ctx, customerID, page, 100)
+			rows, _, err := s.contacts.ListByCustomer(ctx, customerID, page, 100, filter)
 			if err != nil {
 				return nil, fmt.Errorf("读取联系人去重候选失败: %w", err)
 			}
@@ -373,7 +373,7 @@ func (s *CustomerDedupeService) entityRowsForCustomer(ctx context.Context, kind,
 				return out, nil
 			}
 		case DedupeEntitySupplier:
-			rows, _, err := s.suppliers.ListByCustomer(ctx, customerID, page, 100)
+			rows, _, err := s.suppliers.ListByCustomer(ctx, customerID, page, 100, filter)
 			if err != nil {
 				return nil, fmt.Errorf("读取供应商去重候选失败: %w", err)
 			}
@@ -387,7 +387,7 @@ func (s *CustomerDedupeService) entityRowsForCustomer(ctx context.Context, kind,
 				return out, nil
 			}
 		case DedupeEntityServiceProvider:
-			rows, _, err := s.providers.ListByCustomer(ctx, customerID, page, 100)
+			rows, _, err := s.providers.ListByCustomer(ctx, customerID, page, 100, filter)
 			if err != nil {
 				return nil, fmt.Errorf("读取服务商去重候选失败: %w", err)
 			}

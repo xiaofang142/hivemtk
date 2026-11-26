@@ -170,7 +170,7 @@ func TestAccountAuthorizationService_RevokeAffectsPermissionImmediately(t *testi
 		store,
 	)
 	ctx := tenant.WithTenantID(context.Background(), 7)
-	perm := &CustomerPermissionService{authRepo: store, accountRepo: nil, scopeSvc: NewBusinessScopeServiceWithReaders(nil, nil)}
+	perm := &CustomerPermissionService{authRepo: store, accountRepo: crmPermissionAccountsForTest(), scopeSvc: NewBusinessScopeServiceWithReaders(nil, nil)}
 	scopeBefore, err := perm.Resolve(ctx, 3)
 	if err != nil || !scopeBefore.RestrictedAccounts || len(scopeBefore.AccountIDs) == 0 {
 		t.Fatalf("撤销前受限员工应看到账号范围: scope=%+v err=%v", scopeBefore, err)
@@ -189,7 +189,7 @@ func TestCustomerPermissionService_TwoEmployeesTwoAccountsAreIsolated(t *testing
 		{TenantID: 7, UserID: 3, ChannelAccountID: 11, Role: "viewer", VisibleIndustryScope: `["制造"]`},
 		{TenantID: 7, UserID: 4, ChannelAccountID: 12, Role: "viewer", VisibleIndustryScope: `["食品"]`},
 	}}
-	perm := &CustomerPermissionService{authRepo: store, accountRepo: nil, scopeSvc: NewBusinessScopeServiceWithReaders(nil, nil)}
+	perm := &CustomerPermissionService{authRepo: store, accountRepo: crmPermissionAccountsForTest(), scopeSvc: NewBusinessScopeServiceWithReaders(nil, nil)}
 	ctx := tenant.WithTenantID(context.Background(), 7)
 	s3, err := perm.Resolve(ctx, 3)
 	if err != nil {

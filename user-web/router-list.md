@@ -8,6 +8,10 @@
 **测试账号**: https://work.xapptool.cn/ · jideilvluoqun@gmail.com · <口令经 E2E_ADMIN_PASSWORD 注入，不写入仓库>
 **站点类型**: hash 路由 (`/#/path`) · vue-router 4 · 懒加载模块 (ensureRouteLoaded)
 
+## 2026-11-26 · 独立渠道模块
+
+顶级导航只展示一个「渠道」入口。既有 `/channels/manage`、`/channels/accounts`、`/channels/identify-codes` 分别显示平台、账号、识别码页签；仅显示已授权入口，保留原 URL、角色能力和旧 Bridge token 深链。三个页面共同说明渠道与单聊／群聊的关系，SageX 历史接入绑定独立呈现，保留四川同咨的现有业务关联。具体本轮证据见 [缺陷记录](../.specify/bugs/channel-module-semantics-20261126/assessment.md)。
+
 ## 2026-11-20 · 菜单、页面职责与路由专项审计
 
 以 `user-server/internal/model/menu.go` 和当前前端源码为准，对照 7 个顶级分组的 196 个有路径的菜单节点（含分组默认路径），共 194 个不同路径，均落在 85 个模块、258 条路由记录的清单内。判重先对照路由与组件，再核对业务对象、页面主操作和 API；共用表单、参数入口和兼容路径不当作重复功能。

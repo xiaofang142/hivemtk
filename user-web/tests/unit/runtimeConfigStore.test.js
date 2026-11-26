@@ -39,7 +39,7 @@ describe('useRuntimeConfig', () => {
 
   it('num 对非正数回落（0/负数都是写坏的值）', () => {
     const s = useRuntimeConfigStore()
-    // 0 在阈值语义下几乎总是写坏了：重连 0 次 = 断线即弃，flush 0ms = 每事件都刷。
+    // 0 在阈值语义下几乎总是写坏了：重连 0 次 = 断线即弃。
     for (const bad of ['0', '-1', '0.4']) {
       s.values = { 'frontend_ws.agent_max_reconnect_attempts': bad }
       expect(s.num('frontend_ws', 'agent_max_reconnect_attempts', 10)).toBe(10)
@@ -63,16 +63,16 @@ describe('useRuntimeConfig', () => {
   it('durSeconds 把后端秒数转成前端毫秒', () => {
     const s = useRuntimeConfigStore()
     // 后端 duration 参数存的是秒（parseDurationSeconds 的双口径），前端要毫秒。
-    s.values = { 'frontend_ws.journey_flush_interval_ms': '45' }
-    expect(s.durSeconds('frontend_ws', 'journey_flush_interval_ms', 30000)).toBe(45000)
+    s.values = { 'frontend_ws.agent_ping_interval_ms': '45' }
+    expect(s.durSeconds('frontend_ws', 'agent_ping_interval_ms', 30000)).toBe(45000)
   })
 
   it('durSeconds 对 0/非法回落毫秒 fallback', () => {
     const s = useRuntimeConfigStore()
-    s.values = { 'frontend_ws.journey_flush_interval_ms': '0' }
-    expect(s.durSeconds('frontend_ws', 'journey_flush_interval_ms', 30000)).toBe(30000)
-    s.values = { 'frontend_ws.journey_flush_interval_ms': 'abc' }
-    expect(s.durSeconds('frontend_ws', 'journey_flush_interval_ms', 30000)).toBe(30000)
+    s.values = { 'frontend_ws.agent_ping_interval_ms': '0' }
+    expect(s.durSeconds('frontend_ws', 'agent_ping_interval_ms', 30000)).toBe(30000)
+    s.values = { 'frontend_ws.agent_ping_interval_ms': 'abc' }
+    expect(s.durSeconds('frontend_ws', 'agent_ping_interval_ms', 30000)).toBe(30000)
   })
 
   it('bool 区分「没配过」与「配了 false」——回落只发生在前者', () => {

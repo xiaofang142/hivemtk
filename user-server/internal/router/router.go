@@ -184,6 +184,19 @@ func SetHealthRedis(p Pinger) {
 	HealthRedis = p
 }
 
+// installLeadMiningReAct 把生产仓储 resolver 与全局 dispatcher 一次性装配到线索判定入口。
+// 依赖不完整时返回错误，不安装会伪造证据的空 resolver。
+func installLeadMiningReAct(gormDB *gorm.DB) error {
+	resolver, err := service.NewLeadReactResolver(
+		repository.NewLeadMiningJudgementRepositoryWithDB(gormDB),
+		repository.NewCustomerSessionRepositoryWithDB(gormDB),
+	)
+	if err != nil {
+		return err
+	}
+	return service.InstallLeadReactDispatcher(resolver)
+}
+
 func Setup(r *gin.Engine, gormDB *gorm.DB) {
 
 	var whatsappCloudSvc *service.WhatsAppCloudService
@@ -396,10 +409,21 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 	// 同一份按租户缓存的适配器集合。
 	ssoCtrl := controller.NewSSOController(service.NewSSOService(repository.NewSSOIdentityRepository(gormDB), repository.NewSystemConfigKVRepositoryWithDB(gormDB)))
 
+	// 线索发掘服务全局只建一次：公开embed客服与Bridge/网关共用同一 worker 队列，
+	// 重复 New 会额外启动一组 worker（NewLeadMiningService 内部直接 go worker），
+	// 造成同一 singleton 被多组消费者竞争消费。
+	miningSvc := service.NewLeadMiningService(repository.NewClueRepositoryWithDB(gormDB))
+	// 发掘服务创建后立刻装配通知出口与 ReAct 判定器：worker 在此刻已开始消费，
+	// 若等到 Bridge 装配块才注入，embed 消息在窗口期内命中会丢负责人通知。
+	miningSvc.SetNotifier(service.NewLeadNotifyService())
+	if err := installLeadMiningReAct(gormDB); err != nil {
+		logger.Errorf("[LeadMining] ReAct dispatcher 装配失败：%v", err)
+	}
+
 	public := r.Group("/api")
 	{
 		setupPublicRoutes(public, liveCodeController, gormDB)
-		setupChatPublicRoutes(public, gormDB, orchestrator, langResolver)
+		setupChatPublicRoutes(public, gormDB, orchestrator, langResolver, miningSvc)
 		setupSSORoutes(public, ssoCtrl)
 		setupSelfServiceRoutes(public, gormDB)
 		setupLegacyRoutes(public) // 已下线的 /api/knowledge 顶层域名：410 + 迁移指引（见 legacy_routes.go）
@@ -816,22 +840,7 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		if bridgeIngressSvc != nil {
 			bridgeIngressSvc.SetInboxService(service.NewInboxService())
 			logger.Infof("[Bridge] bridge InboxService 已注入（统一收件箱会话同步已连通）")
-			miningSvc := service.NewLeadMiningService(repository.NewClueRepositoryWithDB(gormDB))
-			// FR-008/FR-015：发掘链路的负责人推送出口在装配点注入，
-			// Service 内部不再隐式构造依赖全局 DB 的通知服务。
-			miningSvc.SetNotifier(service.NewLeadNotifyService())
-			// D18：服务自有文本 ReAct 取证；生产 resolver 只绑定受限只读仓储。
-			// 缺少依赖时仍安装 fail-visible hook，并由 Router 记录装配错误。
-			resolver, resolveErr := service.NewLeadReactResolver(
-				repository.NewLeadMiningJudgementRepositoryWithDB(gormDB),
-				repository.NewCustomerSessionRepositoryWithDB(gormDB),
-			)
-			if resolveErr != nil {
-				logger.Errorf("[LeadMining] ReAct resolver 装配失败：%v", resolveErr)
-			}
-			if installErr := service.InstallLeadReactDispatcher(resolver); installErr != nil {
-				logger.Errorf("[LeadMining] ReAct dispatcher 装配失败：%v", installErr)
-			}
+			// 发掘服务的通知出口与 ReAct 判定器已在创建点装配，此处只做入口绑定。
 			bridgeIngressSvc.SetLeadMining(miningSvc)
 			// T048/T049 US3：两类智能体独立启停闸门。开关按 channel_account 的
 			// auto_reply_agent_id / lead_mining_agent_id 判定；两腿互不调用。

@@ -9,6 +9,7 @@ import (
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/dbstate"
+	"hivemtk-user/internal/pkg/edition"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/repository"
 )
@@ -108,7 +109,14 @@ func (r *ChannelResolver) resolveAccountChannel(ctx context.Context, acc *model.
 	if r.channelRepo == nil || !r.channelRepo.Available() {
 		return nil, nil, repository.ErrChannelStoreUnavailable
 	}
-	ch, err := r.channelRepo.GetByID(ctx, acc.TenantID, acc.ChannelID)
+	// 识别码已证明账号归属；渠道查询使用该租户的受限上下文。
+	// OnlyTenant 会剥离所有 value，需显式保留版本覆盖，否则定制版的
+	// 国内渠道会在仓储 edition gate 中被误判为不存在。
+	channelCtx := tenant.OnlyTenant(ctx, acc.TenantID)
+	if version, ok := edition.FromContext(ctx); ok {
+		channelCtx = edition.WithContext(channelCtx, version)
+	}
+	ch, err := r.channelRepo.GetByID(channelCtx, acc.TenantID, acc.ChannelID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -381,9 +389,6 @@ func (r *ChannelResolver) Identify(ctx context.Context, tenantID, accountID uint
 		return nil, ErrChannelIdentityUnresolved
 	}
 	typ := strings.ToLower(strings.TrimSpace(conversationType))
-	if typ == "" {
-		typ = strings.ToLower(strings.TrimSpace(acc.Type))
-	}
 	out := &ChannelIdentity{
 		TenantID:         tenantID,
 		ChannelAccountID: accountID,

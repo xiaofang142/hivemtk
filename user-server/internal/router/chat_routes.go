@@ -16,7 +16,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func setupChatPublicRoutes(public *gin.RouterGroup, db *gorm.DB, orchestrator *service.SmartCSOrchestrator, langResolver *translation.LangConfigResolver) {
+func setupChatPublicRoutes(public *gin.RouterGroup, db *gorm.DB, orchestrator *service.SmartCSOrchestrator, langResolver *translation.LangConfigResolver, leadMiningSvc *service.Service) {
 	channelSvc := service.MustNewChatChannelService(repository.NewChatChannelRepositoryWithDB(db))
 	aiAgentRepo := repository.NewAIAgentRepositoryWithDB(db)
 	agentBindingSvc := service.NewChannelAgentBindingServiceWithRepos(
@@ -25,6 +25,11 @@ func setupChatPublicRoutes(public *gin.RouterGroup, db *gorm.DB, orchestrator *s
 		service.NewAIAgentServiceWithRepo(aiAgentRepo),
 	)
 	visitorSvc := service.NewVisitorChatService(channelSvc, orchestrator, agentBindingSvc)
+	// 线索发掘注入（LM-06）：embed 网页客服与其他渠道共用同一发掘队列。
+	// 由 Router 传入全局唯一实例，避免重复 New 造成多组 worker 竞争。
+	if leadMiningSvc != nil {
+		visitorSvc.SetLeadMining(leadMiningSvc)
+	}
 
 	chatPublic := public.Group("/chat/public")
 	// tenant_code 声明要排在渠道解析**之前**：default/{platform}_card 这类每租户自动

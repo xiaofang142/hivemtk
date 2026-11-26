@@ -16,6 +16,16 @@ type leadReactDispatcherJudge struct {
 	dispatcher *llm.Dispatcher
 }
 
+// leadReactJudgeError 在 structured judge 失败时保留已完成的 typed ReAct outcome，
+// 供确定性 fallback 持久化；对外错误文本只暴露底层原因，不泄露机器状态。
+type leadReactJudgeError struct {
+	err   error
+	react *LeadReactOutcome
+}
+
+func (e *leadReactJudgeError) Error() string { return e.err.Error() }
+func (e *leadReactJudgeError) Unwrap() error { return e.err }
+
 func (j *leadReactDispatcherJudge) Judge(ctx context.Context, cfg *model.LeadMiningConfig, history []llm.ChatMessage) (*LeadJudgement, error) {
 	return (&dispatcherJudge{}).Judge(ctx, cfg, history)
 }
@@ -24,8 +34,9 @@ func (j *leadReactDispatcherJudge) JudgeWithContext(ctx context.Context, jctx *L
 	if jctx == nil {
 		return nil, errors.New("二次判断上下文为空")
 	}
+	var capture *LeadReactOutcome
 	if hook := getLeadReactHook(); hook != nil {
-		capture := &LeadReactOutcome{}
+		capture = &LeadReactOutcome{}
 		ctx = withLeadReactOutcomeCapture(ctx, capture)
 		evidence, degraded := hook(ctx, jctx)
 		jctx.ReactEvidence = evidence
@@ -54,9 +65,12 @@ func (j *leadReactDispatcherJudge) JudgeWithContext(ctx context.Context, jctx *L
 	}
 	var jd LeadJudgement
 	if _, err := dispatcher.DispatchStructured(ctx, req, &jd); err != nil {
+		if capture != nil && capture.Status != "" {
+			return nil, &leadReactJudgeError{err: err, react: capture}
+		}
 		return nil, err
 	}
-	if capture, ok := ctx.Value(leadReactOutcomeCaptureContextKey{}).(*LeadReactOutcome); ok && capture != nil && capture.Status != "" {
+	if capture != nil && capture.Status != "" {
 		jd.ReactOutcome = capture
 		if capture.Degraded {
 			jd.Degraded = true

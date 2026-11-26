@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -101,16 +102,27 @@ func TestLeadReactTextOnlyProductionDispatcher_NoFCAndNative(t *testing.T) {
 				"Final Answer: 证据充分",
 			)
 			var gotQuery string
-			resolver := LeadReactResolver{HistoricalLeads: func(_ context.Context, _ LeadReactTask, query string) (string, error) {
+			var gotTask LeadReactTask
+			resolver := LeadReactResolver{HistoricalLeads: func(_ context.Context, task LeadReactTask, query string) (string, error) {
 				gotQuery = query
+				gotTask = task
 				return "历史命中", nil
 			}}
 			SetLeadReactHook(resolver, newLeadReactDispatch(dispatcher))
 			t.Cleanup(func() { SetLeadReactHook(LeadReactResolver{}, nil) })
 
-			outcome := runLeadReactLoop(leadReactTestContext(), leadReactTestTask(), defaultLeadReactTools(resolver), newLeadReactDispatch(dispatcher))
+			task := leadReactTestTask()
+			outcome := runLeadReactLoop(leadReactTestContext(), task, defaultLeadReactTools(resolver), newLeadReactDispatch(dispatcher))
 			if outcome.Degraded || outcome.Status != leadReactStatusOK || len(outcome.Evidence) != 1 || gotQuery != "u1" {
 				t.Fatalf("文本 ReAct 应成功取证，outcome=%+v query=%q", outcome, gotQuery)
+			}
+			if gotTask.SourceRef != task.SourceRef || len(gotTask.AccountIDs) != len(task.AccountIDs) {
+				t.Fatalf("resolver 必须收到完整可信账号范围，got=%+v want=%+v", gotTask, task)
+			}
+			for i := range task.AccountIDs {
+				if gotTask.AccountIDs[i] != task.AccountIDs[i] {
+					t.Fatalf("resolver 账号范围被改写，got=%v want=%v", gotTask.AccountIDs, task.AccountIDs)
+				}
 			}
 			capture.mu.Lock()
 			defer capture.mu.Unlock()
@@ -123,9 +135,14 @@ func TestLeadReactTextOnlyProductionDispatcher_NoFCAndNative(t *testing.T) {
 				}
 			}
 			firstPrompt := renderLeadReactRequestText(capture.requests[0])
-			for _, want := range []string{"这个能买吗", "你好", "只判断采购意向", "购买", "acct-1", "telegram", "conv-1", "u1", "query_historical_leads", "keyword"} {
+			for _, want := range []string{"这个能买吗", "你好", "只判断采购意向", "购买", "telegram", "conv-1", "u1", "query_historical_leads", "keyword"} {
 				if !strings.Contains(firstPrompt, want) {
 					t.Fatalf("首轮 prompt 缺少 %q: %s", want, firstPrompt)
+				}
+			}
+			for _, forbidden := range []string{"acct-1", "source_ref=", "account_aliases="} {
+				if strings.Contains(firstPrompt, forbidden) {
+					t.Fatalf("首轮 prompt 泄露账号识别凭证 %q: %s", forbidden, firstPrompt)
 				}
 			}
 		})
@@ -135,6 +152,65 @@ func TestLeadReactTextOnlyProductionDispatcher_NoFCAndNative(t *testing.T) {
 func renderLeadReactRequestText(req map[string]any) string {
 	raw, _ := json.Marshal(req)
 	return string(raw)
+}
+
+func TestLeadReactTaskContext_RejectsOversizedIdentifiersBeforeDispatch(t *testing.T) {
+	tooLong := strings.Repeat("界", 257)
+	cases := []struct {
+		name   string
+		mutate func(*LeadReactTask)
+	}{
+		{name: "platform", mutate: func(task *LeadReactTask) { task.Platform = tooLong }},
+		{name: "source_ref", mutate: func(task *LeadReactTask) { task.SourceRef = tooLong }},
+		{name: "account_id", mutate: func(task *LeadReactTask) { task.AccountIDs[1] = tooLong }},
+		{name: "conversation_id", mutate: func(task *LeadReactTask) { task.ConversationID = tooLong }},
+		{name: "group_id", mutate: func(task *LeadReactTask) { task.GroupID = tooLong }},
+		{name: "sender_id", mutate: func(task *LeadReactTask) { task.SenderID = tooLong }},
+		{name: "too_many_accounts", mutate: func(task *LeadReactTask) {
+			task.AccountIDs = make([]string, 21)
+			task.AccountIDs[0] = "11"
+			for i := 1; i < len(task.AccountIDs); i++ {
+				task.AccountIDs[i] = fmt.Sprintf("acct-%d", i)
+			}
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			task := leadReactTestTask()
+			tc.mutate(&task)
+			if validLeadReactTaskContext(leadReactTestContext(), task) {
+				t.Fatal("超限标识符或账号数量不得通过可信范围校验")
+			}
+			dispatchCalls := 0
+			outcome := runLeadReactLoop(leadReactTestContext(), task, nil, func(context.Context, llm.DispatchRequest) (*llm.DispatchResult, error) {
+				dispatchCalls++
+				return nil, errors.New("must-not-dispatch")
+			})
+			if dispatchCalls != 0 || !outcome.Degraded || outcome.Status != leadReactStatusUnavailable || outcome.Reason != leadReactReasonInvalidScope {
+				t.Fatalf("超限任务必须在 dispatch 前失败，calls=%d outcome=%+v", dispatchCalls, outcome)
+			}
+		})
+	}
+}
+
+func TestLeadReactTaskContext_AcceptsExactIdentifierAndAccountBounds(t *testing.T) {
+	exact := strings.Repeat("界", 256)
+	task := leadReactTestTask()
+	task.Platform = exact
+	task.SourceRef = exact
+	task.AccountIDs = []string{"11", exact}
+	task.ConversationID = exact
+	task.GroupID = exact
+	task.SenderID = exact
+	for i := 2; i < 20; i++ {
+		task.AccountIDs = append(task.AccountIDs, fmt.Sprintf("acct-%d", i))
+	}
+	if len(task.AccountIDs) != 20 {
+		t.Fatalf("测试账号数量应为 20，实际 %d", len(task.AccountIDs))
+	}
+	if !validLeadReactTaskContext(leadReactTestContext(), task) {
+		t.Fatal("恰好 256 rune 的标识符与 20 个账号应通过可信范围校验")
+	}
 }
 
 func TestLeadReactStrictArgs_RejectsMalformedAndScopeOverride(t *testing.T) {

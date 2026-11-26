@@ -169,6 +169,29 @@ func TestBindBridgeTenant_ChannelHintDoesNotOverrideIdentifyCode(t *testing.T) {
 	}
 }
 
+func TestBindBridgeTenant_SageXServiceBindingUsesMessagePlatform(t *testing.T) {
+	db := testutil.NewTestDBOrSkip(t, &model.Channel{}, &model.ChannelAccount{}, &model.ChannelIdentifyCode{})
+	modeOn(t)
+	fixture := seedCanonicalBridgeFixture(t, db, 18, "sagex-t18", "service-binding")
+	for _, platform := range []string{"qq", "personal_wx"} {
+		c := bindingCtxWithIdentifyCode(t, "channel="+platform+"&account_id="+fixture.AccountID, fixture.Code)
+		ctx, err := bindBridgeTenant(c, platform, fixture.AccountID)
+		identity, ok := BridgeIdentityFromContext(c)
+		if err != nil || !ok || identity.Channel != platform || identity.AccountID != fixture.AccountID {
+			t.Fatalf("SageX 绑定仅证明归属，消息渠道应为 %s：identity=%+v err=%v", platform, identity, err)
+		}
+		if tid, bound := tenant.FromContext(ctx); !bound || tid != 18 {
+			t.Fatalf("消息渠道不得改变凭据租户：%d/%v", tid, bound)
+		}
+	}
+	for _, platform := range []string{"", "sagex-t18", "douyin"} {
+		c := bindingCtxWithIdentifyCode(t, "account_id="+fixture.AccountID, fixture.Code)
+		if _, err := bindBridgeTenant(c, platform, fixture.AccountID); !errors.Is(err, ErrBridgeTenantUnresolved) {
+			t.Fatalf("SageX 缺少真实平台或平台不受支持时必须拒绝：%q err=%v", platform, err)
+		}
+	}
+}
+
 func TestBindBridgeTenant_InvalidIdentifyCodeRejected(t *testing.T) {
 	testutil.NewTestDBOrSkip(t, &model.Channel{}, &model.ChannelAccount{}, &model.ChannelIdentifyCode{})
 	modeOn(t)
@@ -233,6 +256,34 @@ func TestBindBridgeTenant_ChannelFallbackQueryErrorRejected(t *testing.T) {
 	c := bindingCtxWithIdentifyCode(t, "channel=douyin&account_id="+fixture.AccountID, fixture.Code)
 	if _, err := bindBridgeTenant(c, "douyin", fixture.AccountID); !errors.Is(err, queryErr) {
 		t.Fatalf("channel fallback 运行错误必须可见: %v", err)
+	}
+}
+
+// 账号或权威识别码查询故障必须可见，不能继续回退成另一条身份路径。
+func TestBindBridgeTenant_IdentityLookupQueryErrorRejected(t *testing.T) {
+	for _, table := range []string{"channel_accounts", "channel_identify_codes"} {
+		t.Run(table, func(t *testing.T) {
+			db := testutil.NewTestDBOrSkip(t, &model.Channel{}, &model.ChannelAccount{}, &model.ChannelIdentifyCode{})
+			modeOn(t)
+			fixture := seedCanonicalBridgeFixture(t, db, 11, "douyin", "lookup-error")
+			queryErr := errors.New("identity lookup query failed")
+			const callback = "test:bridge-identity-lookup-query-error"
+			if err := db.Callback().Query().Before("gorm:query").Register(callback, func(tx *gorm.DB) {
+				if tx.Statement.Table == table {
+					tx.AddError(queryErr)
+				}
+			}); err != nil {
+				t.Fatalf("注册身份查询故障失败: %v", err)
+			}
+			t.Cleanup(func() { _ = db.Callback().Query().Remove(callback) })
+			c := bindingCtxWithIdentifyCode(t, "channel=douyin&account_id="+fixture.AccountID, fixture.Code)
+			if _, err := bindBridgeTenant(c, "douyin", fixture.AccountID); !errors.Is(err, queryErr) {
+				t.Fatalf("身份查询运行错误必须可见: %v", err)
+			}
+			if _, ok := BridgeIdentityFromContext(c); ok {
+				t.Fatal("查询故障不得产生已解析身份")
+			}
+		})
 	}
 }
 

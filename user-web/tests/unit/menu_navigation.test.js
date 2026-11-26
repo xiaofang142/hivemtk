@@ -29,6 +29,30 @@ describe('用户端菜单展示与路由上下文', () => {
     getUserMenus.mockReset()
   })
 
+  it('将三个渠道权限收拢为一个独立入口，保留全部深链与原始授权', () => {
+    const paths = ['/channels/manage', '/channels/accounts', '/channels/identify-codes']
+    const leaves = paths.map((path, i) => item(['channelManage', 'channelAccount', 'channelIdentifyCode'][i], path))
+    permission.menus = [group('system', [group('permissionGroup', leaves)])]
+    const original = JSON.parse(JSON.stringify(permission.menus))
+    expect(permission.navigationMenus.map(node => node.key)).toEqual(['channels'])
+    expect(permission.navigationPaths).toEqual(['/channels/manage'])
+    expect(permission.navigationMenus[0].children?.length || 0).toBe(0)
+    for (const path of paths) {
+      expect(permission.canAccessPath(path)).toBe(true)
+      expect(permission.getNavigationTrail({ path }).map(node => node.key)).toEqual(['channels'])
+    }
+    expect(permission.menus).toEqual(original)
+  })
+
+  it('渠道模块落在真实获权的页面，不为账号权限补发渠道或识别码权限', () => {
+    permission.menus = [group('channels', [item('channelAccount', '/channels/accounts')])]
+    expect(permission.navigationPaths).toEqual(['/channels/accounts'])
+    expect(permission.navigationMenus[0].key).toBe('channels')
+    expect(permission.navigationMenus[0].children?.length || 0).toBe(0)
+    expect(permission.canAccessPath('/channels/manage')).toBe(false)
+    expect(permission.getNavigationTrail({ path: '/channels/identify-codes' })).toEqual([])
+  })
+
   it('列表可见时隐藏四个动作入口，不修改授权、原始菜单树或独立画布', () => {
     const playground = item('assetBundlePlayground', '/asset-bundle/playground')
     permission.menus = [

@@ -55,7 +55,7 @@ func NewChannelMasterServiceWithDeps(
 }
 
 func toChannelOption(ch *model.Channel) dto.ChannelOption {
-	return dto.ChannelOption{ID: ch.ID, Name: ch.Name, Code: ch.Code, Type: ch.Type, Enabled: ch.Enabled}
+	return dto.ChannelOption{ID: ch.ID, Name: ch.Name, Code: ch.Code, Type: ch.Type, Enabled: ch.Enabled, Remark: ch.Remark}
 }
 
 func (s *channelMasterService) List(ctx context.Context, tenantID uint, q dto.ChannelListQuery) ([]dto.ChannelOption, error) {
@@ -139,7 +139,10 @@ func (s *channelMasterService) Update(ctx context.Context, tenantID, id uint, in
 	if edition.IsDomesticChannel(ch.Code) && !edition.AllowsContext(ctx, edition.FeatureDomesticChannels) {
 		return ErrChannelCodeDisabled
 	}
-	updates := map[string]any{"name": in.Name, "code": in.Code, "type": in.Type, "remark": in.Remark}
+	updates := map[string]any{"name": in.Name, "code": in.Code, "remark": in.Remark}
+	if in.Type != "" {
+		updates["type"] = in.Type
+	}
 	if in.Enabled != nil {
 		updates["enabled"] = *in.Enabled
 	}

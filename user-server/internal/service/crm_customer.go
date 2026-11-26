@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"strings"
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
@@ -185,13 +184,12 @@ func custOwnerID(input uint, c *model.Customer) uint {
 }
 
 // validateEntityAccount 校验实体新增/改挂的渠道账号：必须真实存在、属于当前租户且在操作者范围内。
-// 账号范围接受数字 ID 与识别码；识别码作为账号引用而非 ACL 凭据，须回查真实账号后校验。
-// 基础账号集合通过后仍须满足目标客户的账号×行业×角色配对，避免实体挂载绕过逐账号授权。
+// 账号以稳定数字 ID 校验，仍须满足目标客户的行业/负责人条件。
 func (s *CRMCustomerService) validateEntityAccount(ctx context.Context, scope CustomerDataScope, customer *model.Customer, accountID *uint) error {
-	if accountID == nil || *accountID == 0 {
-		return nil // 未提交账号指针：沿用旧值或不挂载，不视为越权。
+	if accountID == nil {
+		return nil // 未挂账号的旧实体继承已验证的客户范围。
 	}
-	if customer == nil {
+	if customer == nil || *accountID == 0 {
 		return ErrCRMCustomerForbidden
 	}
 	if s.accounts == nil || !s.accounts.Available() {
@@ -205,57 +203,12 @@ func (s *CRMCustomerService) validateEntityAccount(ctx context.Context, scope Cu
 	if err != nil || acc == nil || acc.TenantID != tid {
 		return ErrCRMCustomerForbidden
 	}
-	if scope.AllAccounts {
-		return nil
-	}
-	accountRefs := []string{strconv.FormatUint(uint64(*accountID), 10)}
-	if acc.IdentifyCode != "" {
-		accountRefs = append(accountRefs, acc.IdentifyCode)
-	}
-	accountAllowed := false
-	for _, ref := range accountRefs {
-		if containsCRMString(scope.AccountIDs, ref) {
-			accountAllowed = true
-			break
-		}
-	}
-	if !accountAllowed {
-		return ErrCRMCustomerForbidden
-	}
-	if len(scope.AccountRules) == 0 {
-		return nil
-	}
-	if accountRulePairAllows(scope, accountRefs, customer.Industry, custOwnerID(0, customer)) {
+	candidate := *customer
+	candidate.SourceAccountID = strconv.FormatUint(uint64(*accountID), 10)
+	if s.permission.CanAccess(scope, &candidate) {
 		return nil
 	}
 	return ErrCRMCustomerForbidden
-}
-
-// accountRulePairAllows 仅判断实体账号与目标客户的行业/负责人配对；基础账号集合由调用方先校验。
-func accountRulePairAllows(scope CustomerDataScope, accountRefs []string, industry string, ownerID uint) bool {
-	for _, rule := range scope.AccountRules {
-		matchedAccount := false
-		for _, ref := range accountRefs {
-			if rule.AccountID == ref {
-				matchedAccount = true
-				break
-			}
-		}
-		if !matchedAccount {
-			continue
-		}
-		if len(rule.Industries) > 0 && !containsCRMString(rule.Industries, industry) {
-			continue
-		}
-		if strings.EqualFold(rule.Role, "owner") && ownerID != scope.UserID {
-			continue
-		}
-		if rule.OwnerUserID > 0 && ownerID != rule.OwnerUserID {
-			continue
-		}
-		return true
-	}
-	return false
 }
 
 // CreateContact 新建联系人（客户必须在权限范围内）。
@@ -327,24 +280,20 @@ func (s *CRMCustomerService) CreateServiceProvider(ctx context.Context, scope Cu
 	return row, nil
 }
 
-// entityCustomerScoped 校验当前用户对实体所挂客户的读取权限（fail-closed）。
-func (s *CRMCustomerService) entityCustomerScoped(ctx context.Context, scope CustomerDataScope, customerID string) error {
-	_, err := s.permission.GetByIDScoped(ctx, scope, customerID)
-	return err
-}
-
 // ListEntities 按客户 + 权限读取补缺实体（联系人/供应商/服务商）。
 func (s *CRMCustomerService) ListEntities(ctx context.Context, scope CustomerDataScope, kind int, customerID string, page, pageSize int) (any, int64, error) {
-	if err := s.entityCustomerScoped(ctx, scope, customerID); err != nil {
+	customer, err := s.permission.GetByIDScoped(ctx, scope, customerID)
+	if err != nil {
 		return nil, 0, err
 	}
+	filter := s.permission.EntityAccountFilter(scope, customer)
 	switch kind {
 	case CRMEntityContact:
-		return s.contacts.ListByCustomer(ctx, customerID, page, pageSize)
+		return s.contacts.ListByCustomer(ctx, customerID, page, pageSize, filter)
 	case CRMEntitySupplier:
-		return s.suppliers.ListByCustomer(ctx, customerID, page, pageSize)
+		return s.suppliers.ListByCustomer(ctx, customerID, page, pageSize, filter)
 	case CRMEntityServiceProvider:
-		return s.providers.ListByCustomer(ctx, customerID, page, pageSize)
+		return s.providers.ListByCustomer(ctx, customerID, page, pageSize, filter)
 	default:
 		return nil, 0, errors.New("未知实体类型")
 	}
@@ -353,6 +302,10 @@ func (s *CRMCustomerService) ListEntities(ctx context.Context, scope CustomerDat
 // UpdateEntity 编辑补缺实体；同时校验旧客户与新客户的数据权限，避免越权改挂。
 func (s *CRMCustomerService) UpdateEntity(ctx context.Context, scope CustomerDataScope, kind int, id int64, in CRMEntitySave) (any, error) {
 	var oldCustomerID string
+	var oldAccountID *uint
+	var contact *model.Contact
+	var supplier *model.Supplier
+	var provider *model.ServiceProvider
 	switch kind {
 	case CRMEntityContact:
 		row, err := s.contacts.GetByID(ctx, id)
@@ -362,7 +315,7 @@ func (s *CRMCustomerService) UpdateEntity(ctx context.Context, scope CustomerDat
 		if row == nil {
 			return nil, errors.New("实体不存在")
 		}
-		oldCustomerID = row.CustomerID
+		oldCustomerID, oldAccountID, contact = row.CustomerID, row.ChannelAccountID, row
 	case CRMEntitySupplier:
 		row, err := s.suppliers.GetByID(ctx, id)
 		if err != nil {
@@ -371,7 +324,7 @@ func (s *CRMCustomerService) UpdateEntity(ctx context.Context, scope CustomerDat
 		if row == nil {
 			return nil, errors.New("实体不存在")
 		}
-		oldCustomerID = row.CustomerID
+		oldCustomerID, oldAccountID, supplier = row.CustomerID, row.ChannelAccountID, row
 	case CRMEntityServiceProvider:
 		row, err := s.providers.GetByID(ctx, id)
 		if err != nil {
@@ -380,11 +333,15 @@ func (s *CRMCustomerService) UpdateEntity(ctx context.Context, scope CustomerDat
 		if row == nil {
 			return nil, errors.New("实体不存在")
 		}
-		oldCustomerID = row.CustomerID
+		oldCustomerID, oldAccountID, provider = row.CustomerID, row.ChannelAccountID, row
 	default:
 		return nil, errors.New("未知实体类型")
 	}
-	if err := s.entityCustomerScoped(ctx, scope, oldCustomerID); err != nil {
+	oldCustomer, err := s.permission.GetByIDScoped(ctx, scope, oldCustomerID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.validateEntityAccount(ctx, scope, oldCustomer, oldAccountID); err != nil {
 		return nil, err
 	}
 	newCustomerID := in.CustomerID
@@ -395,12 +352,16 @@ func (s *CRMCustomerService) UpdateEntity(ctx context.Context, scope CustomerDat
 	if err != nil {
 		return nil, err
 	}
-	if err := s.validateEntityAccount(ctx, scope, targetCustomer, in.ChannelAccountID); err != nil {
+	finalAccountID := in.ChannelAccountID
+	if finalAccountID == nil {
+		finalAccountID = oldAccountID
+	}
+	if err := s.validateEntityAccount(ctx, scope, targetCustomer, finalAccountID); err != nil {
 		return nil, err
 	}
 	switch kind {
 	case CRMEntityContact:
-		row, _ := s.contacts.GetByID(ctx, id)
+		row := contact
 		row.Name = in.Name
 		row.CustomerID = newCustomerID
 		if in.ChannelAccountID != nil {
@@ -417,7 +378,7 @@ func (s *CRMCustomerService) UpdateEntity(ctx context.Context, scope CustomerDat
 		s.writeAudit(ctx, "crm_entity_update", newCustomerID, scope.UserID, fmt.Sprintf("contact:%d", id))
 		return row, nil
 	case CRMEntitySupplier:
-		row, _ := s.suppliers.GetByID(ctx, id)
+		row := supplier
 		row.Name = in.Name
 		row.CustomerID = newCustomerID
 		if in.ChannelAccountID != nil {
@@ -434,7 +395,7 @@ func (s *CRMCustomerService) UpdateEntity(ctx context.Context, scope CustomerDat
 		s.writeAudit(ctx, "crm_entity_update", newCustomerID, scope.UserID, fmt.Sprintf("supplier:%d", id))
 		return row, nil
 	default:
-		row, _ := s.providers.GetByID(ctx, id)
+		row := provider
 		row.Name = in.Name
 		row.CustomerID = newCustomerID
 		if in.ChannelAccountID != nil {
@@ -456,6 +417,7 @@ func (s *CRMCustomerService) UpdateEntity(ctx context.Context, scope CustomerDat
 // DeleteEntity 删除补缺实体；先按实体所属客户校验权限，再写操作审计。
 func (s *CRMCustomerService) DeleteEntity(ctx context.Context, scope CustomerDataScope, kind int, id int64) error {
 	var customerID, kindName string
+	var accountID *uint
 	switch kind {
 	case CRMEntityContact:
 		row, err := s.contacts.GetByID(ctx, id)
@@ -466,6 +428,7 @@ func (s *CRMCustomerService) DeleteEntity(ctx context.Context, scope CustomerDat
 			return errors.New("实体不存在")
 		}
 		customerID, kindName = row.CustomerID, "contact"
+		accountID = row.ChannelAccountID
 	case CRMEntitySupplier:
 		row, err := s.suppliers.GetByID(ctx, id)
 		if err != nil {
@@ -475,6 +438,7 @@ func (s *CRMCustomerService) DeleteEntity(ctx context.Context, scope CustomerDat
 			return errors.New("实体不存在")
 		}
 		customerID, kindName = row.CustomerID, "supplier"
+		accountID = row.ChannelAccountID
 	case CRMEntityServiceProvider:
 		row, err := s.providers.GetByID(ctx, id)
 		if err != nil {
@@ -484,13 +448,17 @@ func (s *CRMCustomerService) DeleteEntity(ctx context.Context, scope CustomerDat
 			return errors.New("实体不存在")
 		}
 		customerID, kindName = row.CustomerID, "service_provider"
+		accountID = row.ChannelAccountID
 	default:
 		return errors.New("未知实体类型")
 	}
-	if err := s.entityCustomerScoped(ctx, scope, customerID); err != nil {
+	customer, err := s.permission.GetByIDScoped(ctx, scope, customerID)
+	if err != nil {
 		return err
 	}
-	var err error
+	if err := s.validateEntityAccount(ctx, scope, customer, accountID); err != nil {
+		return err
+	}
 	switch kind {
 	case CRMEntityContact:
 		err = s.contacts.Delete(ctx, id)
@@ -519,44 +487,11 @@ func (s *CRMCustomerService) writeAudit(ctx context.Context, action, customerID 
 // AllowsWrite 写权限：账号范围 + 行业范围 + 负责人范围。
 // 空授权必须拒绝；owner 限定下 0 值不能绕过归属检查（最终写入值由调用方归一后传入）。
 func (s *CustomerPermissionService) AllowsWrite(scope CustomerDataScope, accountID, industry string, ownerID uint) bool {
-	if scope.AllAccounts {
-		return true
+	candidate := &model.Customer{SourceAccountID: accountID, Industry: industry}
+	if ownerID > 0 {
+		candidate.OwnerUserID = &ownerID
 	}
-	if scope.RestrictedAccounts && (len(scope.AccountIDs) == 0 || !containsCRMString(scope.AccountIDs, accountID)) {
-		return false
-	}
-	if len(scope.Industries) > 0 && !containsCRMString(scope.Industries, industry) {
-		return false
-	}
-	if scope.OnlyOwned && ownerID != scope.UserID {
-		return false
-	}
-	if scope.OwnerUserID > 0 && ownerID != scope.OwnerUserID {
-		return false
-	}
-	if len(scope.AccountRules) > 0 {
-		matched := false
-		for _, rule := range scope.AccountRules {
-			if rule.AccountID != accountID {
-				continue
-			}
-			if len(rule.Industries) > 0 && !containsCRMString(rule.Industries, industry) {
-				continue
-			}
-			if strings.EqualFold(rule.Role, "owner") && ownerID != scope.UserID {
-				continue
-			}
-			if rule.OwnerUserID > 0 && ownerID != rule.OwnerUserID {
-				continue
-			}
-			matched = true
-			break
-		}
-		if !matched {
-			return false
-		}
-	}
-	return true
+	return s.CanAccess(scope, candidate)
 }
 
 // DescribeScope 供 Controller 输出当前用户的权限范围（便于前端收敛选项）。

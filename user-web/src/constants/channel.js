@@ -10,7 +10,8 @@ export const CHANNEL_GROUP = Object.freeze({
 export const CHANNEL_OPTIONS = Object.freeze([
   { value: 'wecom',         label: '企业微信', tagType: 'success', group: CHANNEL_GROUP.IM,     icon: 'OfficeBuilding', description: '企业微信（外部联系人）', alias: ['企微'] },
   { value: 'weixin',        label: '微信公众号', tagType: 'success', group: CHANNEL_GROUP.IM,   icon: 'ChatDotRound',    description: '微信公众号（客服消息）', alias: ['微信', 'wechat'] },
-  { value: 'personal_wx',   label: '个人微信',   tagType: 'success', group: CHANNEL_GROUP.SOCIAL, icon: 'ChatDotRound',  description: '个人微信（桌面伴生；服务端协议就绪，伴生未交付）' },
+  { value: 'personal_wx',   label: '个人微信',   tagType: 'success', group: CHANNEL_GROUP.IM, icon: 'ChatDotRound', description: '个人微信（SageX 接入，支持单聊与群聊消息）' },
+  { value: 'qq',            label: 'QQ',        tagType: 'primary', group: CHANNEL_GROUP.IM, icon: 'ChatDotRound', description: 'QQ（SageX 接入，支持单聊与群聊消息）' },
   { value: 'whatsapp',      label: 'WhatsApp',  tagType: 'success', group: CHANNEL_GROUP.IM,     icon: 'ChatLineRound',   description: 'WhatsApp Cloud API（Meta 商业）', newBadge: true },
   { value: 'telegram',      label: 'Telegram',  tagType: 'primary', group: CHANNEL_GROUP.IM,     icon: 'Promotion',       description: 'Telegram Bot API（境外 IM）', newBadge: true },
   { value: 'feishu',        label: '飞书',      tagType: 'primary', group: CHANNEL_GROUP.COLLAB, icon: 'ChatLineSquare',  description: '飞书 Open API（协作）', newBadge: true },
@@ -149,6 +150,9 @@ export const getChannelTagType = (value) => {
 };
 
 export const getChannelOption = (value) => CHANNEL_MAP[value] || null;
+
+// 旧接入凭据仍被账号引用，展示时与真实平台分开。
+export const isLegacyConnectionService = (value) => /^sagex(?:-t\d+)?$/i.test(String(value || ''));
 
 export const filterChannelsByGroup = (groups) => {
   const list = Array.isArray(groups) ? groups : [groups]

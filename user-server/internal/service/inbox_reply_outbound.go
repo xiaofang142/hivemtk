@@ -30,6 +30,8 @@ type InboxReplyDelivery struct {
 }
 
 // InboxReplyRequest 是统一出站的最小输入（controller 已做人工接管）。
+// Hub 可选：外部渠道出站须传完整 Hub（会话/收件人/租户），否则出站发送器
+// 无法构造可投递消息与失败轨迹；controller 从客服会话构造并注入。
 type InboxReplyRequest struct {
 	Platform   model.Platform
 	AccountID  string
@@ -37,10 +39,11 @@ type InboxReplyRequest struct {
 	Content    string
 	AgentID    uint
 	SenderName string
+	Hub        *model.MessageHub
 }
 
 // 可注入 seam：默认绑真实实现；测试注入 fake 计数/可配置回执，不依赖真实 HTTP/DB。
-type inboxReplyDispatchFn func(ctx context.Context, ch WebhookChannel, accountID, eventID, content string) (sent bool, platformMsgID string, err error)
+type inboxReplyDispatchFn func(ctx context.Context, ch WebhookChannel, accountID, eventID, content string, hub *model.MessageHub) (sent bool, platformMsgID string, err error)
 type inboxReplyLocalSendFn func(ctx context.Context, sessionID, content, senderID, senderName string) (*model.SessionMessage, error)
 
 // InboxReplyOutboundService 按平台把人工回复路由到统一出站意图。
@@ -66,11 +69,12 @@ func defaultInboxReplyLocalSend(ctx context.Context, sessionID, content, senderI
 	})
 }
 
-func defaultInboxReplyDispatch(ctx context.Context, ch WebhookChannel, accountID, eventID, content string) (bool, string, error) {
+func defaultInboxReplyDispatch(ctx context.Context, ch WebhookChannel, accountID, eventID, content string, hub *model.MessageHub) (bool, string, error) {
 	svc := NewWebhookService()
 	p := &ParsedPayload{EventID: eventID, EventType: "human_reply", Content: content}
 	// sendOutbound 只回 sent/error；Sent=至少一跳成功，无平台消息 ID 视为「平台确认但 ACK 丢失」。
-	sent, err := svc.sendOutbound(ctx, ch, accountID, p, content, nil, nil)
+	// B01：必须传 Hub，缺会话/收件人时出站发送器无法形成可投递消息。
+	sent, err := svc.sendOutbound(ctx, ch, accountID, p, content, hub, nil)
 	return sent, "", err
 }
 
@@ -91,7 +95,7 @@ func (s *InboxReplyOutboundService) Reply(ctx context.Context, req *InboxReplyRe
 	}
 	// 唯一 EventID，避免被 AI reply 的 ClaimReply 去重误吞人工回复。
 	eventID := "human_reply:" + req.SessionID + ":" + strconv.FormatInt(time.Now().UnixNano(), 10)
-	sent, platformMsgID, err := s.dispatch(ctx, ch, req.AccountID, eventID, req.Content)
+	sent, platformMsgID, err := s.dispatch(ctx, ch, req.AccountID, eventID, req.Content, req.Hub)
 	if err != nil {
 		return &InboxReplyDelivery{Status: InboxReplyFailed, Channel: string(ch), Error: err.Error()}, msg, nil
 	}

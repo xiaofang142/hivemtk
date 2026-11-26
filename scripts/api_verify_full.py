@@ -34,8 +34,12 @@ api_verify_full.py — API 四维验收脚本（CLAUDE.md 验收标准实现）
   HIVEMTK_ALLOW_EXTERNAL_AI  默认不发起有效 AI 画像调用；仅在确认本地 mock/授权外发时设 1
 """
 import argparse
+import contextlib
 import csv
+import fcntl
+import functools
 import hashlib
+import io
 import json
 import os
 import random
@@ -435,10 +439,51 @@ def cleanup_crm_operation_logs(audit_floor, customer_ids, audit_ids, execute):
         clauses.append("id = ANY(%s)")
         params.append(audit_ids)
     if customer_ids:
-        clauses.append("(id > %s AND resource_id = ANY(%s))")
+        clauses.append(crm_customer_audit_clause())
         params.extend((audit_floor, customer_ids))
     if clauses:
         execute("DELETE FROM operation_logs WHERE " + " OR ".join(clauses), tuple(params))
+
+
+def crm_customer_audit_clause():
+    """operation_logs 的模型列名是 resource；resource_type 会导致运行时 SQL 报错。"""
+    return "(resource = 'customer' AND id > %s AND resource_id = ANY(%s))"
+
+
+def capture_crm_audits(action, after_id, query_all, *, username=None, resource_id=None,
+                       detail_match=None, report=check):
+    """串行验收下精确捕获唯一一条本 run 审计；0 条或多条都 fail-closed，不参与删除。"""
+    clauses = ["id > %s", "action = %s", "module = 'crm'", "resource = 'customer'"]
+    params = [after_id, action]
+    if username is not None:
+        clauses.append("username = %s")
+        params.append(username)
+    if resource_id is not None:
+        clauses.append("resource_id = %s")
+        params.append(resource_id)
+    candidates = query_all(
+        "SELECT id, action, module, resource, resource_id, username, detail "
+        "FROM operation_logs WHERE " + " AND ".join(clauses) + " ORDER BY id",
+        tuple(params),
+    )
+    matches = []
+    for row in candidates or []:
+        if row.get("module") != "crm" or row.get("resource") != "customer":
+            continue
+        if resource_id is not None and str(row.get("resource_id") or "") != str(resource_id):
+            continue
+        try:
+            detail = row.get("detail")
+            detail = detail if isinstance(detail, dict) else json.loads(detail or "{}")
+        except (TypeError, ValueError):
+            continue
+        if isinstance(detail, dict) and all(detail.get(key) == value
+                                            for key, value in (detail_match or {}).items()):
+            matches.append(row)
+    ok = len(matches) == 1
+    report(f"C-AUDIT {action} 精确捕获唯一审计", ok,
+           f"matches={len(matches)} after_id={after_id} resource_id={resource_id}")
+    return matches if ok else []
 
 
 def _write_json(path, payload):
@@ -540,6 +585,8 @@ class APIClient:
         url = BASE + path
         body = kw.pop("json", None)
         params = kw.pop("params", None)
+        raw = kw.pop("raw", False)
+        expect_content_type = kw.pop("expect_content_type", None)
         want_codes = set(allow_codes)
         if expect_code is not None:
             want_codes.add(expect_code)
@@ -558,14 +605,21 @@ class APIClient:
             echo = r.text
         print(f"【返回】HTTP {r.status_code} {echo[:300]}")
         print(f"【预期】HTTP {list(ok_status)}"
+              + (f" Content-Type={expect_content_type}" if expect_content_type else "")
               + (f" 响应体 code={sorted(want_codes, key=str)}" if want_codes else " 响应体 code 不限"))
         code_ok = r.status_code in ok_status
         contract_ok = True
-        try:
-            j = r.json()
-        except ValueError:
-            j = None
-            contract_ok = False
+        if raw:
+            j = r.text
+            if expect_content_type:
+                contract_ok = r.headers.get("Content-Type", "").split(";", 1)[0].strip().lower() \
+                    == expect_content_type.split(";", 1)[0].strip().lower()
+        else:
+            try:
+                j = r.json()
+            except ValueError:
+                j = None
+                contract_ok = False
         if j is not None and want_codes and isinstance(j, dict):
             if "code" in j:
                 contract_ok = contract_ok and j.get("code") in want_codes
@@ -1433,6 +1487,56 @@ def _probe_route(method, path, token, fe_calls):
     return ok_m, detail
 
 
+def require_isolated_test_db():
+    """写验收只允许专用 8217；端口不符时在登录/HTTP/SQL 前 fail-closed。"""
+    if DB["port"] == 8217:
+        return True
+    check("DB-SAFE 专用测试库端口", False,
+          f"HIVEMTK_DB_PORT={DB['port']}；写验收必须显式设为 8217")
+    return False
+
+
+@contextlib.contextmanager
+def crm_runner_lock(path=None):
+    """同一测试库的写验收串行化；竞争失败即退出，不并发捕获/清理审计。"""
+    if path is None:
+        key = f"{DB['host']}:{DB['port']}/{DB['dbname']}"
+        digest = hashlib.sha256(key.encode("utf-8")).hexdigest()[:16]
+        directory = os.path.join(tempfile.gettempdir(), "opencode")
+        os.makedirs(directory, exist_ok=True)
+        path = os.path.join(directory, f"crm-runner-{digest}.lock")
+    handle = open(path, "a+", encoding="utf-8")
+    acquired = False
+    try:
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            acquired = True
+        except BlockingIOError:
+            check("DB-SAFE CRM 写验收串行锁", False, f"已有运行实例持有锁: {path}")
+            yield False
+            return
+        yield True
+    finally:
+        if acquired:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        handle.close()
+
+
+def isolated_crm_runner(run):
+    """api/crm/sc001 共用 8217 与串行锁守卫；守卫先于任何登录、HTTP、SQL。"""
+    @functools.wraps(run)
+    def guarded(*args, **kwargs):
+        keep = kwargs.get("keep", args[0] if args else False)
+        if not require_isolated_test_db():
+            return finish(keep)
+        with crm_runner_lock() as acquired:
+            if not acquired:
+                return finish(keep)
+            return run(*args, **kwargs)
+    return guarded
+
+
+@isolated_crm_runner
 def run_api(keep=False):
     section("API 全量矩阵 · 路由清单提取")
     inv = _load_inventory()
@@ -1490,6 +1594,7 @@ def run_api(keep=False):
     return finish(keep)
 
 
+@isolated_crm_runner
 def run_crm(keep=False):
     """CRM scoped 四维验收；不触发 bridge/chain/真实渠道外发。"""
     section("CRM 四维验收 · 入参 / 返回 / 预期 / DB")
@@ -1498,6 +1603,7 @@ def run_crm(keep=False):
     return finish(keep)
 
 
+@isolated_crm_runner
 def run_sc001(keep=False):
     """SC-001：100 对合成客户候选分类准确率；不触发真实渠道外发。"""
     section("SC-001 · 100 对人工标签 / 候选准确率")
@@ -1508,23 +1614,33 @@ def run_sc001(keep=False):
     frozen = json.dumps(sample["pairs"], ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     print(f"【冻结标签】run_id={run_id} pairs={len(sample['pairs'])} "
           f"sha256={hashlib.sha256(frozen.encode('utf-8')).hexdigest()}")
+    evidence_dir = os.environ.get("HIVEMTK_EVIDENCE_DIR") or tempfile.mkdtemp(
+        prefix=f"hivemtk-sc001-{run_id}-"
+    )
 
     id_map, customer_ids = {}, []
     audit_floor = 0
     floor_row = q1("SELECT COALESCE(MAX(id), 0) AS id FROM operation_logs")
     audit_floor = int((floor_row or {}).get("id") or 0)
+    cleanup_state = {"kept": keep, "deleted": False, "remaining": None}
 
     def cleanup():
         if keep:
+            cleanup_state["kept"] = True
             print(f"【保留】SC-001 run_id={run_id} customer_ids={customer_ids}")
             return
         try:
+            remaining = 0
             if customer_ids:
-                qexec("DELETE FROM operation_logs WHERE id > %s AND resource_id = ANY(%s)",
-                      (audit_floor, customer_ids))
+                cleanup_crm_operation_logs(audit_floor, customer_ids, [], qexec)
                 qexec("DELETE FROM customers WHERE id = ANY(%s)", (customer_ids,))
-            check("SC001-CLEAN 【DB】合成客户清理完成", True, f"rows={len(customer_ids)}")
+                row = q1("SELECT COUNT(*) AS n FROM customers WHERE id = ANY(%s)", (customer_ids,))
+                remaining = int((row or {}).get("n") or 0)
+            cleanup_state.update({"kept": False, "deleted": True, "remaining": remaining})
+            check("SC001-CLEAN 【DB】合成客户清理完成", remaining == 0,
+                  f"rows={len(customer_ids)} remaining={remaining}")
         except Exception as exc:
+            cleanup_state.update({"kept": False, "deleted": False, "error": str(exc)[:200]})
             check("SC001-CLEAN 【DB】合成客户清理完成", False, f"清理异常: {exc}")
 
     def validate():
@@ -1542,7 +1658,7 @@ def run_sc001(keep=False):
         check("SC001-SEED 200 个客户全部创建", not create_failures and len(id_map) == 200,
               f"created={len(id_map)} failures={create_failures[:10]}")
         if len(id_map) != 200:
-            return
+            return None, None
 
         update_failures = []
         for spec in sample["customers"]:
@@ -1554,7 +1670,7 @@ def run_sc001(keep=False):
         check("SC001-FINALIZE 200 个最终身份全部落库", not update_failures,
               f"failures={update_failures[:10]}")
         if update_failures:
-            return
+            return None, None
 
         external_failures = []
         for spec in sample["customers"]:
@@ -1566,29 +1682,43 @@ def run_sc001(keep=False):
         check("SC001-EXTERNAL 外部 ID 夹具补齐", not external_failures,
               f"failures={external_failures[:3]}")
         if external_failures:
-            return
+            return None, None
 
-        j, ok = adm.req("POST", "/api/manage/crm/dedupe/scan", "SC001-SCAN 租户候选扫描",
-                        expect_code=0, json={
-                            "max_customers": 5000,
-                            "name_threshold": 85,
-                            "same_account_only": False,
-                        })
+        scan_response, ok = adm.req(
+            "POST", "/api/manage/crm/dedupe/scan", "SC001-SCAN 租户候选扫描",
+            expect_code=0, json={
+                "max_customers": 5000,
+                "name_threshold": 85,
+                "same_account_only": False,
+            },
+        )
         if not ok:
-            return
-        candidates = ((j or {}).get("data") or {}).get("list") or []
-        result = score_sc001(sample["pairs"], candidates, id_map=id_map)
+            return scan_response, None
+        candidates = ((scan_response or {}).get("data") or {}).get("list") or []
+        try:
+            result = score_sc001(sample["pairs"], candidates, id_map=id_map)
+        except (KeyError, TypeError, ValueError) as exc:
+            check("SC001-SCORE 候选响应可评分", False, f"评分异常: {exc}")
+            return scan_response, None
         for row in result["rows"]:
             print("【逐行标签】" + json.dumps(row, ensure_ascii=False, sort_keys=True))
         print(format_sc001_summary(result))
         check("SC-001 候选分类准确率 >=95%", result["accuracy"] >= 0.95,
               format_sc001_summary(result).replace("\n", " | "))
-        return None
+        return scan_response, result
 
+    scan_response, result = None, None
     try:
-        validate()
+        scan_response, result = validate()
     finally:
         cleanup()
+
+    try:
+        write_sc001_evidence(evidence_dir, sample, id_map, scan_response, result, cleanup_state)
+        check("SC001-EVIDENCE 取证文件已写入", True, evidence_dir)
+    except Exception as exc:
+        check("SC001-EVIDENCE 取证文件已写入", False, f"{evidence_dir}: {exc}")
+    print(f"【取证目录】{evidence_dir}")
     return finish(keep)
 
 
@@ -1693,14 +1823,100 @@ def verify_crm_ai_profile(adm, customer_id):
                         "路由与鉴权已探测，但 AI 结论/evidence 未验证")
 
 
+CRM_CSV_EXPORT_HEADER = (
+    "id", "name", "phone", "email", "industry", "source_account_id", "owner_user_id", "tags",
+)
+
+
+def crm_csv_export_errors(csv_text, json_rows, imported_id):
+    """CSV/JSON 导出对账：固定表头、ID 集合、所有共有身份字段必须一致。"""
+    errors = []
+    try:
+        reader = csv.reader(io.StringIO(csv_text or ""))
+        header = next(reader)
+        rows = list(reader)
+    except (csv.Error, StopIteration):
+        return ["CSV 为空或无法解析"]
+    if tuple(header) != CRM_CSV_EXPORT_HEADER:
+        errors.append(f"CSV header 不符: {header}")
+        return errors
+    if any(len(row) != len(CRM_CSV_EXPORT_HEADER) for row in rows):
+        errors.append("CSV 存在列数不一致的行")
+    csv_by_id = {row[0]: row for row in rows if len(row) == len(CRM_CSV_EXPORT_HEADER)}
+    json_by_id = {str(row.get("id")): row for row in (json_rows or [])}
+    if sorted(csv_by_id) != sorted(json_by_id):
+        errors.append(f"CSV/JSON ID 集合不一致: csv={len(csv_by_id)} json={len(json_by_id)}")
+    imported = csv_by_id.get(str(imported_id))
+    if imported is None:
+        errors.append(f"CSV 缺少导入客户: {imported_id}")
+    for customer_id in sorted(csv_by_id.keys() & json_by_id.keys()):
+        expected = json_by_id[customer_id]
+        exported = csv_by_id[customer_id]
+        for index, field in enumerate(CRM_CSV_EXPORT_HEADER):
+            if field in expected and str(expected.get(field) or "") != exported[index]:
+                errors.append(f"CSV 客户 {customer_id} 字段 {field} 与 JSON 不一致")
+    return errors
+
+
+def verify_crm_export_csv(client, params, imported_id, json_rows):
+    """验证前端实际使用的 CSV 分支，并与同查询 JSON 结果逐行对账。"""
+    text, ok = client.req("GET", "/api/manage/crm/export", "C24 CSV 导出客户",
+                          raw=True, expect_content_type="text/csv", params=params)
+    errors = crm_csv_export_errors(text if isinstance(text, str) else "", json_rows, imported_id)
+    check("C24.1 CSV/JSON 导出一致且含导入客户", ok and not errors,
+          f"errors={errors[:5]}")
+    return errors
+
+
+def verify_crm_archive(client, customer_id, run, after_id, query_one, query_all):
+    """安全验证线索归档关联：租户存在启用通知路由时拒绝调用，绝不真实外发。"""
+    clue_id = f"crm-e2e-{run}"
+    route_row = query_one(
+        "SELECT COUNT(*) AS n FROM system_users u "
+        "JOIN lead_mining_notify_routes r ON r.tenant_id = u.tenant_id "
+        "WHERE u.username=%s AND r.enabled=true AND r.deleted_at IS NULL",
+        (ADMIN_USER,),
+    )
+    route_count = int((route_row or {}).get("n") or 0)
+    check("C23.0 归档前确认测试租户无启用通知路由", route_count == 0,
+          f"enabled_routes={route_count}")
+    if route_count != 0:
+        return None
+    payload = {
+        "clue_id": clue_id,
+        "customer_id": customer_id,
+        "summary": f"CRM-E2E-{run} 安全归档关联验收",
+        "evidence_json": json.dumps({"run": run, "synthetic": True}, ensure_ascii=False),
+    }
+    j, ok = client.req("POST", "/api/manage/crm/clue/archive", "C23 归档线索并关联客户",
+                      expect_code=0, json=payload)
+    data = (j or {}).get("data") or {}
+    check("C23.1 返回 linked=true 且 customer_id 正确",
+          ok and data.get("linked") is True and str(data.get("customer_id")) == str(customer_id),
+          f"data={data}")
+    if not ok or data.get("linked") is not True:
+        return None
+    # notified 只表示 notifier 返回 nil；无路由时也是 true，不能当作送达证据。
+    check("C23.2 notified 字段存在（不视为真实送达证明）", "notified" in data, f"data={data}")
+    audits = capture_crm_audits(
+        "clue_archive_link_customer", after_id, query_all, resource_id=customer_id,
+        detail_match={"clue_id": clue_id, "customer_id": customer_id},
+    )
+    return audits[0] if audits else None
+
+
 def _crm_deep(token):
     """CRM 四维深测：所有写操作带 DB 断言，finally 清理本 run 数据。"""
     adm = APIClient(token=token)
     anon = APIClient()
     run = uuid.uuid4().hex[:8]
     tag = f"CRM-E2E-{run}"
-    customer_ids, entity_ids, one_ids = [], [], []
+    customer_ids, entity_ids, one_ids, audit_ids = [], [], [], []
     audit_floor = 0
+
+    def current_audit_id():
+        row = q1("SELECT COALESCE(MAX(id), 0) AS id FROM operation_logs")
+        return int((row or {}).get("id") or 0)
 
     def remember_customer(customer_id):
         if customer_id and customer_id not in customer_ids:
@@ -1744,11 +1960,37 @@ def _crm_deep(token):
                       "WHERE primary_id = ANY(%s) OR secondary_id = ANY(%s)",
                       (customer_ids, customer_ids))
                 qexec("DELETE FROM customers WHERE id = ANY(%s)", (customer_ids,))
-            if audit_floor:
-                qexec("DELETE FROM operation_logs WHERE id > %s "
-                      "AND (action IN ('customer_import','customer_export','customer_merge','merge') "
-                      "OR resource_id = ANY(%s))", (audit_floor, customer_ids))
-            check("C99 【DB】本 run 合成数据清理完成", True, f"customers={len(customer_ids)} entities={len(entity_ids)}")
+            cleanup_crm_operation_logs(audit_floor, customer_ids, audit_ids, qexec)
+
+            remaining = 0
+            if customer_ids:
+                row = q1("SELECT COUNT(*) AS n FROM customers WHERE id = ANY(%s)", (customer_ids,))
+                remaining += int((row or {}).get("n") or 0)
+                row = q1("SELECT COUNT(*) AS n FROM customer_merges "
+                         "WHERE primary_id = ANY(%s) OR secondary_id = ANY(%s)",
+                         (customer_ids, customer_ids))
+                remaining += int((row or {}).get("n") or 0)
+            for table, entity_id in entity_ids:
+                row = q1(f"SELECT COUNT(*) AS n FROM {table} WHERE id=%s", (entity_id,))
+                remaining += int((row or {}).get("n") or 0)
+            if one_ids:
+                row = q1("SELECT COUNT(*) AS n FROM contact_consent_identity_links "
+                         "WHERE left_one_id = ANY(%s) OR right_one_id = ANY(%s)",
+                         (one_ids, one_ids))
+                remaining += int((row or {}).get("n") or 0)
+            log_clauses, log_params = [], []
+            if audit_ids:
+                log_clauses.append("id = ANY(%s)")
+                log_params.append(audit_ids)
+            if customer_ids:
+                log_clauses.append(crm_customer_audit_clause())
+                log_params.extend((audit_floor, customer_ids))
+            if log_clauses:
+                row = q1("SELECT COUNT(*) AS n FROM operation_logs WHERE "
+                         + " OR ".join(log_clauses), tuple(log_params))
+                remaining += int((row or {}).get("n") or 0)
+            check("C99 【DB】本 run 合成数据清理完成", remaining == 0,
+                  f"customers={len(customer_ids)} entities={len(entity_ids)} remaining={remaining}")
         except Exception as exc:
             check("C99 【DB】本 run 合成数据清理完成", False, f"清理异常: {exc}")
 
@@ -1884,8 +2126,14 @@ def _crm_deep(token):
             "source_account_id": f"crm-e2e-{run}-import", "source_channel": "douyin",
             "tags": json.dumps(["crm-e2e", run]),
         }]}
+        import_audit_floor = current_audit_id()
         j, ok = adm.req("POST", "/api/manage/crm/import", "C14 导入客户", expect_code=0, json=import_body)
         imported = (j or {}).get("data") or {}
+        import_audits = capture_crm_audits(
+            "customer_import", import_audit_floor, qall, username=ADMIN_USER,
+            detail_match={"created": 1, "total": 1},
+        )
+        audit_ids.extend(row["id"] for row in import_audits)
         imported_row = q1("SELECT id FROM customers WHERE phone=%s", (import_phone,))
         imported_id = imported_row["id"] if imported_row else None
         if imported_id:
@@ -1893,14 +2141,40 @@ def _crm_deep(token):
         check("C14.1 【DB】导入 created=1 且行存在", ok and imported.get("created") == 1 and imported_id,
               f"result={imported} id={imported_id}")
 
+        export_audit_floor = current_audit_id()
         j, ok = adm.req("GET", "/api/manage/crm/export", "C15 导出客户", expect_code=0,
                         params={"keyword": tag, "industry": "e2e"})
         exported = (j or {}).get("data") or {}
+        export_audits = capture_crm_audits(
+            "customer_export", export_audit_floor, qall, username=ADMIN_USER,
+            detail_match={"exported": len(exported.get("rows") or []),
+                          "total": exported.get("total"),
+                          "masked": exported.get("sensitive_masked")},
+        )
+        audit_ids.extend(row["id"] for row in export_audits)
         check("C15.1 导出含导入客户", ok and any(
             row.get("id") == imported_id for row in (exported.get("rows") or [])),
             f"total={exported.get('total')}")
 
+        csv_audit_floor = current_audit_id()
+        csv_params = {"keyword": tag, "industry": "e2e", "format": "csv"}
+        verify_crm_export_csv(adm, csv_params, imported_id, exported.get("rows") or [])
+        csv_audits = capture_crm_audits(
+            "customer_export", csv_audit_floor, qall, username=ADMIN_USER,
+            detail_match={"exported": len(exported.get("rows") or []),
+                          "total": exported.get("total"),
+                          "masked": exported.get("sensitive_masked")},
+        )
+        audit_ids.extend(row["id"] for row in csv_audits)
+
         verify_crm_ai_profile(adm, primary_id)
+
+        archive_audit_floor = current_audit_id()
+        archive_audit = verify_crm_archive(
+            adm, primary_id, run, archive_audit_floor, q1, qall,
+        )
+        if archive_audit:
+            audit_ids.append(archive_audit["id"])
 
         for path, table, label in entity_specs:
             entity_id = next((eid for tbl, eid in entity_ids if tbl == table), None)

@@ -29,7 +29,7 @@
             <el-option
               v-for="c in channels"
               :key="c.id"
-              :label="c.name"
+              :label="channelName(c.id)"
               :value="c.id"
             />
           </el-select>
@@ -87,11 +87,6 @@
           label="识别码"
           min-width="150"
           show-overflow-tooltip
-        />
-        <el-table-column
-          prop="type"
-          label="类型"
-          width="90"
         />
         <el-table-column
           label="自动回复"
@@ -174,7 +169,7 @@
     <el-dialog
       v-model="dialogVisible"
       :title="editingId ? '编辑渠道账号' : '新增渠道账号'"
-      width="680px"
+      width="min(680px, 94vw)"
       top="5vh"
     >
       <el-form
@@ -194,7 +189,7 @@
             <el-option
               v-for="c in channels"
               :key="c.id"
-              :label="c.name"
+              :label="channelName(c.id)"
               :value="c.id"
             />
           </el-select>
@@ -208,30 +203,11 @@
             placeholder="请输入账号名称"
           />
         </el-form-item>
-        <el-form-item label="自他识别名称">
+        <el-form-item :label="$t('channels.displayName')">
           <el-input
             v-model="form.self_identify_name"
-            placeholder="用于单聊自他识别"
+            :placeholder="$t('channels.displayNamePlaceholder')"
           />
-        </el-form-item>
-        <el-form-item label="会话类型">
-          <el-select
-            v-model="form.type"
-            style="width: 100%"
-          >
-            <el-option
-              label="单聊"
-              value="dm"
-            />
-            <el-option
-              label="群聊"
-              value="group"
-            />
-            <el-option
-              label="客服"
-              value="cs"
-            />
-          </el-select>
         </el-form-item>
         <el-form-item label="备注">
           <el-input
@@ -299,7 +275,7 @@
             v-model="form.leadMiningOn"
             @change="onLeadMiningToggle"
           />
-          <span class="hint">关闭后该账号不识别/归档商机，且不触发自动回复</span>
+          <span class="hint">{{ $t('channels.leadMiningHint') }}</span>
         </el-form-item>
         <el-form-item
           v-if="form.leadMiningOn"
@@ -441,11 +417,14 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import channelAccountApi from '@/api/channelAccount.js'
 import { listAgents } from '@/api/aiAgent.js'
+import { isLegacyConnectionService } from '@/constants/channel'
 
+const { t: translate } = useI18n()
 const loading = ref(false)
 const saving = ref(false)
 const accounts = ref([])
@@ -461,7 +440,6 @@ const form = reactive({
   name: '',
   remark: '',
   self_identify_name: '',
-  type: 'dm',
   statusOn: true,
   autoReplyOn: false,
   leadMiningOn: false,
@@ -478,7 +456,7 @@ const crossRef = ref(null)
 
 function channelName(id) {
   const c = channels.value.find((x) => x.id === id)
-  return c ? c.name : '-'
+  return c ? (isLegacyConnectionService(c.code) ? translate('channels.serviceBindingLabel', { name: c.name }) : c.name) : '-'
 }
 
 async function loadList() {
@@ -501,7 +479,7 @@ function resetFilter() {
 
 function resetForm() {
   Object.assign(form, {
-    channel_id: null, name: '', remark: '', self_identify_name: '', type: 'dm',
+    channel_id: null, name: '', remark: '', self_identify_name: '',
     statusOn: true, autoReplyOn: false, leadMiningOn: false,
     auto_reply_agent_id: null, lead_mining_agent_id: null,
     ownerUserText: '', dataScope: ''
@@ -521,7 +499,6 @@ async function openEdit(row) {
     name: row.name,
     remark: row.remark || '',
     self_identify_name: row.self_identify_name || '',
-    type: row.type || 'dm',
     statusOn: row.status === 1,
     autoReplyOn: !!row.auto_reply_agent_id,
     leadMiningOn: !!row.lead_mining_agent_id,
@@ -534,6 +511,7 @@ async function openEdit(row) {
   try {
     const detail = await channelAccountApi.getAccount(row.id)
     if (detail) {
+      form.remark = detail.remark || ''
       form.ownerUserText = (detail.owner_user_ids || []).join(',')
       form.dataScope = detail.data_scope || ''
     }
@@ -561,7 +539,6 @@ async function onSave() {
     name: form.name,
     remark: form.remark,
     self_identify_name: form.self_identify_name,
-    type: form.type,
     status: form.statusOn ? 1 : 0,
     auto_reply_agent_id: form.autoReplyOn ? form.auto_reply_agent_id : null,
     lead_mining_agent_id: form.leadMiningOn ? form.lead_mining_agent_id : null,

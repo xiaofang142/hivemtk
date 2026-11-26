@@ -57,8 +57,9 @@ func NewLeadClueArchiveServiceWith(clues repository.ClueRepository, archive *Clu
 	return &LeadClueArchiveService{clues: clues, archive: archive}
 }
 
-// Archive 归档线索并关联客户。顺序：先写线索归档字段，再调 Phase 3 客户侧关联；
-// 客户侧失败返回错误（fail-visible），不把半成品标记为"已通知"。
+// Archive 归档线索并关联客户。顺序：先做客户侧关联，成功后再写归档终态。
+// 旧顺序先写 status=archived 再关联客户，客户侧失败时线索已显示归档但客户未关联；
+// 现在失败时线索保持未归档，可安全重试，终态与客户关联同时成立。
 func (s *LeadClueArchiveService) Archive(ctx context.Context, in LeadClueArchiveInput) (*ArchiveClueResult, error) {
 	if s == nil || s.archive == nil || s.clues == nil {
 		return nil, errors.New("归档服务未装配")
@@ -72,6 +73,24 @@ func (s *LeadClueArchiveService) Archive(ctx context.Context, in LeadClueArchive
 	}
 	if clue == nil {
 		return nil, fmt.Errorf("待归档线索不存在: %s", in.ClueID)
+	}
+
+	result, err := s.archive.ArchiveClueAndLinkCustomer(ctx, ArchiveClueInput{
+		ClueID:          in.ClueID,
+		CustomerID:      in.CustomerID,
+		Identifiers:     in.Identifiers,
+		Name:            in.Name,
+		Industry:        in.Industry,
+		SourceAccountID: in.SourceAccountID,
+		SourceChannel:   in.SourceChannel,
+		OwnerUserID:     in.OwnerUserID,
+		Summary:         in.Summary,
+		EvidenceJSON:    in.EvidenceJSON,
+		// 终态未写成功前不通知，避免“已通知但未归档”。
+		SkipNotify: true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("第三阶段客户侧归档失败: %w", err)
 	}
 
 	role := normalizeLeadRole(in.Role)
@@ -99,31 +118,25 @@ func (s *LeadClueArchiveService) Archive(ctx context.Context, in LeadClueArchive
 	if in.SourceAccountID != "" {
 		updates["source_account_id"] = in.SourceAccountID
 	}
+	// 客户侧新建/识别出的 OneID 与终态同批写入，避免回写失败造成单向关联。
+	if result != nil && result.CustomerID != "" && result.CustomerID != in.CustomerID {
+		updates["customer_id"] = result.CustomerID
+	}
 	if err := s.clues.UpdateByID(ctx, in.ClueID, updates); err != nil {
 		return nil, fmt.Errorf("写入线索归档字段失败: %w", err)
 	}
-
-	result, err := s.archive.ArchiveClueAndLinkCustomer(ctx, ArchiveClueInput{
-		ClueID:          in.ClueID,
-		CustomerID:      in.CustomerID,
-		Identifiers:     in.Identifiers,
-		Name:            in.Name,
-		Industry:        in.Industry,
-		SourceAccountID: in.SourceAccountID,
-		SourceChannel:   in.SourceChannel,
-		OwnerUserID:     in.OwnerUserID,
-		Summary:         in.Summary,
-		EvidenceJSON:    in.EvidenceJSON,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("第三阶段客户侧归档失败: %w", err)
-	}
-
-	// 客户侧新建/识别出的 OneID 回写线索，保证双向可追溯。
-	if result != nil && result.CustomerID != "" && result.CustomerID != in.CustomerID {
-		if err := s.clues.UpdateByID(ctx, in.ClueID, map[string]any{"customer_id": result.CustomerID}); err != nil {
+	// 终态与客户关联都已成立后才通知负责人；失败只告警，不回滚已完成的归档。
+	if notifier := s.archive.Notifier(); notifier != nil && result != nil {
+		notifyIn := ArchiveClueInput{
+			ClueID: in.ClueID, CustomerID: result.CustomerID,
+			SourceAccountID: in.SourceAccountID, SourceChannel: in.SourceChannel,
+			Summary: in.Summary, OwnerUserID: in.OwnerUserID,
+		}
+		if err := notifier.NotifyOwner(ctx, notifyIn, result.CustomerID); err != nil {
 			logger.Ctx(ctx).Warn().Err(err).Str("clue_id", in.ClueID).
-				Str("customer_id", result.CustomerID).Msg("[lead-archive] 客户ID回写线索失败")
+				Msg("[lead-archive] 负责人推送失败（归档已完成）")
+		} else {
+			result.Notified = true
 		}
 	}
 	return result, nil

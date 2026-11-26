@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"errors"
 	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils/response"
@@ -12,6 +13,10 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type customerRecordPermissionResolver interface {
+	Resolve(context.Context, uint) (service.CustomerDataScope, error)
+}
+
 // Customer360Controller 客户 360° 视图控制器
 //
 // 通过以下三个 service 访问数据：
@@ -20,6 +25,7 @@ import (
 //   - TagRuleService       自动标签规则（customer_tags 表）
 type Customer360Controller struct {
 	customer360Service *service.Customer360Service
+	permission         customerRecordPermissionResolver
 	userTagSvc         *service.UserTagService
 	userProfileSvc     *service.UserProfileService
 	tagRuleSvc         *service.TagRuleService
@@ -29,6 +35,7 @@ type Customer360Controller struct {
 func NewCustomer360Controller(customer360Service *service.Customer360Service) *Customer360Controller {
 	return &Customer360Controller{
 		customer360Service: customer360Service,
+		permission:         service.NewCustomerPermissionService(),
 		userTagSvc:         service.NewUserTagService(),
 		userProfileSvc:     service.NewUserProfileService(),
 		tagRuleSvc:         service.NewTagRuleService(),
@@ -39,6 +46,10 @@ func NewCustomer360Controller(customer360Service *service.Customer360Service) *C
 // 原来多数 handler 对任何错误都回 404 + err.Error()，DB 抖动会被伪装成
 // 「客户不存在」，同时把英文/驱动错误原文透给前端。
 func replyCustomer360Error(ctx *gin.Context, err error, fallback string) {
+	if errors.Is(err, service.ErrCRMCustomerForbidden) {
+		response.Error(ctx, http.StatusForbidden, response.ErrPermissionDenied)
+		return
+	}
 	if errors.Is(err, service.ErrCustomerForbidden) {
 		// 行级隔离拒绝（2026-11-15 审计 H-1）：与 DataScopeGuard 的 403 同档，
 		// 文案按会话域既有口径，不区分「没这行」和「不是你的行」。
@@ -50,6 +61,19 @@ func replyCustomer360Error(ctx *gin.Context, err error, fallback string) {
 		return
 	}
 	errhttp.HandleDBError(ctx, err, fallback)
+}
+
+// customerRecordView 在读取档案及其关联资料之前解析 CRM 配对权限。
+func (c *Customer360Controller) customerRecordView(ctx *gin.Context, id string) (*service.Customer360DTO, error) {
+	uid := getUserIDFromContext(ctx)
+	if uid == 0 || c.permission == nil {
+		return nil, service.ErrCRMCustomerForbidden
+	}
+	scope, err := c.permission.Resolve(ctx.Request.Context(), uid)
+	if err != nil {
+		return nil, err
+	}
+	return c.customer360Service.GetCustomer360ByCustomerIDScoped(ctx.Request.Context(), scope, id)
 }
 
 // customerScopeFromCtx 从登录态组装客户域数据隔离身份（与会话域 sessionScopeFromCtx 同形）。
@@ -402,9 +426,9 @@ func (c *Customer360Controller) GetCustomer360ByID(ctx *gin.Context) {
 		return
 	}
 
-	dto, err := c.customer360Service.GetCustomer360ByCustomerID(ctx.Request.Context(), userID)
+	dto, err := c.customerRecordView(ctx, userID)
 	if err != nil {
-		response.Error(ctx, http.StatusNotFound, err.Error())
+		replyCustomer360Error(ctx, err, "获取客户 360 视图失败")
 		return
 	}
 
@@ -507,9 +531,9 @@ func (c *Customer360Controller) GetCustomerDetail(ctx *gin.Context) {
 		return
 	}
 
-	dto, err := c.customer360Service.GetCustomer360ByCustomerID(ctx.Request.Context(), userID)
+	dto, err := c.customerRecordView(ctx, userID)
 	if err != nil {
-		response.Error(ctx, http.StatusNotFound, err.Error())
+		replyCustomer360Error(ctx, err, "获取客户详情失败")
 		return
 	}
 
@@ -612,13 +636,9 @@ func (c *Customer360Controller) GetCustomerCommunications(ctx *gin.Context) {
 		return
 	}
 
-	dto, err := c.customer360Service.GetCustomer360ByCustomerID(ctx.Request.Context(), customerID)
+	dto, err := c.customerRecordView(ctx, customerID)
 	if err != nil {
-		if errors.Is(err, service.ErrCustomerNotFound) {
-			response.Error(ctx, http.StatusNotFound, "客户不存在")
-			return
-		}
-		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
+		replyCustomer360Error(ctx, err, "获取客户沟通记录失败")
 		return
 	}
 

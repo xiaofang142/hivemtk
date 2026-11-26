@@ -103,6 +103,9 @@ type PublishResult struct {
 	FromVersion int             `json:"from_version"`
 	ToVersion   int             `json:"to_version"`
 	Applied     []AppliedChange `json:"applied"`
+	// 正文事务和提交后向量补算是两个独立结果，不能用发布成功推断补算完成。
+	EmbeddingStatus        string `json:"embedding_status"`
+	EmbeddingAuditRecorded bool   `json:"embedding_audit_recorded"`
 }
 
 // RollbackResult 回滚/放回的产出（三个号都回给调用方，管理端要能原样展示"从哪来回哪去"）
@@ -654,7 +657,7 @@ func (r *KBReleaseRepository) Publish(ctx context.Context, in PublishIntent) (*P
 			SubjectKey: "release:" + in.ProductID,
 			Action:     model.KBAuditPublished,
 			OldValue:   fmt.Sprintf("effective=%d draft=%d", rel.EffectiveVersion, rel.DraftVersion),
-			NewValue:   fmt.Sprintf("effective=%d previous=%d applied=%d", bucket, rel.EffectiveVersion, len(in.Changes)),
+			NewValue:   fmt.Sprintf("effective=%d previous=%d applied=%d embedding=unconfirmed", bucket, rel.EffectiveVersion, len(in.Changes)),
 			Actor:      in.Actor,
 		})
 	})

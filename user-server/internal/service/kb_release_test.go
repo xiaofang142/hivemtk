@@ -17,6 +17,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -58,12 +59,13 @@ type stubReleaseStore struct {
 	withdrawOK  bool
 	withdrawErr error
 
-	audits    []model.KBChangeAuditLog
-	auditErr  error
-	auditRows []model.KBChangeAuditLog
-	auditErr2 error
-	auditKey  string
-	auditLim  int
+	audits          []model.KBChangeAuditLog
+	auditErr        error
+	auditRows       []model.KBChangeAuditLog
+	auditErr2       error
+	auditKey        string
+	auditLim        int
+	auditContextErr error
 
 	publishIntents []repository.PublishIntent
 	publishRes     *repository.PublishResult
@@ -132,6 +134,7 @@ func (s *stubReleaseStore) WithdrawChange(ctx context.Context, id string) (bool,
 
 func (s *stubReleaseStore) RecordAudit(ctx context.Context, log model.KBChangeAuditLog) error {
 	s.call("RecordAudit")
+	s.auditContextErr = ctx.Err()
 	s.audits = append(s.audits, log)
 	return s.auditErr
 }
@@ -945,6 +948,82 @@ func TestKBRelease_EmbedAppliedAfterCommit(t *testing.T) {
 // ---------------------------------------------------------------------------
 // 指针移动 / 治理开关 / 视图
 // ---------------------------------------------------------------------------
+
+func TestKBRelease_EmbeddingOutcomeVisibleWithoutRepublishing(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		embedErr    error
+		unavailable bool
+		noContent   bool
+		auditErr    error
+		wantStatus  string
+		wantAudit   bool
+	}{
+		{name: "补算成功", wantStatus: "completed", wantAudit: true},
+		{name: "补算失败", embedErr: errors.New("供应商暂不可用"), wantStatus: "failed", wantAudit: true},
+		{name: "未装配补算", unavailable: true, wantStatus: "unavailable", wantAudit: true},
+		{name: "没有新正文", noContent: true, wantStatus: "not_required", wantAudit: true},
+		{name: "恢复审计写入失败", embedErr: errors.New("向量调用失败"), auditErr: errors.New("审计存储失败"), wantStatus: "failed"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, st, _ := newKBService(t)
+			st.release = kbGoverned(5)
+			st.auditErr = tc.auditErr
+			st.publishRes = &repository.PublishResult{FromVersion: 4, ToVersion: 5}
+			if !tc.noContent {
+				st.publishRes.Applied = []repository.AppliedChange{{AppliedChunkID: 88, Content: "已批准的新正文"}}
+			}
+			if !tc.unavailable {
+				svc.embedder = &kbEmbedStub{err: tc.embedErr}
+			}
+			_, result, err := svc.PublishPending(context.Background(), "p1", "operator-1")
+			if err != nil || result == nil || result.ToVersion != 5 {
+				t.Fatalf("补算不能改变已提交的发布结论: result=%+v err=%v", result, err)
+			}
+			encoded, err := json.Marshal(result)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var response map[string]any
+			if err := json.Unmarshal(encoded, &response); err != nil {
+				t.Fatal(err)
+			}
+			if response["embedding_status"] != tc.wantStatus || response["embedding_audit_recorded"] != tc.wantAudit {
+				t.Errorf("响应必须区分正文发布与补算/审计结果: %s", encoded)
+			}
+			if len(st.publishIntents) != 1 {
+				t.Errorf("正文只允许提交一次，实得 %d", len(st.publishIntents))
+			}
+			if len(st.audits) != 1 || st.audits[0].SubjectKey != "release:p1" || st.audits[0].Action != "embedding_status" || st.audits[0].Actor != "operator-1" {
+				t.Errorf("补算结果必须有归属明确的独立审计: %+v", st.audits)
+			} else if !strings.Contains(st.audits[0].NewValue, "version=5") || !strings.Contains(st.audits[0].NewValue, "status="+tc.wantStatus) || strings.Contains(st.audits[0].NewValue, "已批准的新正文") {
+				t.Errorf("审计应只保存版本、状态和恢复线索，不能复制正文: %+v", st.audits[0])
+			}
+		})
+	}
+}
+
+type kbCancelEmbedder struct{ cancel context.CancelFunc }
+
+func (e kbCancelEmbedder) EmbedAndPersistChunks(context.Context, string, []model.KnowledgeChunk) error {
+	e.cancel()
+	return context.Canceled
+}
+
+func TestKBRelease_EmbeddingAuditSurvivesRequestCancellation(t *testing.T) {
+	svc, st, _ := newKBService(t)
+	st.release = kbGoverned(5)
+	st.publishRes = &repository.PublishResult{ToVersion: 5, Applied: []repository.AppliedChange{{AppliedChunkID: 88, Content: "正文"}}}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	svc.embedder = kbCancelEmbedder{cancel: cancel}
+	if _, _, err := svc.PublishPending(ctx, "p1", "operator-1"); err != nil {
+		t.Fatal(err)
+	}
+	if len(st.audits) != 1 || st.auditContextErr != nil {
+		t.Fatalf("取消请求不能阻止已提交发布保存补算故障: audits=%+v contextErr=%v", st.audits, st.auditContextErr)
+	}
+}
 
 func TestKBRelease_PointerMovesGoToStore(t *testing.T) {
 	ctx := context.Background()

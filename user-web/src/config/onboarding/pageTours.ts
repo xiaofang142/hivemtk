@@ -464,7 +464,23 @@ export function createPageTours(t: (key: string) => string): Record<string, Page
         }
       ]
     },
-    // T062：渠道识别码管理页（旧 /bridge/token 入口已收敛至此）。
+    '/channels/manage': {
+      route: '/channels/manage',
+      pageKey: 'channelManage',
+      steps: [
+        { element: '[data-testid="channels-tabs"]', title: t('setup.onboarding.page.channels.title'), description: t('setup.onboarding.page.channels.description'), side: 'bottom', align: 'center' },
+        { element: '.channel-manage .el-card', title: t('setup.onboarding.page.channels.catalog'), description: t('setup.onboarding.page.channels.catalogGuide'), side: 'bottom', align: 'center' }
+      ]
+    },
+    '/channels/accounts': {
+      route: '/channels/accounts',
+      pageKey: 'channelAccount',
+      steps: [
+        { element: '[data-testid="channels-tabs"]', title: t('setup.onboarding.page.channels.title'), description: t('setup.onboarding.page.channels.description'), side: 'bottom', align: 'center' },
+        { element: '.channel-account-manage .el-card', title: t('setup.onboarding.page.channels.accounts'), description: t('setup.onboarding.page.channels.accountsGuide'), side: 'bottom', align: 'center' }
+      ]
+    },
+    // T062：旧 /bridge/token 深链保留，页面入口合并进渠道模块。
     '/channels/identify-codes': {
       route: '/channels/identify-codes',
       pageKey: 'channelIdentifyCode',
@@ -472,7 +488,7 @@ export function createPageTours(t: (key: string) => string): Record<string, Page
         {
           element: '.identify-code-manage .el-card',
           title: t('setup.onboarding.page.common.overview'),
-          description: t('setup.onboarding.page.common.overview'),
+          description: t('setup.onboarding.page.channels.codesGuide'),
           side: 'bottom',
           align: 'center'
         },

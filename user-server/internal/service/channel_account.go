@@ -238,18 +238,17 @@ func (s *channelAccountService) Update(ctx context.Context, tenantID, id uint, i
 		return ErrChannelAccountNotFound
 	}
 	typ := strings.ToLower(strings.TrimSpace(in.Type))
-	if typ == "" {
-		typ = "dm"
-	}
 	updates := map[string]any{
 		"channel_id":           in.ChannelID,
 		"name":                 strings.TrimSpace(in.Name),
 		"remark":               in.Remark,
 		"self_identify_name":   in.SelfIdentifyName,
-		"type":                 typ,
 		"auto_reply_agent_id":  in.AutoReplyAgentID,
 		"lead_mining_agent_id": in.LeadMiningAgentID,
 		"owner_user_ids":       model.JSONStrings(in.OwnerUserIDs),
+	}
+	if typ != "" {
+		updates["type"] = typ
 	}
 	if in.DataScope != "" {
 		updates["data_scope"] = in.DataScope

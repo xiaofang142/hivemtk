@@ -119,12 +119,13 @@ func TestKBChangeModel_TableNames(t *testing.T) {
 	}
 }
 
-// TestKBChangeModel_AuditActionsAreDistinct 审计动作值域：六项、互不重复，
+// TestKBChangeModel_AuditActionsAreDistinct 审计动作值域互不重复，
 // 且每一项都有对应常量（少一项就是留痕少一类，而 AC③ 要的正是"每个动作都有一条"）。
 func TestKBChangeModel_AuditActionsAreDistinct(t *testing.T) {
 	want := []string{
 		KBAuditSubmitted, KBAuditWithdrawn, KBAuditPublished,
 		KBAuditRollback, KBAuditRestored, KBAuditGoverned,
+		KBAuditEmbeddingStatus,
 	}
 	if len(KBChangeAuditActions) != len(want) {
 		t.Fatalf("审计动作值域应为 %d 项，实得 %d：%v", len(want), len(KBChangeAuditActions), KBChangeAuditActions)

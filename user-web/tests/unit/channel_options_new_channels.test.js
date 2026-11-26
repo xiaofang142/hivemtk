@@ -90,7 +90,7 @@ describe('渠道表：2026-11 新增渠道与公众号别名', () => {
 });
 
 // CS-07（2026-11-07）实验渠道等级必须以文字标注，不得仅靠 tag 颜色表达；
-// 个人微信与公众号分格，伴生未交付要在提示面写明。
+// 个人微信与公众号分格，接入服务与会话能力要在提示面写明。
 describe('渠道表：实验等级文字标注（CS-07）', () => {
   const optionByValue = (v) => CHANNEL_OPTIONS.find((o) => o.value === v);
 
@@ -109,9 +109,10 @@ describe('渠道表：实验等级文字标注（CS-07）', () => {
     expect(opt.description).toContain('未经真机校准');
   });
 
-  it('个人微信提示面写明伴生未交付，与公众号区分', () => {
+  it('个人微信说明 SageX 接入和两种会话，与公众号区分', () => {
     const pw = optionByValue('personal_wx');
-    expect(pw.description).toContain('伴生未交付');
+    expect(pw.description).toContain('SageX');
+    expect(pw.description).toContain('单聊与群聊');
     const wx = optionByValue('weixin');
     expect(wx.label).toBe('微信公众号');
     expect(pw.label).toBe('个人微信');

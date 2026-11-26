@@ -6,6 +6,7 @@ import (
 	"gorm.io/gorm"
 
 	"hivemtk-user/internal/model"
+	_db "hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/tenant"
 )
 
@@ -72,15 +73,22 @@ func (r *LeadMiningNotifyRouteRepository) ListByChannelAccount(ctx context.Conte
 	return items, err
 }
 
-// UpdateDeliveryRecords 落送达记录（业务码判成败的结果数组，宪法 IV）。
-func (r *LeadMiningNotifyRouteRepository) UpdateDeliveryRecords(ctx context.Context, routeID, records string) error {
+// AppendDeliveryRecords 追加本次送达结果（业务码判成败，宪法 IV），不再整列覆盖历史。
+// 数据库侧 JSONB 拼接保证并发下不丢记录；COALESCE + 类型判断兼容历史空值/非数组脏数据。
+// 记录保留上限（retention）作为独立任务，避免在此引入复杂的数组切片 SQL。
+func (r *LeadMiningNotifyRouteRepository) AppendDeliveryRecords(ctx context.Context, routeID, records string) error {
 	q, err := leadNotifyScoped(ctx, r.db(ctx))
 	if err != nil {
 		return err
 	}
-	return q.Model(&model.LeadMiningNotifyRoute{}).
+	return _db.EnsureAffected(q.Model(&model.LeadMiningNotifyRoute{}).
 		Where("route_id = ?", routeID).
-		Update("delivery_records", records).Error
+		Update("delivery_records", gorm.Expr(
+			"CASE WHEN jsonb_typeof(COALESCE(delivery_records, '[]'::jsonb)) = 'array' "+
+				"THEN (COALESCE(delivery_records, '[]'::jsonb) || ?::jsonb) "+
+				"ELSE ?::jsonb END",
+			records, records,
+		)))
 }
 
 // leadNotifyScoped 给通知路由查询补显式租户条件：多租户缺租户时 fail-closed，
