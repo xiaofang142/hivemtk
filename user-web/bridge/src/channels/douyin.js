@@ -6,13 +6,23 @@ import { makeSendMediaHook } from '../core/media-inject.js';
 import { SelectorEngine } from '../core/selector-engine.js';
 import { mergeSelectors, customConversationListSelectors } from '../core/selector-ai.js';
 import { FRONTEND_DEFAULT_SENDER_TYPE } from '../core/fallback.js';
-import { readDouyinPeerIdentity, readDouyinDirection, requestDouyinIdentityRefresh, requestDouyinMessageRefresh, isDouyinMessageStale } from './douyin-identity.js';
+import { readDouyinPeerIdentityLoose, readDouyinDirection, requestDouyinIdentityRefresh, requestDouyinMessageRefresh, isDouyinMessageStale } from './douyin-identity.js';
 // M-6 新用户（非关注好友）识别：系统文案命中打标（随消息 extra 上报，不改 system 归类）
 import { applyFollowSignal, followSignalFromSystemText } from '../core/follow-signal.js';
 // M-6 followUser 渠道 hook 工厂（真机未校准，fixture 口径；默认开关关）
 import { createFollowUserHook } from '../core/follow-action.js';
 
 const log = createLogger('douyin', CHANNELS.DOUYIN);
+
+// 可见性判定：真机新版私信面板用 fixed 定位，offsetParent 为 null，
+// 必须用 getClientRects；jsdom 夹具里 getClientRects 恒空，回退 offsetParent。
+function isVisibleElement(el) {
+  if (!el) return false;
+  try {
+    if (typeof el.getClientRects === 'function' && el.getClientRects().length > 0) return true;
+  } catch (_) {  }
+  return el.offsetParent !== null;
+}
 
 // 合并选择器：用户配置优先（chrome.storage），SEL 默认兜底。
 // UI 选择器配置面板修改后，mergeSelectors 自动优先使用用户配置值。
@@ -32,19 +42,19 @@ function mergedSelectors() {
 // 因为平台常用 CSS module 大写类名（如 Unread / ConversationItem 等）。
 // 平台改版导致选择器失效时，通过 UI 配置面板覆盖对应字段即可，无需修改代码。
 export const SEL = {
-  CHAT_LIST: '#island_b69f5, [data-e2e="conversation-list"]',
-  MSG_LIST: '[class*="messageList" i], [data-e2e="chat-msg-list"], [class*="chat-content" i]',
-  MSG_ITEM: '.MessageItemTextcontainer, div[data-e2e="msg-item-content"], [class*="chatMessageItemSelf" i], [class*="chatMessageItemOther" i], [class*="messageMessageItem" i], [class*="chatMessageItem" i], [class*="msg-content" i]',
-  TEXT: '.MessageItemTextcontainer p, [data-e2e="msg-item-content"], [class*="msg-content" i]',
-  INPUT: 'div.messageEditorinputArea.editor-kit-container, div[contenteditable="true"][role="textbox"]',
-  SEND: '[class*="e2e-send-msg-btn" i], button[aria-label*="发送"]',
+  CHAT_LIST: '#island_b69f5, [data-e2e="conversation-list"], .semi-list-items, .ReactVirtualized__Grid.ReactVirtualized__List',
+  MSG_LIST: '[class*="messageList" i], [data-e2e="chat-msg-list"], [class*="chat-content" i], .box-content-qyCVPY',
+  MSG_ITEM: '.MessageItemTextcontainer, div[data-e2e="msg-item-content"], .box-item-message-r0L2l6, .box-item-W0TV01, [class*="chatMessageItemSelf" i], [class*="chatMessageItemOther" i], [class*="messageMessageItem" i], [class*="chatMessageItem" i], [class*="msg-content" i]',
+  TEXT: '.MessageItemTextcontainer p, [data-e2e="msg-item-content"], pre.text-item-message-zUNhSB, [class*="text-item-message" i], [class*="msg-content" i]',
+  INPUT: 'div.messageEditorinputArea.editor-kit-container, div[contenteditable="true"][role="textbox"], .chat-input-nSWBco',
+  SEND: '[class*="e2e-send-msg-btn" i], button[aria-label*="发送"], button.chat-btn',
   MSG_TYPE: '[data-msg-type], [data-message-type]',
   CARD: '[class*="card-container" i], [class*="goods-card" i]',
-  CONV_ITEM: '[data-e2e="conversation-item"], [class*="conversation-item" i], [class*="conv-item" i]',
+  CONV_ITEM: '[data-e2e="conversation-item"], .semi-list-item-body-main, [class*="conversation-item" i], [class*="conv-item" i]',
   SYSTEM: '[class*="system-msg" i], [class*="notice" i], [class*="divider" i], [class*="time-stamp" i], [class*="recalled" i]',
-  PEER_NAME: '[data-e2e="chat-header-title"], [class*="chat-header" i] [class*="title" i]',
+  PEER_NAME: '[data-e2e="chat-header-title"], [class*="chat-header" i] [class*="title" i], .item-header-name-eukBdz',
   UNREAD: '[class*="unread" i], [class*="red-dot" i], [data-unread="1"]',
-  EDITOR: 'div.messageEditorinputArea.editor-kit-container, div[contenteditable="true"][role="textbox"]',
+  EDITOR: 'div.messageEditorinputArea.editor-kit-container, div[contenteditable="true"][role="textbox"], .chat-input-nSWBco',
 };
 
 // 抖音输入框（strict）：优先用户配置选择器 → SEL 默认
@@ -390,11 +400,17 @@ function getPeerName() {
     if (t && !/私信|消息|抖音|聊天/i.test(t)) return t;
   }
   // 3) 活动会话列表项里的昵称元素
-  const active = qsa(
-    '#island_b69f5 [class*="curConversation"], [data-e2e="conversation-list"] [class*="curConversation"], [class*="conversation-list"] [class*="curConversation"], [class*="ConversationList"] [class*="curConversation"], [aria-selected="true"], [class*="curConversation"]'
-  ).find((el) => el.offsetParent !== null);
+  let active = qsa(
+    '#island_b69f5 [class*="curConversation"], [data-e2e="conversation-list"] [class*="curConversation"], [class*="conversation-list"] [class*="curConversation"], [class*="ConversationList"] [class*="curConversation"], [aria-selected="true"], [class*="curConversation"], .semi-list-item.active-BApUO3'
+  ).find(isVisibleElement);
+  if (!active) {
+    active = qsa('.semi-list-item-body-main').find((el) => {
+      const li = el.closest('li');
+      return isVisibleElement(el) && li && (li.classList.contains('active-BApUO3') || li.getAttribute('aria-selected') === 'true');
+    }) || null;
+  }
   if (active) {
-    const nameEl = active.querySelector('.conversationConversationItemtitle') || active.querySelector(
+    const nameEl = active.querySelector('.item-header-name-eukBdz, .conversationConversationItemtitle') || active.querySelector(
       '[class*="title" i], [class*="Title" i], [class*="name" i], [class*="nickname" i], [class*="Nickname" i]'
     );
     // sanitizePeerName 剥离会话项里的时间戳/状态徽章等易变后缀
@@ -421,9 +437,15 @@ function getPeerAvatar() {
     } catch (_) {  }
   }
   try {
-    const active = qsa(
-      '#island_b69f5 [class*="curConversation"], [data-e2e="conversation-list"] [class*="curConversation"], [class*="conversation-list"] [class*="curConversation"], [class*="ConversationList"] [class*="curConversation"], [aria-selected="true"], [class*="curConversation"]'
-    ).find((el) => el.offsetParent !== null);
+    let active = qsa(
+      '#island_b69f5 [class*="curConversation"], [data-e2e="conversation-list"] [class*="curConversation"], [class*="conversation-list"] [class*="curConversation"], [class*="ConversationList"] [class*="curConversation"], [aria-selected="true"], [class*="curConversation"], .semi-list-item.active-BApUO3'
+    ).find(isVisibleElement);
+    if (!active) {
+      active = qsa('.semi-list-item-body-main').find((el) => {
+        const li = el.closest('li');
+        return isVisibleElement(el) && li && (li.classList.contains('active-BApUO3') || li.getAttribute('aria-selected') === 'true');
+      }) || null;
+    }
     const u = avatarImgUrl(active && active.querySelector('img'));
     if (u) return u;
   } catch (_) {  }
@@ -471,9 +493,17 @@ function getConversationId() {
   if (/[?&]conversation_id=/.test(location.href)) {
     return new URLSearchParams(location.search).get('conversation_id');
   }
-  const active = qsa(
-    '#island_b69f5 [class*="curConversation"], [data-e2e="conversation-list"] [class*="curConversation"], [class*="conversation-list"] [class*="curConversation"], [class*="ConversationList"] [class*="curConversation"], [class*="conversation-item"][class*="curConversation"], [class*="ConversationItem"][class*="curConversation"], [aria-selected="true"], [class*="curConversation"]'
-  ).find((el) => el.offsetParent !== null);
+  const visible = isVisibleElement;
+  let active = qsa(
+    '#island_b69f5 [class*="curConversation"], [data-e2e="conversation-list"] [class*="curConversation"], [class*="conversation-list"] [class*="curConversation"], [class*="ConversationList"] [class*="curConversation"], [class*="conversation-item"][class*="curConversation"], [class*="ConversationItem"][class*="curConversation"], [aria-selected="true"], [class*="curConversation"], .semi-list-item.active-BApUO3'
+  ).find(visible);
+  if (!active) {
+    // 新版面板：活动标记在外层 li 上，内层 body 才是身份证据载体。
+    active = qsa('.semi-list-item-body-main').find((el) => {
+      const li = el.closest('li');
+      return visible(el) && li && (li.classList.contains('active-BApUO3') || li.getAttribute('aria-selected') === 'true');
+    }) || null;
+  }
   // ConversationShortID 优先（与后端 webhook conversation_id 格式一致），
   // 避免 URL /chat/<sec_uid> 与列表 /user/<sec_uid> 链接格式不一致导致 openConversation 错配
   const dataConv = active?.getAttribute('data-conversation-id') || active?.getAttribute('data-conv-id') || active?.getAttribute('data-id');
@@ -488,9 +518,9 @@ function getConversationId() {
   // 兼容 /user/<数字id> 与 /user/MS4w...（token 形式）；命中后切换会话会重新回填历史
   const m = link?.getAttribute('href')?.match(/\/user\/([^/?#]+)/);
   if (m && m[1]) return m[1];
-  const peer = readDouyinPeerIdentity(active);
-  if (peer) return peer;
-  return null;
+  // 只读 MAIN 身份读器写入的证据属性；证据缺失时宁可返回 null，
+  // 绝不从裸昵称派生会话身份（安全测试与跨会话防串台口径）。
+  return readDouyinPeerIdentityLoose(active) || null;
 }
 
 // 会话列表项（含联系人昵称）不应被当成消息气泡。
@@ -555,7 +585,7 @@ function getConversationList() {
   }
   if (!items.length) {
     items = qsa(
-      '#island_b69f5 li, [data-e2e="conversation-item"], [class*="conversation-item"], [data-e2e="conversation-list-item"], [class*="conversationListItem"], [class*="ConversationListItem"]'
+      '#island_b69f5 li, [data-e2e="conversation-item"], .semi-list-item-body-main, [class*="conversation-item"], [data-e2e="conversation-list-item"], [class*="conversationListItem"], [class*="ConversationListItem"]'
     );
   }
   if (!items.length) return [];
@@ -575,11 +605,13 @@ function getConversationList() {
     }
     // 昵称：会话项内的昵称/名称元素（sanitizePeerName 剥离时间戳/状态后缀，
     // 否则同会话不同时刻的 name 不同 → id 不同 → 重复枚举/下行错配）
-    const nameEl = item.querySelector('.conversationConversationItemtitle') || item.querySelector(
+    const nameEl = item.querySelector('.item-header-name-eukBdz, .conversationConversationItemtitle') || item.querySelector(
       '[class*="name" i], [class*="nickname" i], [class*="Nickname" i], [class*="title" i], [class*="Title" i]'
     );
     const name = sanitizePeerName(nameEl ? cleanText(nameEl) : '');
-    if (!id) id = readDouyinPeerIdentity(item);
+    // 会话身份只能来自 MAIN 身份读器写下的 evidence 属性；昵称仅作展示。
+    // 新版面板无 sec_uid 时读器会以 conv:<规范化昵称> 落证据，仍不在此处猜测。
+    if (!id) id = readDouyinPeerIdentityLoose(item);
     if (!id) continue;
     if (ids.has(id)) continue;
     ids.add(id);
@@ -623,7 +655,20 @@ const hooks = {
   },
   selectors: SEL,
   getMessageListRoot() {
-    const root = qs(SEL.MSG_LIST) || closestScrollable(qsa(SEL.MSG_ITEM)[0]);
+    // 关键：必须用用户配置的选择器（mergedSelectors）而不是 SEL 默认值。
+    // 2026-11-26 新版抖音私信面板把消息容器改成 .box-content-qyCVPY，
+    // 默认 [class*="messageList"] 完全不匹配 → _backfill 用陈旧 root 把新会话
+    // 所有消息判为归属不符而丢光（BD 12,0,0,12）。
+    const m = mergedSelectors();
+    const listSel = (m.listSelectors || []).join(',');
+    const itemSel = (m.itemSelectors || []).join(',');
+    const visible = isVisibleElement;
+    const withItem = (sel, itemSelector) => Array.from(qsa(sel)).find((el) => visible(el) && el.querySelector(itemSelector));
+    const root = withItem(listSel, itemSel)
+      || withItem(SEL.MSG_LIST, SEL.MSG_ITEM)
+      || Array.from(qsa(listSel || SEL.MSG_LIST)).find(visible)
+      || qs(listSel || SEL.MSG_LIST)
+      || closestScrollable(qsa(itemSel || SEL.MSG_ITEM)[0]);
     if (root) return root;
     // 兜底：IM 主面板（输入框/会话列表的最近公共祖先）
     // /chat 专用路由为双栏（左会话列表 + 右消息线程）：editor 所在可滚动祖先

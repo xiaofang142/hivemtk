@@ -1018,11 +1018,27 @@ export class BaseAdapter {
     if (typeof target.el.scrollIntoView === 'function') {
       try { target.el.scrollIntoView({ block: 'nearest' }); } catch (_) {  }
     }
+    // 平台改版后会话项内部结构多变：真正可点的是外层 li / 昵称节点 / 链接，
+    // 而 getConversationList() 暴露的 el 可能只是内层 body。逐个尝试并在每次点击后
+    // 复核活动会话，命中即停；全部失败才判 notFound，避免"点错元素→整轮同步作废"。
+    const clickTargets = [target.el];
     try {
-      if (target.el.tagName === 'A' || target.el.tagName === 'BUTTON') target.el.click();
-      else simulateRealClick(target.el);
+      const li = target.el.closest && target.el.closest('li, [role="listitem"]');
+      if (li && !clickTargets.includes(li)) clickTargets.push(li);
+      const inner = target.el.querySelector && target.el.querySelector(
+        'a[href], button, [role="button"], [class*="header-name" i], [class*="nickname" i], [class*="name" i], [class*="title" i]'
+      );
+      if (inner && !clickTargets.includes(inner)) clickTargets.push(inner);
     } catch (_) {  }
-    const opened = await this._waitForActiveConversation(cid, prevCid, waitActiveMs, useExact);
+    let opened = null;
+    for (const el of clickTargets) {
+      try {
+        if (el.tagName === 'A' || el.tagName === 'BUTTON') el.click();
+        else simulateRealClick(el);
+      } catch (_) {  }
+      opened = await this._waitForActiveConversation(cid, prevCid, Math.min(waitActiveMs, 800), useExact);
+      if (opened) break;
+    }
     if (!opened) {
       this.log.warn(`会话 ${cid} 点击后未打开线程`);
       return null;
@@ -1607,7 +1623,11 @@ export class BaseAdapter {
     const batch = []; 
     const occ = new Map();
     const items = this.getMessageItems();
-    const activeRoot = root || this.getMessageRoot();
+    // 平台改版后一个页面可能并存多个消息容器（旧会话残留节点仍在 DOM 里）。
+    // 调用方传入的 root 是会话切换瞬间抓到的，可能已经过期；必须以当前可见的
+    // getMessageRoot() 为准，否则会把新会话的所有消息全部判为「不属于当前线程」
+    // 而丢光回填（2026-11-26 抖音新版私信面板实证：BD 12,0,0,12）。
+    const activeRoot = this.getMessageRoot() || root;
     const cid = this.getConversationId();
     for (const item of items) {
       const parsed = this.parseMessageItem(item);

@@ -34,6 +34,10 @@ if (manifest.version !== version) {
 // 发 1.0.3 时又只改了标题、正文还是上一版内容 —— 两次都把变更说明说错。
 // 现在发版前必须为当前 package.json version 补一节，漏了 npm run release 直接红。
 const CHANGELOGS = {
+  '1.3.11': `- 抖音私信面板 2026-11-26 改版适配：会话行/气泡新 class 进入默认选择器，
+  MAIN 身份读器在新面板写入 conv:<规范化昵称> 证据（无 sec_uid 时仍可归属当前会话），
+  消息列表根按用户配置选择器取可见容器（修复回填 root 陈旧导致历史全部丢弃），
+  换会话改为多候选点击+复核；四渠道生产 tenant18 实测抖音/小红书入站落库。`,
   '1.3.10': `- 安全脱敏（TA-07）：HTTP ingest 常规日志不再输出请求体正文与逐条消息内容（改对账元数据 body_keys/size/content_len）——买家会话内容不进日志`,
   '1.3.9': `- 二次审核批：五渠道全链补齐（channelcaps/capregistry/ENUM v3.98+078/ChannelType/channelTypeOf/词表/技能/MD 白名单/别名表）+ popup 描述含店铺骨架渠道`,
   '1.3.8': `- 电商店铺五渠道骨架（CH-15/18/19/28/35）：taobao/douyin_shop/kuaishou_shop/shopee/walmart_us 服务端全链注册（Experimental），适配器 fail-closed（选择器零证据拒启拒发），真机校准后开闸；Shopee 八区路由`,
