@@ -57,8 +57,14 @@ type LeadMiningNotifyRoute struct {
 	DeletedAt     *time.Time `gorm:"index" json:"deleted_at,omitempty"`
 
 	// T042 通知路由扩展：账号维护人 → 渠道维护人 → 租户默认的三级回退。
-	// Scope: account/channel/tenant；ChannelAccountID 关联渠道账号主键；
-	// NotifyUserIDs 为接收人（系统用户 id 字符串）；NotifyTypes 为站内/TG/飞书；
+	// Scope: account/channel/tenant；ChannelAccountID/Channel 只是路由作用域键
+	// （渠道账号来自 channel_accounts 下拉源），不是智能体绑定。
+	// T05 语义契约：NotifyUserIDs 是本系统员工（system_users.id 的字符串形式），
+	// 是唯一收件人来源；NotifyTypes 为站内/TG/飞书投递通道；Target 是 TG/飞书
+	// 机器人或群聊投递目标（accountID:chatID），也不是智能体。
+	// 本表与客服智能体（ChannelAccount.AutoReplyAgentID）/线索智能体
+	// （ChannelAccount.LeadMiningAgentID、lead_mining_agents 注册表）完全无关，
+	// 禁止把线索通知配置改成智能体绑定或混用两类语义。
 	// DeliveryRecords 是每次送达的业务码结果数组（宪法 IV：判业务码不判 HTTP 码）。
 	ChannelAccountID uint        `gorm:"column:channel_account_id;type:bigint;not null;default:0;index" json:"channel_account_id"`
 	Scope            string      `gorm:"column:scope;type:varchar(16);not null;default:'tenant'" json:"scope"`

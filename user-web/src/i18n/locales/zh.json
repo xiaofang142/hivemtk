@@ -1,4 +1,15 @@
 {
+  "leadNotifyConfig": {
+    "pageSubSystem": "系统配置：命中线索后通知本系统员工（收件人是员工/系统用户，非客服智能体、非线索智能体）",
+    "recipientCol": "接收员工",
+    "recipientLabel": "接收员工",
+    "recipientPlaceholder": "选择本系统员工（可多选）",
+    "recipientTip": "仅本系统员工（系统用户）可作为收件人；与客服智能体、线索智能体无关",
+    "deliveryTargetLabel": "投递目标（TG/飞书）",
+    "deliveryTargetPlaceholder": "TG/飞书机器人或群聊：accountID:chatID[:receiveIDType]（非智能体）",
+    "formNotice": "本配置属于系统通知设置：命中线索后通知本系统员工。客服智能体/线索智能体在「线索配置」中维护，与本配置无关。",
+    "employeeLoadFail": "加载员工列表失败"
+  },
   "channels": {
     "legacyBindings": "历史接入绑定",
     "legacyBindingsHint": "这些记录保留已有账号和识别码关联。SageX 为 QQ、个人微信提供接入，消息按实际来源归入对应渠道。",

@@ -1,4 +1,15 @@
 {
+  "leadNotifyConfig": {
+    "pageSubSystem": "System configuration: notify employees of this system when a lead is found (recipients are staff/system users, not customer-service or lead agents)",
+    "recipientCol": "Recipient staff",
+    "recipientLabel": "Recipient staff",
+    "recipientPlaceholder": "Select system employees (multiple)",
+    "recipientTip": "Only system employees (system users) can be recipients; unrelated to customer-service or lead agents",
+    "deliveryTargetLabel": "Delivery target (TG/Feishu)",
+    "deliveryTargetPlaceholder": "TG/Feishu bot or chat: accountID:chatID[:receiveIDType] (not an agent)",
+    "formNotice": "This is a system notification setting: notify system employees when a lead is found. Customer-service/lead agents are maintained under Lead Config and are unrelated.",
+    "employeeLoadFail": "Failed to load employee list"
+  },
   "channels": {
     "legacyBindings": "Legacy connection bindings",
     "legacyBindingsHint": "These records retain existing account and credential links. SageX connects QQ and personal WeChat; messages use their actual source channel.",

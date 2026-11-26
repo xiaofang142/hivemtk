@@ -5,6 +5,7 @@
         <h2 class="page-title">
           线索通知路由
         </h2>
+        <span class="page-sub">{{ t('leadNotifyConfig.pageSubSystem') }}</span>
         <span class="page-sub">优先级：账号维护人 → 渠道维护人 → 租户默认；送达记录按平台业务码判定</span>
       </div>
       <el-button
@@ -56,11 +57,11 @@
           </template>
         </el-table-column>
         <el-table-column
-          label="通知人"
+          :label="t('leadNotifyConfig.recipientCol')"
           min-width="140"
         >
           <template #default="{ row }">
-            {{ join(row.notify_user_ids) }}
+            {{ recipients(row.notify_user_ids) }}
           </template>
         </el-table-column>
         <el-table-column
@@ -73,7 +74,7 @@
         </el-table-column>
         <el-table-column
           prop="target"
-          label="外部目标"
+          :label="t('leadNotifyConfig.deliveryTargetLabel')"
           min-width="160"
           show-overflow-tooltip
         />
@@ -99,6 +100,13 @@
       title="新增通知路由"
       width="560px"
     >
+      <el-alert
+        :title="t('leadNotifyConfig.formNotice')"
+        type="info"
+        :closable="false"
+        show-icon
+        class="mb12"
+      />
       <el-form
         label-width="110px"
         @submit.prevent
@@ -131,11 +139,25 @@
             placeholder="channel 层级必填"
           />
         </el-form-item>
-        <el-form-item label="通知人ID">
-          <el-input
+        <el-form-item :label="t('leadNotifyConfig.recipientLabel')">
+          <el-select
             v-model="form.notify_user_ids"
-            placeholder="多个用逗号分隔"
-          />
+            multiple
+            filterable
+            clearable
+            :placeholder="t('leadNotifyConfig.recipientPlaceholder')"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="opt in employeeOptions"
+              :key="opt.value"
+              :label="opt.label"
+              :value="opt.value"
+            />
+          </el-select>
+          <div class="field-tip">
+            {{ t('leadNotifyConfig.recipientTip') }}
+          </div>
         </el-form-item>
         <el-form-item label="通知通道">
           <el-checkbox-group v-model="form.notify_types">
@@ -150,10 +172,10 @@
             </el-checkbox>
           </el-checkbox-group>
         </el-form-item>
-        <el-form-item label="外部目标">
+        <el-form-item :label="t('leadNotifyConfig.deliveryTargetLabel')">
           <el-input
             v-model="form.target"
-            placeholder="TG/飞书：accountID:chatID[:receiveIDType]"
+            :placeholder="t('leadNotifyConfig.deliveryTargetPlaceholder')"
           />
         </el-form-item>
         <el-form-item label="优先级">
@@ -180,22 +202,33 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { leadsApi } from '@/api/leads'
+import { listSystemUsers } from '@/api/systemUser'
 import ChannelSelect from '@/components/ChannelSelect.vue'
 import ChannelAccountSelect from '@/components/ChannelAccountSelect.vue'
 import { useChannelCatalogStore } from '@/stores/channelCatalog'
 
+// T05：线索通知配置 = 系统配置，收件人是本系统员工（system_users.id）。
+// 员工下拉来自 /api/system/users，不来自客服/线索智能体注册表。
+const { t } = useI18n()
 const catalog = useChannelCatalogStore()
 const loading = ref(false)
 const saving = ref(false)
 const rows = ref([])
+const employees = ref([])
 const dialogVisible = ref(false)
 const form = reactive({
   scope: 'account', channel_account_id: 0, channel: '',
-  notify_user_ids: '', notify_types: ['in_app'], target: '', priority: 0
+  notify_user_ids: [], notify_types: ['in_app'], target: '', priority: 0
 })
+
+const employeeOptions = computed(() => employees.value.map((u) => ({
+  value: String(u.id),
+  label: `${u.real_name || u.username || '员工'}（#${u.id}）`
+})))
 
 function scopeLabel(scope) {
   return { account: '账号', channel: '渠道', tenant: '租户' }[scope] || '旧路由'
@@ -205,14 +238,27 @@ function join(list) {
   return Array.isArray(list) ? list.join('、') : ''
 }
 
-function split(text) {
-  return String(text || '').split(/[,，]/).map((s) => s.trim()).filter(Boolean)
+function recipients(ids) {
+  if (!Array.isArray(ids)) return ''
+  const labels = new Map(employeeOptions.value.map((o) => [o.value, o.label]))
+  // 历史自由文本/不在当前员工列表的 ID 原样回显，避免旧数据丢失（T05 兼容口径）。
+  return ids.map((id) => labels.get(String(id)) || String(id)).join('、')
+}
+
+async function loadEmployees() {
+  try {
+    const res = await listSystemUsers({ page: 1, size: 200 })
+    const list = res?.list || res?.data?.list || []
+    employees.value = Array.isArray(list) ? list : []
+  } catch (e) {
+    ElMessage.error(e?.message || t('leadNotifyConfig.employeeLoadFail'))
+  }
 }
 
 function emptyForm() {
   Object.assign(form, {
     scope: 'account', channel_account_id: 0, channel: '',
-    notify_user_ids: '', notify_types: ['in_app'], target: '', priority: 0
+    notify_user_ids: [], notify_types: ['in_app'], target: '', priority: 0
   })
 }
 
@@ -239,7 +285,7 @@ async function save() {
     await leadsApi.createNotifyRoute({
       scope: form.scope, channel_account_id: form.channel_account_id,
       channel: form.channel, account_id: form.channel ? '' : String(form.channel_account_id || ''),
-      notify_user_ids: split(form.notify_user_ids), notify_types: form.notify_types,
+      notify_user_ids: form.notify_user_ids, notify_types: form.notify_types,
       target: form.target, priority: form.priority, enabled: true
     })
     ElMessage.success('保存成功')
@@ -265,6 +311,7 @@ async function remove(row) {
 
 onMounted(async () => {
   catalog.ensure()
+  await loadEmployees()
   await fetchList()
 })
 </script>
@@ -273,5 +320,7 @@ onMounted(async () => {
 .leads-page { padding: 16px; }
 .page-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .page-title { margin: 0; font-size: 18px; }
-.page-sub { color: #909399; font-size: 12px; }
+.page-sub { display: block; color: #909399; font-size: 12px; line-height: 1.6; }
+.field-tip { color: #909399; font-size: 12px; line-height: 1.4; margin-top: 4px; }
+.mb12 { margin-bottom: 12px; }
 </style>
