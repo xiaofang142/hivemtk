@@ -20,6 +20,11 @@ var (
 	ErrChannelIdentityAmbiguous = errors.New("渠道身份歧义，拒绝解析")
 	// ErrChannelIdentityUnresolved 身份信息不足，无法自证。
 	ErrChannelIdentityUnresolved = errors.New("渠道身份无法自证")
+	// ErrChannelIdentityInvalid 已命中的主数据不完整或不一致，不能按未迁移回退。
+	ErrChannelIdentityInvalid = errors.New("渠道身份主数据不一致")
+	// ErrChannelIdentityLegacyUnmatched 表示仓储可用且查询成功，但该引用未命中
+	// 新渠道账号主数据；只有这一种“明确未迁移”结果允许模块闸门兼容放行。
+	ErrChannelIdentityLegacyUnmatched = errors.New("渠道账号未命中新主数据")
 )
 
 // ResolvedChannelAccount 识别码解析结果（租户 + 账号 + 渠道）。
@@ -67,35 +72,57 @@ func NewChannelResolverWithRepos(acc repository.ChannelAccountRepository, ch rep
 
 // ResolveByIdentifyCode 按识别码解析租户/账号。
 func (r *ChannelResolver) ResolveByIdentifyCode(ctx context.Context, code string) (*ResolvedChannelAccount, error) {
-	if r == nil || r.accountRepo == nil {
-		return nil, ErrChannelIdentityUnresolved
-	}
+	out, _, err := r.resolveByIdentifyCode(ctx, code)
+	return out, err
+}
+
+func (r *ChannelResolver) resolveByIdentifyCode(ctx context.Context, code string) (*ResolvedChannelAccount, *model.Channel, error) {
 	code = strings.TrimSpace(code)
 	if code == "" {
-		return nil, ErrChannelIdentityUnresolved
+		return nil, nil, ErrChannelIdentityUnresolved
+	}
+	if r == nil || r.accountRepo == nil || !r.accountRepo.Available() {
+		return nil, nil, repository.ErrChannelStoreUnavailable
 	}
 	acc, err := r.accountRepo.GetByIdentifyCode(ctx, code)
 	if err != nil {
 		if errors.Is(err, repository.ErrAmbiguousIdentifyCode) {
-			return nil, ErrChannelIdentityAmbiguous
+			return nil, nil, ErrChannelIdentityAmbiguous
 		}
-		return nil, err
+		return nil, nil, err
 	}
-	if acc == nil || acc.TenantID == 0 || acc.ID == 0 {
-		return nil, ErrChannelIdentityUnresolved
+	if acc == nil {
+		return nil, nil, ErrChannelIdentityUnresolved
+	}
+	return r.resolveAccountChannel(ctx, acc)
+}
+
+// resolveAccountChannel 对所有账号入口复用同一份渠道、租户及主键校验。
+func (r *ChannelResolver) resolveAccountChannel(ctx context.Context, acc *model.ChannelAccount) (*ResolvedChannelAccount, *model.Channel, error) {
+	if acc == nil || acc.ID == 0 || acc.TenantID == 0 || acc.ChannelID == 0 {
+		return nil, nil, ErrChannelIdentityInvalid
+	}
+	if tid, bound := tenant.FromContext(ctx); bound && tid != 0 && tid != acc.TenantID {
+		return nil, nil, ErrChannelIdentityAmbiguous
+	}
+	if r.channelRepo == nil || !r.channelRepo.Available() {
+		return nil, nil, repository.ErrChannelStoreUnavailable
+	}
+	ch, err := r.channelRepo.GetByID(ctx, acc.TenantID, acc.ChannelID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if ch == nil || ch.ID != acc.ChannelID || ch.TenantID != acc.TenantID || strings.TrimSpace(ch.Code) == "" {
+		return nil, nil, ErrChannelIdentityInvalid
 	}
 	out := &ResolvedChannelAccount{
 		TenantID:     acc.TenantID,
 		AccountID:    acc.ID,
 		ChannelID:    acc.ChannelID,
+		ChannelCode:  ch.Code,
 		IdentifyCode: acc.IdentifyCode,
 	}
-	if r.channelRepo != nil && r.channelRepo.Available() {
-		if ch, err := r.channelRepo.GetByID(ctx, acc.TenantID, acc.ChannelID); err == nil && ch != nil {
-			out.ChannelCode = ch.Code
-		}
-	}
-	return out, nil
+	return out, ch, nil
 }
 
 // ResolveByAccountRef 把上报消息里的账号标识解析为渠道账号数值 ID。
@@ -108,38 +135,32 @@ func (r *ChannelResolver) ResolveByAccountRef(ctx context.Context, platform, ref
 	if r == nil || r.accountRepo == nil || ref == "" {
 		return nil, ErrChannelIdentityUnresolved
 	}
-	if resolved, err := r.ResolveByIdentifyCode(ctx, ref); err == nil && resolved != nil {
-		return resolved, nil
-	}
-
 	tid, ok := tenant.FromContext(ctx)
 	if !ok || tid == 0 {
 		if tenant.IsMultiTenant() {
-			return nil, ErrChannelIdentityUnresolved
+			return nil, ErrChannelTenantUnresolved
 		}
 		tid = tenant.DefaultTenantID
 	}
+	ctx = tenant.WithTenantID(ctx, tid)
 	platform = strings.ToLower(strings.TrimSpace(platform))
-	resolveOut := func(acc *model.ChannelAccount) *ResolvedChannelAccount {
-		out := &ResolvedChannelAccount{
-			TenantID: acc.TenantID, AccountID: acc.ID, ChannelID: acc.ChannelID,
-			ChannelCode: platform, IdentifyCode: acc.IdentifyCode,
-		}
-		if r.channelRepo != nil && r.channelRepo.Available() {
-			if ch, chErr := r.channelRepo.GetByID(ctx, acc.TenantID, acc.ChannelID); chErr == nil && ch != nil {
-				out.ChannelCode = ch.Code
-			}
-		}
-		return out
-	}
-	channelMatches := func(acc *model.ChannelAccount) bool {
-		if platform == "" || r.channelRepo == nil || !r.channelRepo.Available() {
+	channelMatches := func(ch *model.Channel) bool {
+		if platform == "" {
 			return true
 		}
-		ch, chErr := r.channelRepo.GetByID(ctx, acc.TenantID, acc.ChannelID)
-		return chErr == nil && ch != nil &&
-			(strings.EqualFold(strings.TrimSpace(ch.Code), platform) ||
-				strings.EqualFold(strings.TrimSpace(ch.Type), platform))
+		return strings.EqualFold(strings.TrimSpace(ch.Code), platform) ||
+			strings.EqualFold(strings.TrimSpace(ch.Type), platform)
+	}
+	resolved, ch, identifyErr := r.resolveByIdentifyCode(ctx, ref)
+	if identifyErr == nil {
+		if !channelMatches(ch) {
+			return nil, ErrChannelIdentityUnresolved
+		}
+		return resolved, nil
+	}
+	if !errors.Is(identifyErr, ErrChannelIdentityUnresolved) {
+		// 只有健康未命中才允许 ID/名称回退；已命中但不完整的身份与故障均拒绝。
+		return nil, identifyErr
 	}
 
 	if numericID, parseErr := strconv.ParseUint(ref, 10, 64); parseErr == nil && numericID > 0 {
@@ -147,10 +168,20 @@ func (r *ChannelResolver) ResolveByAccountRef(ctx context.Context, platform, ref
 		if getErr != nil {
 			return nil, getErr
 		}
-		if acc == nil || !channelMatches(acc) {
+		if acc == nil {
+			return nil, ErrChannelIdentityLegacyUnmatched
+		}
+		if acc.ID != uint(numericID) {
+			return nil, ErrChannelIdentityInvalid
+		}
+		out, ch, matchErr := r.resolveAccountChannel(ctx, acc)
+		if matchErr != nil {
+			return nil, matchErr
+		}
+		if !channelMatches(ch) {
 			return nil, ErrChannelIdentityUnresolved
 		}
-		return resolveOut(acc), nil
+		return out, nil
 	}
 
 	rows, err := listChannelAccounts(ctx, r.accountRepo, repository.ChannelAccountListOptions{
@@ -159,14 +190,31 @@ func (r *ChannelResolver) ResolveByAccountRef(ctx context.Context, platform, ref
 	if err != nil {
 		return nil, err
 	}
-	var matches []*model.ChannelAccount
+	// 固定上限的结果不能证明没有匹配，也不能证明当前匹配唯一。
+	if len(rows) >= 50 {
+		return nil, ErrChannelIdentityUnresolved
+	}
+	var identityMatches []*model.ChannelAccount
 	for i := range rows {
 		acc := &rows[i]
-		if (!strings.EqualFold(strings.TrimSpace(acc.Name), ref) &&
-			!strings.EqualFold(strings.TrimSpace(acc.IdentifyCode), ref)) || !channelMatches(acc) {
+		if !strings.EqualFold(strings.TrimSpace(acc.Name), ref) &&
+			!strings.EqualFold(strings.TrimSpace(acc.IdentifyCode), ref) {
 			continue
 		}
-		matches = append(matches, acc)
+		identityMatches = append(identityMatches, acc)
+	}
+	if len(identityMatches) == 0 {
+		return nil, ErrChannelIdentityLegacyUnmatched
+	}
+	var matches []*ResolvedChannelAccount
+	for _, acc := range identityMatches {
+		out, ch, matchErr := r.resolveAccountChannel(ctx, acc)
+		if matchErr != nil {
+			return nil, matchErr
+		}
+		if channelMatches(ch) {
+			matches = append(matches, out)
+		}
 	}
 	if len(matches) == 0 {
 		return nil, ErrChannelIdentityUnresolved
@@ -174,7 +222,7 @@ func (r *ChannelResolver) ResolveByAccountRef(ctx context.Context, platform, ref
 	if len(matches) > 1 {
 		return nil, ErrChannelIdentityAmbiguous
 	}
-	return resolveOut(matches[0]), nil
+	return matches[0], nil
 }
 
 // ResolveTenant 渠道回调租户解析入口。webhook.ResolveTenantByChannelAccount 统一委托本方法。
@@ -194,11 +242,11 @@ func (r *ChannelResolver) ResolveTenant(ctx context.Context, channel WebhookChan
 			}
 			return resolved.TenantID, nil
 		}
-		if errors.Is(err, ErrChannelIdentityAmbiguous) {
+		if err != nil && !errors.Is(err, ErrChannelIdentityUnresolved) {
 			return 0, err
 		}
 	}
-	// ② 已绑定租户仅在识别码不可用时作为 legacy 自证输入；path/query 冲突由
+	// ② 已绑定租户仅在识别码健康未命中时作为 legacy 自证输入；path/query 冲突由
 	//    ResolveTrusted 统一复核。这里只返回租户，供旧 webhook 链继续工作。
 	if tid, bound := tenant.FromContext(ctx); bound && tid != 0 {
 		return tid, nil
@@ -234,7 +282,7 @@ func (r *ChannelResolver) ResolveTrusted(ctx context.Context, identifyCode, plat
 	if r == nil || r.accountRepo == nil || strings.TrimSpace(identifyCode) == "" {
 		return nil, ErrChannelIdentityUnresolved
 	}
-	resolved, err := r.ResolveByIdentifyCode(ctx, identifyCode)
+	resolved, ch, err := r.resolveByIdentifyCode(ctx, identifyCode)
 	if err != nil {
 		if errors.Is(err, repository.ErrAmbiguousIdentifyCode) {
 			return nil, ErrChannelIdentityAmbiguous
@@ -257,21 +305,15 @@ func (r *ChannelResolver) ResolveTrusted(ctx context.Context, identifyCode, plat
 				return nil, ErrChannelIdentityAmbiguous
 			}
 		} else if ref != resolved.IdentifyCode {
-			other, oerr := r.ResolveByAccountRef(ctx, platform, ref)
+			other, oerr := r.ResolveByAccountRef(tenant.WithTenantID(ctx, resolved.TenantID), platform, ref)
 			if oerr != nil || other == nil || other.AccountID != resolved.AccountID {
 				return nil, ErrChannelIdentityAmbiguous
 			}
 		}
 	}
 	// 渠道/账号状态：fail-closed（不重建 CH-05 服务，直接查仓储行状态）。
-	if r.channelRepo != nil && r.channelRepo.Available() {
-		ch, chErr := r.channelRepo.GetByID(ctx, resolved.TenantID, resolved.ChannelID)
-		if chErr != nil {
-			return nil, chErr
-		}
-		if ch == nil || !ch.Enabled {
-			return nil, ErrChannelDisabled
-		}
+	if !ch.Enabled {
+		return nil, ErrChannelDisabled
 	}
 	acc, accErr := r.accountRepo.GetByID(ctx, resolved.TenantID, resolved.AccountID)
 	if accErr != nil {
@@ -279,6 +321,9 @@ func (r *ChannelResolver) ResolveTrusted(ctx context.Context, identifyCode, plat
 	}
 	if acc == nil || acc.Status != 1 {
 		return nil, ErrChannelAccountDisabled
+	}
+	if acc.ID != resolved.AccountID || acc.TenantID != resolved.TenantID || acc.ChannelID != resolved.ChannelID {
+		return nil, ErrChannelIdentityInvalid
 	}
 	return resolved, nil
 }

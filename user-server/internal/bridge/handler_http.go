@@ -542,8 +542,6 @@ func (h *BridgeIngestHandler) HandleHTTPIngest(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, HTTPIngestResponse{OK: false, Reason: err.Error()})
 		return
 	}
-	// T015：只有在结构、身份与 scope 全部通过后才允许进入归一化投递，拒绝路径零写入。
-	h.deliverInbound(ctx0, channelNorm, accountID, conversationID, req.Messages)
 	maxMessages := runtimeIngestMaxMessages(ctx0)
 	if len(req.Messages) > maxMessages {
 		logger.Ctx(ctx0).Warn().
@@ -555,6 +553,8 @@ func (h *BridgeIngestHandler) HandleHTTPIngest(c *gin.Context) {
 			Msg("[Bridge HTTP] 消息数超过上限，截断处理（剩余由下轮巡检补齐）")
 		req.Messages = req.Messages[:maxMessages]
 	}
+	// 完整批次 scope 校验通过后，所有消费者只接收截断后的消息。
+	h.deliverInbound(ctx0, channelNorm, accountID, conversationID, req.Messages)
 
 	traceID := c.GetHeader("X-Trace-Id")
 	if traceID == "" {
@@ -1280,28 +1280,20 @@ func (h *BridgeIngestHandler) HandleGateway(c *gin.Context) {
 }
 
 func (h *BridgeIngestHandler) handleGatewayReport(c *gin.Context, req *UnifiedChannelGatewayRequest) {
-	channel := NormalizeBridgeChannel(req.Channel)
-	accountID := strings.TrimSpace(req.AccountID)
-	if ident, ok := BridgeIdentityFromContext(c); ok {
-		if channel == "" {
-			channel = ident.Channel
-		}
-		if accountID == "" {
-			accountID = ident.AccountID
-		}
+	channel, accountID, err := gatewayReportIdentity(c, req.Channel, req.AccountID)
+	if err != nil {
+		writeBridgeTenantError(c, err)
+		return
 	}
 	// identify_code-only: resolve identity early to fill channel/account.
 	if _, err := bindBridgeTenant(c, channel, accountID); err != nil {
 		writeBridgeTenantError(c, err)
 		return
 	}
-	if ident, ok := BridgeIdentityFromContext(c); ok {
-		if channel == "" {
-			channel = ident.Channel
-		}
-		if accountID == "" {
-			accountID = ident.AccountID
-		}
+	channel, accountID, err = gatewayReportIdentity(c, channel, accountID)
+	if err != nil {
+		writeBridgeTenantError(c, err)
+		return
 	}
 	if channel == "" || accountID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"schema_version": "hivemtk.channel.v1", "status": "error", "message": "channel/account_id required (or identify_code)"})
@@ -1330,7 +1322,7 @@ func (h *BridgeIngestHandler) handleGatewayReport(c *gin.Context, req *UnifiedCh
 		return
 	}
 
-	if h.ingress == nil {
+	if h.ingress == nil && h.mockHandle == nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"schema_version": "hivemtk.channel.v1", "status": "error", "message": "ingress unavailable"})
 		return
 	}
@@ -1338,14 +1330,50 @@ func (h *BridgeIngestHandler) handleGatewayReport(c *gin.Context, req *UnifiedCh
 	acks := make([]map[string]any, 0, len(req.Messages))
 	for _, m := range req.Messages {
 		ev := gatewayMessageToEvent(channel, accountID, tenantID, m)
-		_, err := h.ingress.HandleIngressMessage(c.Request.Context(), ev)
+		var result *service.InboxIngressResult
+		var err error
+		if h.mockHandle != nil {
+			result, err = h.mockHandle(c.Request.Context(), ev)
+		} else {
+			result, err = h.ingress.HandleIngressMessage(c.Request.Context(), ev)
+		}
 		if err != nil {
-			acks = append(acks, map[string]any{"event_id": ev.EventID, "status": "retry", "reason": err.Error()})
+			acks = append(acks, map[string]any{"event_id": ev.EventID, "status": "retry", "code": "INGRESS_FAILED"})
+			continue
+		}
+		if result == nil {
+			acks = append(acks, map[string]any{"event_id": ev.EventID, "status": "retry", "code": "INGRESS_RESULT_MISSING"})
+			continue
+		}
+		if !result.Accepted {
+			acks = append(acks, map[string]any{"event_id": ev.EventID, "status": "rejected", "code": "INGRESS_NOT_ACCEPTED"})
 			continue
 		}
 		acks = append(acks, map[string]any{"event_id": ev.EventID, "status": "accepted"})
 	}
 	c.JSON(http.StatusOK, gin.H{"schema_version": "hivemtk.channel.v1", "status": "ok", "acks": acks})
+}
+
+// gatewayReportIdentity 固定使用已解析身份；渠道提示不决定消费分支。
+func gatewayReportIdentity(c *gin.Context, channel, accountID string) (string, string, error) {
+	channel = NormalizeBridgeChannel(channel)
+	accountID = strings.TrimSpace(accountID)
+	ident, ok := BridgeIdentityFromContext(c)
+	if !ok {
+		return channel, accountID, nil
+	}
+	resolvedChannel := NormalizeBridgeChannel(ident.Channel)
+	resolvedAccount := strings.TrimSpace(ident.AccountID)
+	if ident.TenantID == 0 || resolvedChannel == "" || resolvedAccount == "" {
+		return "", "", ErrBridgeTenantUnresolved
+	}
+	if tid, bound := tenant.FromContext(c.Request.Context()); bound && tid != ident.TenantID {
+		return "", "", ErrBridgeTenantAmbiguous
+	}
+	if accountID != "" && accountID != resolvedAccount {
+		return "", "", ErrBridgeTenantAmbiguous
+	}
+	return resolvedChannel, resolvedAccount, nil
 }
 
 func (h *BridgeIngestHandler) handleGatewayBridgeIngest(c *gin.Context, channel, accountID string, req *UnifiedChannelGatewayRequest) {
@@ -1388,10 +1416,13 @@ func gatewayMessageToEvent(channel, accountID string, tenantID uint, m UnifiedGa
 	if conv == "" {
 		conv = strings.TrimSpace(m.SenderID)
 	}
-	extra := map[string]any{"account_id": accountID}
+	extra := make(map[string]any, len(m.Extra)+2)
 	for k, v := range m.Extra {
 		extra[k] = v
 	}
+	// 身份来自已绑定的渠道/租户，客户端诊断字段不得覆盖。
+	extra["account_id"] = accountID
+	extra["tenant_id"] = strconv.FormatUint(uint64(tenantID), 10)
 	receiver := m.ReceiverID
 	if receiver == "" {
 		receiver = accountID

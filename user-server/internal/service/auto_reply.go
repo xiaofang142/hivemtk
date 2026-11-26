@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"hivemtk-user/internal/model"
@@ -40,6 +41,10 @@ func (s *AutoReplyService) Enabled(ctx context.Context, platform, accountID stri
 
 // EnabledForAccount 按数字账号 ID 判断（管理端/装配点用）；无租户上下文时 fail-closed 返回 false。
 func (s *AutoReplyService) EnabledForAccount(ctx context.Context, accountID uint) bool {
+	return enabledForAccount(ctx, accountID, repository.NewChannelAccountRepository())
+}
+
+func enabledForAccount(ctx context.Context, accountID uint, repo repository.ChannelAccountRepository) bool {
 	if accountID == 0 {
 		return false
 	}
@@ -50,13 +55,12 @@ func (s *AutoReplyService) EnabledForAccount(ctx context.Context, accountID uint
 		}
 		tid = tenant.DefaultTenantID
 	}
-	repo := repository.NewChannelAccountRepository()
 	if repo == nil || !repo.Available() {
-		return true
+		return false
 	}
 	acc, err := repo.GetByID(ctx, tid, accountID)
-	if err != nil || acc == nil {
-		return true
+	if err != nil || acc == nil || acc.ID == 0 || acc.ID != accountID || acc.TenantID != tid {
+		return false
 	}
 	return acc.Status == 1 && acc.AutoReplyAgentID != nil && *acc.AutoReplyAgentID > 0
 }
@@ -87,7 +91,7 @@ func (s *AutoReplyService) ReferLeadNotes(ctx context.Context, accountID uint, c
 type ModuleGateDecision int
 
 const (
-	ModuleGateUnmigrated ModuleGateDecision = iota // 未纳入新配置，维持既有行为
+	ModuleGateUnmigrated ModuleGateDecision = iota // 仓储可用且查询确认未命中，维持 legacy 行为
 	ModuleGateEnabled                              // 明确启用
 	ModuleGateDisabled                             // 明确关闭（含账号停用/未绑定 Agent）
 	ModuleGateError                                // 解析或仓储故障，fail-closed
@@ -121,34 +125,50 @@ func decideModuleGate(in ModuleGateInput) ModuleGateDecision {
 }
 
 // resolveModuleGateDecision 统一解析账号并给出模块闸门决策。
-// 账号可信解析后，读取仓储失败归为 ModuleGateError（fail-closed）；
-// 未迁移或无法解析的账号仍保持既有兼容放行。
+// 只有查询成功确认未命中的账号保留 legacy 兼容放行；解析/仓储故障一律 fail-closed。
 func resolveModuleGateDecision(ctx context.Context, accountID string, agentOf func(*model.ChannelAccount) uint) ModuleGateDecision {
-	code := strings.TrimSpace(accountID)
-	if code == "" {
-		return ModuleGateUnmigrated
-	}
 	repo := repository.NewChannelAccountRepository()
-	if repo == nil || !repo.Available() {
-		// 仓储不可用等价于「尚未纳入新配置」：沿用旧行为放行，不能把单机/测试部署误判为模块故障关闭。
-		return ModuleGateUnmigrated
-	}
-	resolved, err := NewChannelResolver().ResolveByAccountRef(ctx, "", code)
-	if err != nil {
-		// 解析阶段任何错误都等价于「无法纳入新配置」：沿用旧行为放行。
-		// 只有账号已被可信解析后、读取模块配置失败才 fail-closed，
-		// 否则单机/未建表部署会把所有模块误关（与 R8.4 未迁移兼容口径冲突）。
-		return ModuleGateUnmigrated
-	}
-	if resolved == nil || resolved.AccountID == 0 {
-		return ModuleGateUnmigrated
-	}
-	acc, err := repo.GetByID(ctx, resolved.TenantID, resolved.AccountID)
-	if err != nil {
+	resolver := NewChannelResolver()
+	return resolveModuleGateDecisionWith(ctx, accountID, agentOf, repo, func(ctx context.Context, ref string) (*ResolvedChannelAccount, error) {
+		return resolver.ResolveByAccountRef(ctx, "", ref)
+	})
+}
+
+func resolveModuleGateDecisionWith(
+	ctx context.Context,
+	accountID string,
+	agentOf func(*model.ChannelAccount) uint,
+	repo repository.ChannelAccountRepository,
+	resolve func(context.Context, string) (*ResolvedChannelAccount, error),
+) ModuleGateDecision {
+	code := strings.TrimSpace(accountID)
+	if code == "" || repo == nil || !repo.Available() || resolve == nil {
 		return ModuleGateError
 	}
-	if acc == nil || acc.ID == 0 {
-		return ModuleGateUnmigrated
+	tid, ok := tenant.FromContext(ctx)
+	if !ok || tid == 0 {
+		if tenant.IsMultiTenant() {
+			return ModuleGateError
+		}
+		tid = tenant.DefaultTenantID
+	}
+	resolved, err := resolve(ctx, code)
+	if err != nil {
+		if errors.Is(err, ErrChannelIdentityLegacyUnmatched) {
+			// 只有仓储可用且解析成功确认无匹配时，才保留 R8.4 的 legacy 放行。
+			return ModuleGateUnmigrated
+		}
+		return ModuleGateError
+	}
+	if resolved == nil || resolved.AccountID == 0 {
+		return ModuleGateError
+	}
+	if resolved.TenantID == 0 || resolved.TenantID != tid {
+		return ModuleGateError
+	}
+	acc, err := repo.GetByID(ctx, resolved.TenantID, resolved.AccountID)
+	if err != nil || acc == nil || acc.ID == 0 || acc.ID != resolved.AccountID || acc.TenantID != resolved.TenantID {
+		return ModuleGateError
 	}
 	return decideModuleGate(ModuleGateInput{
 		Bound: true, Status: acc.Status, AgentID: agentOf(acc),

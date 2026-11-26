@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/repository"
 )
 
@@ -34,6 +35,142 @@ type stubPresetService struct {
 
 func (s *stubPresetService) IsEnabledForTenant(context.Context, uint, string) (bool, error) {
 	return s.enabled, s.err
+}
+
+type ambiguousIdentifyAccountRepo struct {
+	repository.ChannelAccountRepository
+	listCalls int
+}
+
+type legacyMissAccountRepo struct {
+	repository.ChannelAccountRepository
+}
+
+type namedAccountRepo struct {
+	repository.ChannelAccountRepository
+	account model.ChannelAccount
+	rows    []model.ChannelAccount
+}
+
+type resolverChannelRepoStub struct {
+	repository.ChannelRepository
+	available bool
+	channel   *model.Channel
+	err       error
+}
+
+func (r *legacyMissAccountRepo) Available() bool { return true }
+func (r *legacyMissAccountRepo) GetByIdentifyCode(context.Context, string) (*model.ChannelAccount, error) {
+	return nil, nil
+}
+func (r *legacyMissAccountRepo) GetByID(context.Context, uint, uint) (*model.ChannelAccount, error) {
+	return nil, nil
+}
+func (r *legacyMissAccountRepo) List(context.Context, repository.ChannelAccountListOptions) ([]model.ChannelAccount, error) {
+	return nil, nil
+}
+
+func (r *namedAccountRepo) Available() bool { return true }
+func (r *namedAccountRepo) GetByIdentifyCode(context.Context, string) (*model.ChannelAccount, error) {
+	return nil, nil
+}
+func (r *namedAccountRepo) List(context.Context, repository.ChannelAccountListOptions) ([]model.ChannelAccount, error) {
+	if r.rows != nil {
+		return r.rows, nil
+	}
+	return []model.ChannelAccount{r.account}, nil
+}
+
+func (r *resolverChannelRepoStub) Available() bool { return r.available }
+func (r *resolverChannelRepoStub) GetByID(context.Context, uint, uint) (*model.Channel, error) {
+	return r.channel, r.err
+}
+
+func (r *ambiguousIdentifyAccountRepo) Available() bool { return true }
+func (r *ambiguousIdentifyAccountRepo) GetByIdentifyCode(context.Context, string) (*model.ChannelAccount, error) {
+	return nil, repository.ErrAmbiguousIdentifyCode
+}
+func (r *ambiguousIdentifyAccountRepo) List(context.Context, repository.ChannelAccountListOptions) ([]model.ChannelAccount, error) {
+	r.listCalls++
+	return []model.ChannelAccount{{ID: 10, TenantID: 1, Name: "cid_ambiguous"}}, nil
+}
+
+func TestChannelResolver_ResolveByAccountRefDoesNotFallbackAfterAmbiguousIdentifyCode(t *testing.T) {
+	repo := &ambiguousIdentifyAccountRepo{}
+	resolver := NewChannelResolverWithRepos(repo, nil)
+	ctx := tenant.WithTenantID(context.Background(), 1)
+
+	_, err := resolver.ResolveByAccountRef(ctx, "", "cid_ambiguous")
+	if !errors.Is(err, ErrChannelIdentityAmbiguous) {
+		t.Fatalf("识别码歧义必须原样拒绝，实际 err=%v", err)
+	}
+	if repo.listCalls != 0 {
+		t.Fatalf("识别码歧义后不得继续账号名回退，List 调用次数=%d", repo.listCalls)
+	}
+}
+
+func TestChannelResolver_ResolveByAccountRefClassifiesOnlyHealthyMissAsLegacy(t *testing.T) {
+	resolver := NewChannelResolverWithRepos(&legacyMissAccountRepo{}, nil)
+	ctx := tenant.WithTenantID(context.Background(), 1)
+
+	_, err := resolver.ResolveByAccountRef(ctx, "", "legacy-external-name")
+	if !errors.Is(err, ErrChannelIdentityLegacyUnmatched) {
+		t.Fatalf("健康查询确认无匹配必须返回 legacy miss，实际 err=%v", err)
+	}
+}
+
+func TestChannelResolver_ResolveByAccountRefIncompleteSearchDoesNotClaimLegacyMiss(t *testing.T) {
+	ctx := tenant.WithTenantID(context.Background(), 1)
+	rows := make([]model.ChannelAccount, 50)
+	for i := range rows {
+		rows[i] = model.ChannelAccount{ID: uint(i + 1), TenantID: 1, Name: "other-account"}
+	}
+	resolver := NewChannelResolverWithRepos(&namedAccountRepo{rows: rows}, nil)
+	if _, err := resolver.ResolveByAccountRef(ctx, "", "name"); !errors.Is(err, ErrChannelIdentityUnresolved) {
+		t.Fatalf("满页查询不能证明无匹配账号，实际 err=%v", err)
+	}
+}
+
+func TestChannelResolver_ResolveByAccountRefDoesNotTreatChannelMismatchAsLegacyMiss(t *testing.T) {
+	accountRepo := &namedAccountRepo{account: model.ChannelAccount{
+		ID: 10, TenantID: 1, ChannelID: 2, Name: "store-account", Status: 1,
+	}}
+	channelRepo := &resolverChannelRepoStub{
+		available: true,
+		channel:   &model.Channel{ID: 2, TenantID: 1, Code: "qq", Type: "chat"},
+	}
+	resolver := NewChannelResolverWithRepos(accountRepo, channelRepo)
+	ctx := tenant.WithTenantID(context.Background(), 1)
+
+	_, err := resolver.ResolveByAccountRef(ctx, "telegram", "store-account")
+	if !errors.Is(err, ErrChannelIdentityUnresolved) {
+		t.Fatalf("命中账号但渠道不符必须标记为身份不确定，不能作为legacy未命中放行，实际 err=%v", err)
+	}
+}
+
+func TestChannelResolver_ResolveByAccountRefChannelStoreFailureIsNotLegacyMiss(t *testing.T) {
+	accountRepo := &namedAccountRepo{account: model.ChannelAccount{
+		ID: 10, TenantID: 1, ChannelID: 2, Name: "store-account", Status: 1,
+	}}
+	resolver := NewChannelResolverWithRepos(accountRepo, &resolverChannelRepoStub{available: false})
+	ctx := tenant.WithTenantID(context.Background(), 1)
+
+	_, err := resolver.ResolveByAccountRef(ctx, "telegram", "store-account")
+	if !errors.Is(err, repository.ErrChannelStoreUnavailable) {
+		t.Fatalf("渠道仓储不可用必须保留故障，不得判为legacy未命中，实际 err=%v", err)
+	}
+}
+
+func TestChannelResolver_ResolveByAccountRefRejectsMissingTenantInMultiTenantMode(t *testing.T) {
+	previous := tenant.CurrentMode()
+	tenant.SetMode(tenant.ModeOn)
+	t.Cleanup(func() { tenant.SetMode(previous) })
+
+	resolver := NewChannelResolverWithRepos(&legacyMissAccountRepo{}, nil)
+	_, err := resolver.ResolveByAccountRef(context.Background(), "", "999")
+	if !errors.Is(err, ErrChannelTenantUnresolved) {
+		t.Fatalf("多租户模式缺少租户必须拒绝，实际 err=%v", err)
+	}
 }
 
 func TestChannelStatus_RequireRunnableBothSides(t *testing.T) {

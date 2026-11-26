@@ -50,8 +50,12 @@ func extractIdentifyCode(c *gin.Context) string {
 }
 
 func BridgeIngressGuard() gin.HandlerFunc {
+	return bridgeIngressGuard(channelIdentifyCodeCandidates)
+}
+
+func bridgeIngressGuard(candidatesForRequest func() []string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		candidates := channelIdentifyCodeCandidates()
+		candidates := candidatesForRequest()
 		if len(candidates) == 0 {
 			// fail-closed：识别码未生成时默认拒绝。历史部署可显式 BRIDGE_INGEST_AUTH=off
 			// 恢复旧的"无鉴权放行"行为（仅限可信内网）。
@@ -84,7 +88,9 @@ func BridgeIngressGuard() gin.HandlerFunc {
 			return
 		}
 
-		// query 携带的识别码在校验通过后从 URL 剥离，避免日志/反代留存明文。
+		// 下游租户解析继续使用已验证的凭据，再从 URL 剥离 query。
+		c.Request.Header.Set(identifyCodeHeader, got)
+		// 只减少下游 URL 的暴露；已抵达的反代访问日志不受此处控制。
 		if c.Query(identifyCodeQuery) != "" {
 			q := c.Request.URL.Query()
 			q.Del(identifyCodeQuery)
