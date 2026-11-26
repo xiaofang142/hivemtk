@@ -90,18 +90,35 @@ var SystemMenuTree = []SystemMenuNode{
 		// 线索发现：2026-11-26 从「客户与销售」抽出为独立顶级模块，统一收口
 		// 线索发掘、判定、归档、规则、智能体与通知路由。key 与深链保持不变，
 		// 仅变更父分组，避免已有角色授权行失效。
+		//
+		// T02（2026-11-26）菜单去重/合理布局：9 个平铺叶子按「先看工作台 →
+		// 再配智能体 → 最后查判定与线索」收进两个子目录；每个叶子的 key/Path/
+		// Roles 原样保留，收藏夹与角色授权都不失效。通知路由只保留
+		// /leads/notify-routes 一个可写页面（工作台同tab 改为入口跳转）。
 		Key: "leadDiscovery", Title: "线索智能体", Icon: "Search",
 		Roles: []string{"admin", "viewer", "staff"},
 		Children: []SystemMenuNode{
 			{Key: "leadMining", Title: "线索挖掘", Icon: "Search", Path: "/lead-mining/index"},
-			{Key: "clueList", Title: "线索列表", Icon: "Document", Path: "/clue/list"},
-			{Key: "clueStatistics", Title: "线索统计", Icon: "DataAnalysis", Path: "/clue/statistics"},
-			{Key: "leadGovernance", Title: "线索治理", Icon: "Aim", Path: "/leads/rules", Roles: []string{"admin"}},
-			{Key: "leadMiningAgents", Title: "线索发现智能体", Icon: "Cpu", Path: "/leads/mining-agents", Roles: []string{"admin"}},
-			{Key: "leadNotifyRoutes", Title: "线索通知路由", Icon: "Bell", Path: "/leads/notify-routes", Roles: []string{"admin"}},
-			{Key: "leadEvidence", Title: "判定与证据", Icon: "Document", Path: "/leads/evidence", Roles: []string{"admin"}},
-			{Key: "leadArchive", Title: "线索归档", Icon: "FolderChecked", Path: "/leads/archive", Roles: []string{"admin"}},
-			{Key: "leadScopedList", Title: "权限内客户与消息", Icon: "List", Path: "/leads/scoped-list", Roles: []string{"admin"}},
+			{
+				Key: "leadConfigGroup", Title: "线索配置", Icon: "Setting",
+				Roles: []string{"admin"},
+				Children: []SystemMenuNode{
+					{Key: "leadMiningAgents", Title: "线索发现智能体", Icon: "Cpu", Path: "/leads/mining-agents", Roles: []string{"admin"}},
+					{Key: "leadGovernance", Title: "线索治理", Icon: "Aim", Path: "/leads/rules", Roles: []string{"admin"}},
+					{Key: "leadNotifyRoutes", Title: "线索通知路由", Icon: "Bell", Path: "/leads/notify-routes", Roles: []string{"admin"}},
+				},
+			},
+			{
+				Key: "leadEvidenceGroup", Title: "判定与线索", Icon: "Files",
+				Roles: []string{"admin", "viewer", "staff"},
+				Children: []SystemMenuNode{
+					{Key: "leadEvidence", Title: "判定与证据", Icon: "Document", Path: "/leads/evidence", Roles: []string{"admin"}},
+					{Key: "clueList", Title: "线索列表", Icon: "Document", Path: "/clue/list"},
+					{Key: "clueStatistics", Title: "线索统计", Icon: "DataAnalysis", Path: "/clue/statistics"},
+					{Key: "leadArchive", Title: "线索归档", Icon: "FolderChecked", Path: "/leads/archive", Roles: []string{"admin"}},
+					{Key: "leadScopedList", Title: "权限内客户与消息", Icon: "List", Path: "/leads/scoped-list", Roles: []string{"admin"}},
+				},
+			},
 		},
 	},
 	{

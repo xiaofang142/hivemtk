@@ -538,6 +538,8 @@
     "crmMaster": "البيانات الرئيسية للعملاء",
     "leadGovernance": "حوكمة العملاء المحتملين",
     "leadDiscovery": "اكتشاف العملاء المحتملين",
+    "leadConfigGroup": "إعداد العملاء المحتملين",
+    "leadEvidenceGroup": "التقييمات والعملاء المحتملون",
     "leadMiningAgents": "وكلاء اكتشاف العملاء المحتملين",
     "leadNotifyRoutes": "مسارات الإشعارات",
     "leadEvidence": "التقييم والأدلة",

@@ -580,6 +580,8 @@
     "crmMaster": "客户主数据",
     "leadGovernance": "线索治理",
     "leadDiscovery": "线索智能体",
+    "leadConfigGroup": "线索配置",
+    "leadEvidenceGroup": "判定与线索",
     "leadMiningAgents": "线索发现智能体",
     "leadNotifyRoutes": "线索通知路由",
     "leadEvidence": "判定与证据",

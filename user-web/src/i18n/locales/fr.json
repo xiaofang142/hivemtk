@@ -580,6 +580,8 @@
     "crmMaster": "Données maîtres clients",
     "leadGovernance": "Gouvernance des leads",
     "leadDiscovery": "Découverte de leads",
+    "leadConfigGroup": "Configuration des leads",
+    "leadEvidenceGroup": "Évaluations et leads",
     "leadMiningAgents": "Agents de découverte de leads",
     "leadNotifyRoutes": "Routes de notification",
     "leadEvidence": "Évaluation et preuves",

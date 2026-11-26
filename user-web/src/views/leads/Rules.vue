@@ -8,6 +8,9 @@
         <span class="page-sub">按 account → channel 优先级匹配；列表按当前租户隔离</span>
       </div>
       <div class="page-actions">
+        <el-button @click="$router.push('/lead-mining/index')">
+          发掘工作台
+        </el-button>
         <el-button @click="$router.push('/leads/notify-routes')">
           通知路由
         </el-button>

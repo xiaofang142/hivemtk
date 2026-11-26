@@ -580,6 +580,8 @@
     "crmMaster": "Customer Master Data",
     "leadGovernance": "Lead Governance",
     "leadDiscovery": "Lead Agent",
+    "leadConfigGroup": "Lead Configuration",
+    "leadEvidenceGroup": "Judgements & Leads",
     "leadMiningAgents": "Lead Discovery Agents",
     "leadNotifyRoutes": "Lead Notify Routes",
     "leadEvidence": "Judgement & Evidence",

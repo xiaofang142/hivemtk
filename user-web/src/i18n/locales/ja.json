@@ -580,6 +580,8 @@
     "crmMaster": "顧客マスタ",
     "leadGovernance": "リードガバナンス",
     "leadDiscovery": "リード発見",
+    "leadConfigGroup": "リード設定",
+    "leadEvidenceGroup": "判定とリード",
     "leadMiningAgents": "リード発見エージェント",
     "leadNotifyRoutes": "リード通知ルート",
     "leadEvidence": "判定と証拠",

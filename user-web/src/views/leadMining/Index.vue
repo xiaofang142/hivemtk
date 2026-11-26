@@ -10,7 +10,7 @@
             线索发掘工作台
           </h2>
           <div class="sub">
-            配置、通知路由、判定记录与线索列表统一管理
+            账号级配置、判定记录、质量看板与发掘线索统一管理；规则 / 智能体 / 通知路由见「线索配置」
           </div>
         </div>
         <div class="status-tags">
@@ -23,6 +23,12 @@
           <el-tag type="info">
             近期处理 {{ status.recent_processed ?? 0 }}
           </el-tag>
+          <el-button
+            size="small"
+            @click="$router.push('/leads/mining-agents')"
+          >
+            线索配置
+          </el-button>
           <el-button
             size="small"
             @click="refreshAll"
@@ -44,116 +50,28 @@
         label="通知路由"
         name="routes"
       >
-        <el-card shadow="never">
-          <div class="toolbar">
-            <ChannelSelect
-              v-model="routeFilter.channel"
-              placeholder="渠道"
-              style="width: 140px"
-              @change="loadRoutes"
-            />
-            <ChannelAccountSelect
-              v-model="routeFilter.account_id"
-              :channel="routeFilter.channel"
-              placeholder="账号ID"
-              style="width: 180px"
-            />
-            <el-button @click="loadRoutes">
-              查询
-            </el-button>
+        <!-- T02：同一张 lead_mining_notify_routes 表不再有两套 CRUD。
+             这里的 tab 只做入口，真实配置统一在「线索配置 / 线索通知路由」。 -->
+        <el-card
+          shadow="never"
+          class="routes-entry-card"
+        >
+          <div class="page-header">
+            <div>
+              <h3 class="title">
+                线索通知路由
+              </h3>
+              <div class="sub">
+                账号 / 渠道 / 租户三级优先级的唯一配置入口；工作台不再重复维护同一份路由事实。
+              </div>
+            </div>
             <el-button
               type="primary"
-              @click="routeDialogVisible = true"
+              @click="$router.push('/leads/notify-routes')"
             >
-              新增路由
+              前往配置
             </el-button>
           </div>
-          <el-table
-            v-loading="routesLoading"
-            :data="routes"
-            stripe
-            style="margin-top: 12px"
-          >
-            <el-table-column
-              prop="route_id"
-              label="路由ID"
-              min-width="160"
-              show-overflow-tooltip
-            />
-            <el-table-column
-              prop="channel"
-              label="渠道"
-              width="110"
-            >
-              <template #default="{ row }">
-                {{ catalog.channelLabel(row.channel) || '-' }}
-              </template>
-            </el-table-column>
-            <el-table-column
-              prop="account_id"
-              label="账号ID"
-              min-width="140"
-              show-overflow-tooltip
-            >
-              <template #default="{ row }">
-                {{ routeAccountLabel(row) }}
-              </template>
-            </el-table-column>
-            <el-table-column
-              prop="notify_channel"
-              label="通知通道"
-              width="110"
-            >
-              <template #default="{ row }">
-                <el-tag size="small">
-                  {{ notifyChannelLabel(row.notify_channel) }}
-                </el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column
-              prop="target"
-              label="目标"
-              min-width="180"
-              show-overflow-tooltip
-            />
-            <el-table-column
-              label="启用"
-              width="80"
-            >
-              <template #default="{ row }">
-                <el-tag
-                  :type="row.enabled ? 'success' : 'info'"
-                  size="small"
-                >
-                  {{ row.enabled ? '是' : '否' }}
-                </el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column
-              label="创建时间"
-              width="170"
-            >
-              <template #default="{ row }">
-                {{ formatTime(row.created_at) }}
-              </template>
-            </el-table-column>
-            <el-table-column
-              label="操作"
-              width="100"
-              fixed="right"
-            >
-              <template #default="{ row }">
-                <el-button
-                  link
-                  type="danger"
-                  size="small"
-                  @click="removeRoute(row)"
-                >
-                  删除
-                </el-button>
-              </template>
-            </el-table-column>
-          </el-table>
         </el-card>
       </el-tab-pane>
 
@@ -488,11 +406,14 @@
       </el-tab-pane>
 
       <el-tab-pane
-        label="线索库"
+        label="发掘线索"
         name="leads"
       >
         <el-card shadow="never">
           <div class="toolbar">
+            <el-button @click="$router.push('/clue/list')">
+              线索库（全量管理）
+            </el-button>
             <el-input
               v-model="leadFilter.keyword"
               placeholder="搜索名称/账号/城市"
@@ -754,68 +675,6 @@
         </el-button>
       </template>
     </el-drawer>
-
-    <el-dialog
-      v-model="routeDialogVisible"
-      title="新增通知路由"
-      width="520px"
-    >
-      <el-form
-        :model="routeForm"
-        label-width="100px"
-      >
-        <el-form-item label="渠道">
-          <ChannelSelect
-            v-model="routeForm.channel"
-            placeholder="空=默认"
-          />
-        </el-form-item>
-        <el-form-item label="账号ID">
-          <ChannelAccountSelect
-            v-model="routeForm.account_id"
-            :channel="routeForm.channel"
-            placeholder="空=该渠道默认"
-          />
-        </el-form-item>
-        <el-form-item label="通知通道">
-          <el-select v-model="routeForm.notify_channel">
-            <el-option
-              label="站内"
-              value="in_app"
-            />
-            <el-option
-              label="Telegram"
-              value="telegram"
-            />
-            <el-option
-              label="飞书"
-              value="feishu"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="目标">
-          <el-input
-            v-model="routeForm.target"
-            placeholder="用户ID/群ID/webhook 等"
-          />
-        </el-form-item>
-        <el-form-item label="启用">
-          <el-switch v-model="routeForm.enabled" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="routeDialogVisible = false">
-          取消
-        </el-button>
-        <el-button
-          type="primary"
-          :loading="routeSaving"
-          @click="submitRoute"
-        >
-          创建
-        </el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
@@ -825,8 +684,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getLeadMiningStatus,
   getLeadMiningJudgements, getLeadMiningClueStats, getLeadMiningJudgementDetail,
-  submitLeadMiningJudgementFeedback, getLeadMiningQualityStats,
-  getLeadMiningNotifyRoutes, createLeadMiningNotifyRoute, deleteLeadMiningNotifyRoute
+  submitLeadMiningJudgementFeedback, getLeadMiningQualityStats
 } from '@/api/leadMining'
 import { clueApi } from '@/api/clue'
 import AccountMatrix from './AccountMatrix.vue'
@@ -851,15 +709,6 @@ const statusOptions = ['new', 'notified', 'following', 'converted', 'ignored', '
 function unwrap(res) { return res?.data?.data ?? res?.data ?? res ?? {} }
 function leadRoleLabel(v) { return leadRoleOptions.find(r => r.value === v)?.label || v || '未知' }
 function leadRoleTag(v) { return ({ demand: 'danger', supply: 'success', resource: 'warning', broker: '', unknown: 'info' })[v] || 'info' }
-// 通知通道是送达方式（in_app 不属于业务渠道），保留本地选项；标签值能译则走统一目录。
-function notifyChannelLabel(v) {
-  if (v === 'in_app') return '站内'
-  return catalog.channelLabel(v) || v || '-'
-}
-function routeAccountLabel(row) {
-  if (!row.account_id) return '（默认/全部）'
-  return catalog.accountLabel(row.account_id) || row.account_id
-}
 function formatTime(t) {
   if (!t) return '-'
   const d = new Date(typeof t === 'number' && t < 1e12 ? t * 1000 : t)
@@ -872,41 +721,8 @@ async function loadStatus() {
   try { status.value = unwrap(await getLeadMiningStatus()) } catch { status.value = {} }
 }
 
-// notify routes
-const routes = ref([])
-const routesLoading = ref(false)
-const routeFilter = reactive({ channel: '', account_id: '' })
-const routeDialogVisible = ref(false)
-const routeSaving = ref(false)
-const routeForm = reactive({ channel: '', account_id: '', notify_channel: 'in_app', target: '', enabled: true })
-
-async function loadRoutes() {
-  routesLoading.value = true
-  try {
-    const res = await getLeadMiningNotifyRoutes({ channel: routeFilter.channel, account_id: routeFilter.account_id })
-    const data = unwrap(res)
-    routes.value = Array.isArray(data) ? data : (data.list || [])
-  } catch (e) { ElMessage.error('加载通知路由失败：' + (e.message || e)) }
-  finally { routesLoading.value = false }
-}
-
-async function submitRoute() {
-  routeSaving.value = true
-  try {
-    await createLeadMiningNotifyRoute({ ...routeForm })
-    ElMessage.success('创建成功')
-    routeDialogVisible.value = false
-    Object.assign(routeForm, { channel: '', account_id: '', notify_channel: 'in_app', target: '', enabled: true })
-    loadRoutes()
-  } catch (e) { ElMessage.error('创建失败：' + (e.message || e)) }
-  finally { routeSaving.value = false }
-}
-
-async function removeRoute(row) {
-  try { await ElMessageBox.confirm(`确认删除路由 ${row.route_id}？`, '提示', { type: 'warning' }) } catch { return }
-  try { await deleteLeadMiningNotifyRoute(row.route_id); ElMessage.success('已删除'); loadRoutes() }
-  catch (e) { ElMessage.error('删除失败：' + (e.message || e)) }
-}
+// T02：通知路由的读写入口只在 /leads/notify-routes（线索配置分组），
+// 本页 tab 仅保留跳转，避免同一张表出现两个可写 UI。
 
 // judgements
 const judgements = ref([])
@@ -1022,7 +838,7 @@ function resetLeadFilter() {
 }
 
 function refreshAll() {
-  loadStatus(); loadRoutes(); loadJudgements(judgementPage.value); loadQualityStats(); loadLeads(leadPage.value)
+  loadStatus(); loadJudgements(judgementPage.value); loadQualityStats(); loadLeads(leadPage.value)
 }
 
 onMounted(() => {

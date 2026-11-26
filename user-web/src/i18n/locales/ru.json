@@ -580,6 +580,8 @@
     "crmMaster": "Основные данные клиентов",
     "leadGovernance": "Управление лидами",
     "leadDiscovery": "Обнаружение лидов",
+    "leadConfigGroup": "Настройка лидов",
+    "leadEvidenceGroup": "Оценка и лиды",
     "leadMiningAgents": "Агенты обнаружения лидов",
     "leadNotifyRoutes": "Маршруты уведомлений",
     "leadEvidence": "Оценка и доказательства",

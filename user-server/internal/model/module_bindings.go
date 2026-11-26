@@ -244,6 +244,9 @@ var ModuleMenuBindings = map[string][]string{
 		// 2026-11-26：线索发现抽为独立顶级模块；容器与新增深链仍属客户数据面，
 		// 不新增收费模块条目，模块闭包与裁剪规则保持不变。
 		"leadDiscovery", "leadMiningAgents", "leadNotifyRoutes", "leadEvidence", "leadArchive", "leadScopedList",
+		// T02（2026-11-26）：线索智能体族的两个布局子目录；不是新功能/新收费项，
+		// 仅把已有叶子收进菜单分组，故沿用 customer 模块闭包避免授权漂移。
+		"leadConfigGroup", "leadEvidenceGroup",
 	},
 
 	// ========== inbox：会话工作台（12 节点）==========

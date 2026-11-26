@@ -43,15 +43,18 @@ func TestMenuNavigation_AllLeafKeysAndPathsPreserved(t *testing.T) {
 }
 
 // 原角色上界逐 key 固定；渠道归组只允许新增 admin 专用的 channels 容器键。
+// T02（2026-11-26）：线索智能体族新增 leadConfigGroup / leadEvidenceGroup 两个
+// 纯布局容器（无 Path、不带任何新业务叶子），上界计数与指纹相应 +1/+2；
+// 所有原有 key 的角色上界未变，见上方逐 key 断言与叶子路径指纹。
 func TestMenuNavigation_AllRoleCeilingsPreserved(t *testing.T) {
 	cases := []struct {
 		role   string
 		count  int
 		digest string
 	}{
-		{SystemRoleCodeAdmin, 256, "58076cae3ecdedd3966f5426a98718a61d1096dcd9c1ffba748c9897926a1a14"},
-		{SystemRoleCodeCustomerService, 61, "403ab24619ac9dacaa90b356e1626792465228e38cd2842c2f416f1b8ff811e0"},
-		{SystemRoleCodeStaff, 66, "1afdff6f983f29759c8fc52a14fe2cc3aec2b5e1b4d52d1798b3e74a7f9dc55f"},
+		{SystemRoleCodeAdmin, 258, "a55b387bdcecf341cdff06bbb78449faa41b50bee020b230faba840e52d8c6a7"},
+		{SystemRoleCodeCustomerService, 62, "5beb004f7dcb0a3dd681d31c7171cbd46a64d7ae70d61700462bc6a5a2644cad"},
+		{SystemRoleCodeStaff, 67, "7536303eadb161bc3b3abfd1130ed120db31b3845bb59ab2f8613b0769804131"},
 	}
 	for _, tc := range cases {
 		var keys []string
@@ -90,6 +93,12 @@ func TestMenuNavigation_AuthoritativeGroups(t *testing.T) {
 		"salesCockpit": "customer", "orderDraft": "customer", "salesWorkbench": "customer", "followups": "customer",
 		"agentSalesIntel": "customer", "commerceOperations": "customer",
 		"customerSession": "agentPassive", "agentWorkbench": "aiAgent", "automationCenter": "agentWorkbench",
+		// T02：线索智能体族的三个功能层——工作台直达，配置/判定归档各归一个子目录。
+		"leadMining": "leadDiscovery", "leadMiningAgents": "leadConfigGroup",
+		"leadGovernance": "leadConfigGroup", "leadNotifyRoutes": "leadConfigGroup",
+		"leadEvidence": "leadEvidenceGroup", "clueList": "leadEvidenceGroup",
+		"clueStatistics": "leadEvidenceGroup", "leadArchive": "leadEvidenceGroup",
+		"leadScopedList": "leadEvidenceGroup",
 		"agentActive": "reach", "systemMaterialLibrary": "reach",
 		"faqKb": "knowledge", "knowledgeBase": "knowledge", "sopTemplate": "knowledge", "sopTemplateMarket": "knowledge",
 		"sopAgent": "agentSupport", "aiToolManagement": "agentSupport",

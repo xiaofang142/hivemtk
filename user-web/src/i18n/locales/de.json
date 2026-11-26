@@ -580,6 +580,8 @@
     "crmMaster": "Kundenstammdaten",
     "leadGovernance": "Lead-Governance",
     "leadDiscovery": "Lead-Entdeckung",
+    "leadConfigGroup": "Lead-Konfiguration",
+    "leadEvidenceGroup": "Beurteilung & Leads",
     "leadMiningAgents": "Lead-Entdeckungsagenten",
     "leadNotifyRoutes": "Lead-Benachrichtigungsrouten",
     "leadEvidence": "Bewertung & Beweise",
