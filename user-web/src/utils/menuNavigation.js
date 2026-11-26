@@ -47,6 +47,7 @@ const routeOwners = new Map([
   ['/sop-template/editor', ['/sop-template/list']],
   ['/sop-template/editor/:id', ['/sop-template/list']],
   ['/telegram', ['/telegram/account']],
+  ['/tiktok-card-stats/:id', ['/tiktok/list']],
   ['/userSegment/builder', ['/userSegment/list']],
   ['/userSegment/rfm-matrix', ['/userSegment/list']],
   ['/wecomAccount/data', ['/wecomAccount/list']],

@@ -126,13 +126,16 @@ describe('SubMenuItem.vue · 菜单文案真的渲染进 DOM（W-9 渲染腿）'
   it('分组菜单：父标题与子项各命中 1 次，两个原始 key 都不出现', () => {
     const w = mountItem('zh', {
       key: 'customer',
-      children: [{ key: 'customer360', path: '/customer' }],
+      children: [
+        { key: 'customer360', path: '/customer' },
+        { key: 'crm', path: '/crm/list' },
+      ],
     })
     const text = w.text()
 
-    expect(text).toContain('客户中心')
+    expect(text).toContain('客户与销售')
     expect(text).toContain('客户 360')
-    expect(occurrences(text, '客户中心')).toBe(1)
+    expect(occurrences(text, '客户与销售')).toBe(1)
     expect(occurrences(text, '客户 360')).toBe(1)
     expect(text).not.toContain('menu.customer')
     expect(w.html()).not.toContain('menu.customer')

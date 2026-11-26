@@ -1,0 +1,13 @@
+{
+  "label": "相关管理功能",
+  "dedupe": "去重与合并",
+  "importExport": "导入与导出",
+  "contacts": "联系人",
+  "suppliers": "供应商",
+  "serviceProviders": "服务商",
+  "companies": "公司档案",
+  "notifyRoutes": "通知路由",
+  "evidence": "判定证据",
+  "archive": "线索归档",
+  "scopedList": "授权范围内的线索"
+}

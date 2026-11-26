@@ -54,6 +54,23 @@ export interface PageTour {
  */
 export function createPageTours(t: (key: string) => string): Record<string, PageTour> {
   return {
+    '/crm/list': {
+      route: '/crm/list',
+      pageKey: 'crmList',
+      steps: [
+        { element: '.crm-page .page-head', title: t('navigationGuide.pages.crmList.title'), description: t('navigationGuide.pages.crmList.summary'), side: 'bottom' },
+        { element: '.crm-page .el-card .el-form', title: t('navigationGuide.pages.crmList.title'), description: t('navigationGuide.pages.crmList.tools'), side: 'bottom' },
+        { element: '.crm-page .el-table', title: t('navigationGuide.pages.crmList.title'), description: t('navigationGuide.pages.crmList.records'), side: 'top' },
+      ],
+    },
+    '/leads/rules': {
+      route: '/leads/rules',
+      pageKey: 'leadsRules',
+      steps: [
+        { element: '.leads-page .page-head', title: t('navigationGuide.pages.leadsRules.title'), description: t('navigationGuide.pages.leadsRules.summary'), side: 'bottom' },
+        { element: '.leads-page .el-table', title: t('navigationGuide.pages.leadsRules.title'), description: t('navigationGuide.pages.leadsRules.records'), side: 'top' },
+      ],
+    },
     '/commerce/operations': {
       route: '/commerce/operations',
       pageKey: 'commerceOperations',
@@ -1413,7 +1430,7 @@ export function createPageTours(t: (key: string) => string): Record<string, Page
           align: 'center'
         },
         {
-          element: '.geo-brand-config .code-block',
+          element: '.geo-brand-config .preview-notice',
           title: t('setup.onboarding.page.common.action'),
           description: t('setup.onboarding.page.geoBrandConfig.step2.description'),
           side: 'top',

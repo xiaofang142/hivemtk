@@ -1,5 +1,6 @@
 <template>
   <div class="external-import-page">
+    <p>{{ t('businessCopy.knowledge.description') }}</p>
     <el-alert
       :title="$t('外部系统文档接入')"
       type="info"
@@ -61,12 +62,12 @@
               </div>
             </el-form-item>
             <el-form-item
-              label="产品"
+              :label="t('businessCopy.knowledge.label')"
               required
             >
               <el-select
                 v-model="form.product_id"
-                placeholder="选择产品"
+                :placeholder="t('businessCopy.knowledge.select')"
                 style="width: 100%"
               >
                 <el-option
@@ -268,7 +269,7 @@
           </template>
           <el-select
             v-model="jobFilterProduct"
-            placeholder="按产品筛选"
+            :placeholder="t('businessCopy.knowledge.filter')"
             clearable
             style="width: 100%; margin-bottom: 8px"
             @change="loadJobs"
@@ -348,6 +349,9 @@
 
 <script setup>
 import i18n from '@/i18n'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'

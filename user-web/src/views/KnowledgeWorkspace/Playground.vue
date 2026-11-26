@@ -1,5 +1,6 @@
 <template>
   <div class="playground-page">
+    <p>{{ t('businessCopy.knowledge.description') }}</p>
     <el-alert
       :title="$t('检索 Playground')"
       type="info"
@@ -25,12 +26,12 @@
             label-width="100px"
           >
             <el-form-item
-              label="产品"
+              :label="t('businessCopy.knowledge.label')"
               required
             >
               <el-select
                 v-model="form.product_id"
-                placeholder="选择产品"
+                :placeholder="t('businessCopy.knowledge.select')"
                 style="width: 100%"
               >
                 <el-option
@@ -90,10 +91,10 @@
                 style="width: 100%"
               >
                 <el-option
-                  v-for="t in tagOptions"
-                  :key="t"
-                  :label="t"
-                  :value="t"
+                  v-for="tag in tagOptions"
+                  :key="tag"
+                  :label="tag"
+                  :value="tag"
                 />
               </el-select>
             </el-form-item>
@@ -330,7 +331,7 @@
             border
             size="small"
           >
-            <el-descriptions-item label="产品 ID">
+            <el-descriptions-item :label="t('businessCopy.knowledge.id')">
               {{ result.debug_info.product_id }}
             </el-descriptions-item>
             <el-descriptions-item label="Top K">
@@ -365,7 +366,9 @@
 </template>
 
 <script setup>
-import i18n from '@/i18n'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
@@ -429,7 +432,7 @@ const loadProducts = async () => {
 
 const handleSearch = async () => {
   if (!canSearch.value) {
-    ElMessage.warning(i18n.global.t('请选择产品并输入查询文本'))
+    ElMessage.warning(t('businessCopy.knowledge.queryRequired'))
     return
   }
   searching.value = true

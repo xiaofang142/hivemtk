@@ -6,8 +6,8 @@
       type="warning"
       show-icon
       :closable="false"
-      title="订单草稿底座不可用"
-      description="档位读数说本进程没装配草稿运行时（FF_LTC_ORDER_DRAFT_DB 为 off 或值无法识别），所以这一页连列表请求都没发 —— 发出去后端只会回 503。下面的空列表不是「草稿清完了」，是一次都没读到；档位只在装配期读一次，改完须重启。"
+      :title="t('businessCopy.orderDraft.unavailableTitle')"
+      :description="t('businessCopy.orderDraft.unavailableDescription')"
     />
     <el-alert
       v-if="loadError"
@@ -24,8 +24,8 @@
       type="info"
       show-icon
       :closable="false"
-      title="登录态里没有 user id"
-      description="确认/取消/改价都要求操作者身份，所以这一页此刻只能看不能点。重新登录通常就能拿回身份。"
+      :title="t('businessCopy.identity.title')"
+      :description="t('businessCopy.identity.orderDraftDescription')"
     />
 
     <el-card shadow="never">
@@ -38,7 +38,7 @@
               size="small"
               type="info"
             >
-              档位 {{ stats.mode }} · 底座 {{ stats.store || '—' }}
+              {{ t(serviceStatusKey) }}
             </el-tag>
           </div>
           <el-button
@@ -61,7 +61,7 @@
           :key="k"
           class="count-chip"
         >
-          {{ k }} <b>{{ n }}</b>
+          {{ statusLabel(k) }} <b>{{ n }}</b>
         </span>
         <span class="counts-at">待确认池视图不含已确认/已取消/已过期（要看客户全历史，进详情页）</span>
       </div>
@@ -69,7 +69,7 @@
         v-else-if="stats.assembled === false"
         class="counts"
       >
-        <span class="count-chip">本进程未装配草稿运行时 ⇒ 计数未读取（不是 0）</span>
+        <span class="count-chip">{{ t('businessCopy.orderDraft.countsUnavailable') }}</span>
       </div>
       <el-alert
         v-if="stats.warning"
@@ -77,7 +77,8 @@
         type="warning"
         show-icon
         :closable="false"
-        :title="stats.warning"
+        :title="t('businessCopy.orderDraft.serviceWarning')"
+        :description="['memory', 'shadow'].includes(stats.store) ? t('businessCopy.orderDraft.temporaryStorageWarning') : undefined"
       />
 
       <el-form
@@ -246,8 +247,7 @@
         v-if="truncated"
         class="hint"
       >
-        本次读到的行数已达上限（后端读口没有 offset）——「还有更多」是确定的，但看不到后面几条；
-        需要整池全量请提高条数上限（最多 200）或收窄归属筛选。
+        {{ t('businessCopy.orderDraft.listLimitHint') }}
       </p>
     </el-card>
   </div>
@@ -259,6 +259,9 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { orderDraftApi } from '@/api/orderDraft'
 import { useUserStore } from '@/stores/user'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 // AI 成单草稿的人工入口（A1 的前端半）。
 //
@@ -284,6 +287,12 @@ const unavailable = ref(false)
 const loadError = ref('')
 const stats = reactive({ mode: '', store: '', assembled: undefined, counts: null, warning: '' })
 const filter = reactive({ owner: 'pool', limit: 50 })
+const serviceStatusKey = computed(() => {
+  if (unavailable.value || stats.assembled === false) return 'businessCopy.orderDraft.unavailableTitle'
+  if (loadError.value || stats.warning) return 'businessCopy.orderDraft.serviceNeedsAttention'
+  if (['memory', 'shadow'].includes(stats.store)) return 'businessCopy.orderDraft.temporaryStorage'
+  return 'businessCopy.orderDraft.serviceEnabled'
+})
 
 const STATUS_TAGS = { pending: 'warning', confirmed: 'success', cancelled: 'info', expired: 'danger' }
 const STATUS_LABELS = { pending: '待确认', confirmed: '已确认', cancelled: '已取消', expired: '已过期' }
@@ -400,7 +409,7 @@ async function confirmDraft(row) {
     const result = await orderDraftApi.confirm(row.id)
     if (result?.order_provisional) {
       ElMessage.warning(
-        `草稿已确认，但未拿到订单服务 ⇒ 订单号 ${result.order_id || '（空）'} 是本进程临时生成的，orders 表里没有这一行`
+        t('businessCopy.orderDraft.provisionalOrderWarning', { orderId: result.order_id || '—' })
       )
     } else {
       ElMessage.success(`已确认成单${result?.order_id ? `：订单 ${result.order_id}` : ''}`)

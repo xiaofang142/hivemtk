@@ -12,7 +12,7 @@
         >
           <template #header>
             <div class="card-header">
-              <span class="card-title">GEO 配置</span>
+              <span class="card-title">{{ t('menu.geoConfig') }}</span>
               <el-button
                 link
                 type="primary"
@@ -30,14 +30,14 @@
             <el-form-item label="品牌名称">
               <el-input
                 v-model="config.brand"
-                placeholder="如：hivemtk"
+                :placeholder="t('navigationContent.geoDetails.brandExample')"
                 clearable
               />
             </el-form-item>
             <el-form-item label="官网域名">
               <el-input
                 v-model="config.domain"
-                placeholder="如：xiaofang142.github.io（不要带 https://）"
+                :placeholder="t('navigationContent.geoDetails.domainExample')"
                 clearable
               />
             </el-form-item>
@@ -277,12 +277,14 @@
 
 <script setup>
 import { ref, reactive, onMounted, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { Check, MagicStick } from '@element-plus/icons-vue'
 import { geoApi } from '@/api/geo'
 import { http } from '@/utils/request'
 import { isUserReportedError } from '@/utils/errorReporting'
 
+const { t } = useI18n()
 const modelOptions = ref([])
 
 const loadModelOptions = async () => {

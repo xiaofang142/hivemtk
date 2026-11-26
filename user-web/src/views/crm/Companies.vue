@@ -5,7 +5,7 @@
         <h2 class="page-title">
           公司主数据
         </h2>
-        <span class="page-sub">维护公司档案并关联客户（US1 补缺实体）</span>
+        <span class="page-sub">{{ t('businessCopy.crm.companiesSubtitle') }}</span>
       </div>
       <el-button
         type="primary"
@@ -195,6 +195,9 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { companyApi } from '@/api/company'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const loading = ref(false)
 const saving = ref(false)

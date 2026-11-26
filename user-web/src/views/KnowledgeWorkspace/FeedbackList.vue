@@ -1,5 +1,6 @@
 <template>
   <div class="feedback-list-page">
+    <p>{{ t('businessCopy.knowledge.description') }}</p>
     <el-alert
       :title="$t('检索反馈管理')"
       type="info"
@@ -16,7 +17,7 @@
       <div class="filter-bar">
         <el-select
           v-model="filter.product_id"
-          placeholder="选择产品"
+          :placeholder="t('businessCopy.knowledge.select')"
           clearable
           filterable
           style="width: 200px"
@@ -211,6 +212,9 @@
 
 <script setup>
 import _i18n from '@/i18n'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'

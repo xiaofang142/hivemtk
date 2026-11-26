@@ -1,0 +1,11 @@
+{
+  "locales": ["ar", "de", "en", "es", "fr", "ja", "pt", "ru", "zh"],
+  "bundleFallback": "zh",
+  "bundles": [
+    { "namespace": "workflowNavigation", "locales": ["en", "zh"] },
+    { "namespace": "navigationContent", "locales": ["en", "zh"], "root": true },
+    { "namespace": "crawlerSource", "locales": ["en", "zh"] },
+    { "namespace": "businessCopy", "locales": ["en", "zh"] },
+    { "namespace": "navigationGuide", "locales": ["en", "zh"] }
+  ]
+}

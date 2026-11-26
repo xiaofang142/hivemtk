@@ -1,0 +1,78 @@
+{
+  "identity": {
+    "title": "Your identity could not be verified",
+    "approvalDescription": "You cannot claim, process or approve tasks. Contact your site administrator to verify your account identity.",
+    "badCaseDescription": "You cannot add, label or dismiss cases. Contact your site administrator to verify your account identity.",
+    "orderDraftDescription": "You cannot confirm, cancel or edit order drafts. Contact your site administrator to verify your account identity."
+  },
+  "approval": {
+    "unavailableTitle": "Task service unavailable",
+    "unavailableDescription": "Tasks and statistics could not be loaded. An empty list does not mean all tasks are complete. Contact your site administrator."
+  },
+  "badCase": {
+    "unavailableTitle": "Case management service unavailable",
+    "unavailableDescription": "The case queue and statistics could not be loaded. An empty list or zero values do not mean the queue is complete. Contact your site administrator."
+  },
+  "orderDraft": {
+    "unavailableTitle": "Order draft service unavailable",
+    "unavailableDescription": "Order drafts and statistics could not be loaded. An empty list does not mean there are no drafts awaiting confirmation. Contact your site administrator.",
+    "detailUnavailableDescription": "This order draft cannot currently be loaded or processed, so its status is unconfirmed. Contact your site administrator.",
+    "serviceEnabled": "Order draft service enabled",
+    "serviceNeedsAttention": "Order draft service needs attention",
+    "temporaryStorage": "Order drafts stored temporarily",
+    "temporaryStorageWarning": "Drafts are currently stored temporarily and may be unavailable after a service interruption. Contact your site administrator to verify their storage status.",
+    "countsUnavailable": "Draft counts have not been loaded. The number of pending drafts is unknown.",
+    "serviceWarning": "The order draft service has a problem that may affect draft creation or saving. Contact your site administrator before continuing.",
+    "listLimitHint": "The returned draft count has reached the limit. More drafts may be available. Increase the limit (up to 200) or narrow the ownership filter.",
+    "provisionalOrderWarning": "The draft is confirmed, but a formal order has not been created. Reference {orderId} is temporary. Contact your site administrator to verify and create the order.",
+    "owner": "Owner ID",
+    "productNameHint": "If this customer already has a pending draft for the same product, process that draft first.",
+    "editHint": "Only changed values are saved. Quantity must be at least 1 and price cannot be negative. To discard a draft, choose Cancel draft. Saving updates the draft and total."
+  },
+  "crm": {
+    "contactsSubtitle": "Maintain customer contacts and their relationships",
+    "suppliersSubtitle": "Maintain customer supplier details and relationships",
+    "serviceProvidersSubtitle": "Maintain customer service provider details and relationships",
+    "companiesSubtitle": "Maintain company profiles and link customers",
+    "profileSubtitle": "View customer details, AI suggestions with evidence, and search results across accounts and industries"
+  },
+  "leads": {
+    "scopedSubtitle": "View customer and lead data your account is authorized to access"
+  },
+  "insight": {
+    "subtitle": "Generate suggestions from evidence and update records after human confirmation. No applicable actions are offered without evidence.",
+    "generateTitle": "Generate a draft from customer records",
+    "generationDescription": "Suggestions are currently generated from existing customer records without an AI model. No applicable actions are offered without verifiable evidence.",
+    "existingRecordsSource": "Generated from existing customer records (no AI model)",
+    "confirmDescription": "Confirming executes the suggested actions and updates records. Review the evidence and actions first."
+  },
+  "customerImport": {
+    "subtitle": "Upload CSV, check the data, confirm the import and review error reports"
+  },
+  "guide": {
+    "support": "After completing these five steps, you can start your marketing activities. For help, contact your site administrator."
+  },
+  "email": {
+    "addSender": "Add sender account",
+    "editSender": "Edit sender account",
+    "senderName": "Sender account name",
+    "senderNamePlaceholder": "Enter a sender account name",
+    "dailyLimit": "Daily sending limit",
+    "dailyLimitPlaceholder": "Enter a daily sending limit",
+    "deleteSenderConfirm": "Delete this sender account?",
+    "providerReferenceTitle": "Email provider configuration reference",
+    "providerReferenceDescription": "Look up SMTP addresses, ports and authentication requirements, then configure a sender account. Follow the provider's current instructions for exact settings."
+  },
+  "knowledge": {
+    "label": "RAG knowledge base",
+    "select": "Select a RAG knowledge base",
+    "optionalSelect": "Select a RAG knowledge base (optional)",
+    "filter": "Filter by RAG knowledge base",
+    "belongsTo": "RAG knowledge base",
+    "id": "RAG knowledge base ID",
+    "description": "A RAG knowledge base is a document collection used for import and retrieval. Select the collection you want to work with.",
+    "required": "Select the target RAG knowledge base first.",
+    "queryRequired": "Select a RAG knowledge base and enter a query.",
+    "previewEmpty": "Select a RAG knowledge base and a file (or paste JSON), then choose Preview parsed results."
+  }
+}

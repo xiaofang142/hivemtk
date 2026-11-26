@@ -32,6 +32,10 @@
       </div>
     </div>
 
+    <WorkflowNavigation
+      owner="/leads/rules"
+      :links="workflowLinks"
+    />
     <el-card shadow="never">
       <el-table
         v-loading="loading"
@@ -195,6 +199,14 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { leadsApi } from '@/api/leads'
+import WorkflowNavigation from '@/components/WorkflowNavigation.vue'
+
+const workflowLinks = [
+  { key: 'notifyRoutes', path: '/leads/notify-routes' },
+  { key: 'evidence', path: '/leads/evidence' },
+  { key: 'archive', path: '/leads/archive' },
+  { key: 'scopedList', path: '/leads/scoped-list' }
+]
 
 const loading = ref(false)
 const saving = ref(false)

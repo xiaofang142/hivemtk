@@ -1,6 +1,10 @@
 <template>
+  <sub-menu-item
+    v-if="menu.children?.length === 1"
+    :menu="menu.children[0]"
+  />
   <el-sub-menu
-    v-if="menu.children && menu.children.length > 0"
+    v-else-if="menu.children && menu.children.length > 0"
     :index="menu.key || menu.path"
     popper-class="sidebar-menu-popper"
   >

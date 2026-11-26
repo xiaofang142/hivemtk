@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils'
 import ElementPlus, { ElMessage } from 'element-plus'
 import { createPinia } from 'pinia'
 import { settle, settleBody } from './settle-helper'
+import i18n from '@/i18n'
 
 // 组件渲染用例：证明 actions.js 那三条判据**穿过了模板**，而不只是活在判据文件里。
 //
@@ -113,7 +114,7 @@ const mounted = []
 async function mountTracked() {
   const wrapper = mount(List, {
     attachTo: document.body,
-    global: { plugins: [createPinia(), ElementPlus] }
+    global: { plugins: [createPinia(), ElementPlus, i18n] }
   })
   mounted.push(wrapper)
   await settle(wrapper)
@@ -129,6 +130,7 @@ async function mountPage(rows = ROWS, stats = STATS) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  i18n.global.locale.value = 'zh'
   ctx.me = { id: '7', role: 'manager' }
 })
 
@@ -165,12 +167,13 @@ describe('队列渲染：三类状态一起列，按钮按状态分', () => {
     expect(countButtons(document.body, '撤销')).toBe(2)
   })
 
-  it('没有 user id 时整页只读，并挂着那句"只能看不能点"', async () => {
+  it('身份未确认时整页只读，并提示联系站点管理员', async () => {
     ctx.me = null
     const wrapper = await mountPage()
     expect(countButtons(document.body, '打标')).toBe(0)
     expect(countButtons(document.body, '撤销')).toBe(0)
-    expect(wrapper.text()).toContain('登录态里没有 user id')
+    expect(wrapper.text()).toContain('当前身份未能确认')
+    expect(wrapper.text()).toContain('请联系站点管理员确认当前账号身份')
   })
 
   it('值域外的状态自己站出来，不藏进任何一档读数', async () => {
@@ -200,14 +203,14 @@ describe('队列渲染：三类状态一起列，按钮按状态分', () => {
   })
 })
 
-describe('503 与读数：底座不可用不等于队列清完了', () => {
-  it('列表回 503 时页面长期挂着"一次都没读到"，而不是显示一张空表', async () => {
+describe('503 与读数：服务不可用不等于队列清完了', () => {
+  it('列表回 503 时说明队列读取失败，空列表或零值不代表处理完毕', async () => {
     api.list.mockRejectedValue(Object.assign(new Error('unavailable'), { status: 503 }))
     api.stats.mockRejectedValue(Object.assign(new Error('unavailable'), { status: 503 }))
     api.taxonomy.mockResolvedValue(TAXONOMY)
     const wrapper = await mountTracked()
-    expect(wrapper.text()).toContain('Bad Case 底座不可用')
-    expect(wrapper.text()).toContain('一次都没读到')
+    expect(wrapper.text()).toContain('坏例管理服务暂不可用')
+    expect(wrapper.text()).toContain('空列表或零值不代表队列已处理完毕')
   })
 
   it('已判率读数印成百分数（它是本卡北极星，不该要人自己心算 0.6667）', async () => {

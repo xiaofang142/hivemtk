@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"hivemtk-user/internal/geo/model"
 	"hivemtk-user/internal/geo/repository"
 	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
@@ -83,7 +85,7 @@ var aiBotUserAgents = []string{
 // 这里刻意只存**路径**不存完整 URL：官网基址是运行期配置（GEO_SITE_BASE_URL，
 // 默认见 config.DefaultWebsiteBaseURL），域名换了改一处配置即可，不必再回来动这张表。
 // 路径必须全部落在官网真实路由上（/ /features /toolchain /workflow /docs /faq /deploy），
-// 由 site_base_test.go 逐条把门——爬虫投给 AI 引擎的每个落地页都得是活页。
+// 由 site_base_test.go 逐条把门，供本系统主动探测的落地页都应存在。
 var keywordToLandings = map[string][]string{
 	"GEO优化":   {"/", "/features", "/docs"},
 	"AI搜索优化":  {"/features", "/"},
@@ -142,8 +144,7 @@ var competitorSeeds = []competitorSeed{
 	{Domain: "weibanzhushou.com", Paths: []string{"/", "/product", "/pricing"}},
 }
 
-// MonitorCrawlerService 关键词维度 AI 爬虫监控
-// 核心：读 geo_keywords → 查 keywordToLandings 拿 HiveMTK 落地页 → 读 geo_competitors DB → 爬所有竞品 → 每条访问带 keyword 标签
+// MonitorCrawlerService 按关键词任务标签发起 HTTP UA 探测，不调用外部 AI 引擎。
 type MonitorCrawlerService struct {
 	crawlerRepo    repository.GeoCrawlerVisitRepository
 	keywordRepo    repository.GeoKeywordRepository
@@ -168,6 +169,11 @@ func NewMonitorCrawlerService(
 
 // RunCrawlerCron 爬虫入口：读关键词 → 批量爬 → 写库
 func (s *MonitorCrawlerService) RunCrawlerCron(ctx context.Context) (int, error) {
+	var err error
+	ctx, err = crawlerTenantContext(ctx)
+	if err != nil {
+		return 0, err
+	}
 	logger.Info("[GEO Crawler] 关键词驱动爬虫开始 ...")
 
 	kws := s.loadKeywords(ctx)
@@ -179,16 +185,15 @@ func (s *MonitorCrawlerService) RunCrawlerCron(ctx context.Context) (int, error)
 	competitors := s.loadCompetitors(ctx)
 
 	type task struct {
-		Keyword   string
-		URL       string
-		IsHiveMTK bool
+		Keyword string
+		URL     string
 	}
 	tasks := make([]task, 0, len(kws)*6+30)
 
 	for _, kw := range kws {
 
 		for _, u := range landingURLs(ctx, kw) {
-			tasks = append(tasks, task{Keyword: kw, URL: u, IsHiveMTK: true})
+			tasks = append(tasks, task{Keyword: kw, URL: u})
 		}
 
 		for _, comp := range competitors {
@@ -198,9 +203,8 @@ func (s *MonitorCrawlerService) RunCrawlerCron(ctx context.Context) (int, error)
 			}
 			path := paths[rand.Intn(len(paths))]
 			tasks = append(tasks, task{
-				Keyword:   kw,
-				URL:       fmt.Sprintf("https://%s%s", comp.Domain, path),
-				IsHiveMTK: false,
+				Keyword: kw,
+				URL:     fmt.Sprintf("https://%s%s", comp.Domain, path),
 			})
 		}
 	}
@@ -261,11 +265,39 @@ func (s *MonitorCrawlerService) doCrawl(ctx context.Context, targetURL, keyword,
 	}
 
 	return &model.GeoCrawlerVisit{
+		Source:    model.CrawlerSourceActiveUAProbe,
 		Keyword:   keyword,
 		UserAgent: ua,
 		Path:      targetURL,
 		Engine:    extractEngineFromUA(ua),
 	}
+}
+
+var ErrCrawlerTenantRequired = errors.New("主动 UA 探测缺少租户上下文")
+
+// crawlerTenantContext 保留当前租户并剥离系统豁免，缺租户时在任何回退/外发请求前拒绝。
+func crawlerTenantContext(ctx context.Context) (context.Context, error) {
+	id := tenant.WriteTenantID(ctx)
+	if id == 0 {
+		return nil, ErrCrawlerTenantRequired
+	}
+	return tenant.OnlyTenant(ctx, id), nil
+}
+
+// StartCrawlerProbe 只受理当前租户的主动 HTTP 探测；受理不代表已经完成或外部引擎来访。
+func StartCrawlerProbe(ctx context.Context) error {
+	scoped, err := crawlerTenantContext(ctx)
+	if err != nil {
+		return err
+	}
+	runCtx, cancel := context.WithTimeout(tenant.BackgroundWithTenant(scoped), 10*time.Minute)
+	utils.SafeGo(runCtx, "geo-active-ua-probe", func(jobCtx context.Context) {
+		defer cancel()
+		if _, err := CrawlerMonitorCronWithContext(jobCtx); err != nil {
+			logger.Errorf("[GEO UA Probe] 主动探测失败: %v", err)
+		}
+	})
+	return nil
 }
 
 func (s *MonitorCrawlerService) loadKeywords(ctx context.Context) []string {

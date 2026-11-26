@@ -4,7 +4,7 @@
       <h2 class="page-title">
         权限内客户与消息
       </h2>
-      <span class="page-sub">按渠道账号授权登录后，仅展示当前用户权限范围内的数据（US2 数据权限）</span>
+      <span class="page-sub">{{ t('businessCopy.leads.scopedSubtitle') }}</span>
     </div>
 
     <el-card shadow="never">
@@ -213,6 +213,9 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { leadsApi } from '@/api/leads'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const activeTab = ref('customers')
 const loading = ref(false)

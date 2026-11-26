@@ -11,20 +11,19 @@ import (
 // 目录节点 / 它在第几层"只有这里知道。平台端拿到的只是一串字符串，让它自己判断归属
 // 会把一份事实抄成两份并各自漂移。
 //
-// 平台端 seed 由 scripts/gen-module-bindings.sh 从本文件导出
-// （platform-server/seed/module_menu_bindings.json），两端各有一条测试钉死
-// "208 个 menu_key 全覆盖且无重复"，任何一侧漏绑或双绑都会红。
+// 平台端 seed 由 user-server/cmd/gen-module-bindings 从本文件导出，
+// 通过 -out 指定 module_catalog_seed.json 的落点；测试保证注册表全覆盖且无重复。
 //
 // 归属粒度是**菜单节点（key）级**，不是顶级分组级：一个顶级分组下常混着免费与收费
-// 节点（system 顶级全是基础；reach 顶级下 6 个目录全是收费；analytics 顶级下
-// dashboardScreen 属 P11 而 confidencePanel 属 P2）。
+// 节点（system 同时包含系统基座与付费浏览器自动化；aiAgent 同时包含基础会话
+// 和付费智能体）。菜单目录位置不改变叶子能力归属。
 //
 // 归属原则：
 //  1. category=base 的模块不可关闭，因此不能承载「关掉会让外部系统挂掉」的资源 ——
 //     chatChannelList 是 embed-sdk 在客户网站上的凭据来源，归 core 而非 inbox。
 //  2. 同一节点只能属于一个模块（跨模块共享用 depends_on 表达，不重复绑定）。
-//  3. 目录节点也要绑定：目录被过滤掉时其子路由才不会被调到（FilterMenuTree 的剪枝
-//     语义依赖父节点存在）。
+//  3. 目录节点也登记归属供导出与查询，但不增加后代的模块条件；真正依赖由
+//     ModuleCatalogMeta.DependsOn 声明。带 Path 目录的默认页面单独按自身归属过滤。
 
 // ModuleKey 功能模块标识。与 platform-server 的 module_catalog.module_key 一一对应。
 type ModuleKey = string
@@ -196,7 +195,7 @@ func ModuleDependsOn(key string) []string {
 
 // ModuleMenuBindings 模块 → 菜单节点清单。**手工维护，测试钉死全覆盖**。
 //
-// 键的排序按 SystemMenuTree 的先序遍历顺序书写，方便人工比对；测试不依赖顺序。
+// 清单按模块聚合，菜单位置与归属独立；测试不依赖清单顺序。
 var ModuleMenuBindings = map[string][]string{
 	// ========== core：系统基座（29 节点）==========
 	ModuleCore: {
@@ -207,7 +206,7 @@ var ModuleMenuBindings = map[string][]string{
 		"systemDictionaries", "systemFeatureFlags", "ltcConfig", "opsOverview",
 		// 团队
 		"teamGroup", "systemUser", "roleManage", "permissionManage",
-		// 权限设置
+		// 渠道与集成
 		"permissionGroup", "platformAccount", "integration", "channelIdentifyCode",
 		// 2026-11-24：渠道统一治理（渠道预设 + 渠道账号）与识别码同属渠道接入这一摊，
 		// 归 core（与 T057「旧散落账号配置收敛到渠道账号管理」口径一致）。
@@ -223,7 +222,7 @@ var ModuleMenuBindings = map[string][]string{
 		"capabilityDiagnostics",
 		// 能力矩阵（注册表声明的渠道×能力）与诊断是一对：声明 vs 运行态，同归 core。
 		"capabilityMatrix",
-		// 备份（backupEnhanced 已除名：页面并入 backupList，见 menu.go 同日注释）
+		// 备份恢复
 		"backupList",
 		// 客服 Web Widget 渠道（embed-sdk 在客户网站上的凭据来源，见文件头原则 1）
 		"chatChannelList",
@@ -335,7 +334,7 @@ var ModuleMenuBindings = map[string][]string{
 
 	// ========== reach-auto：营销自动化（7 节点）==========
 	ModuleReachAuto: {
-		"reach", // 顶级目录：由全部触达/IM 收费模块共同持有（目录节点允许多绑定）
+		"reach", // 导航目录的登记归属；后代仍逐节点按各自模块过滤。
 		"agentActive", "reachPipeline", "reachDeferredOutbound", "marketingFlow", "batchOperation",
 		"workflowOrchestrator",
 	},
@@ -483,7 +482,7 @@ func SetModuleEnabledFilter(fn func(moduleKey string) bool) {
 
 // FilterMenuTreeByModule 先按「模块是否开通」裁菜单，再交给角色授权裁剪。
 //
-// 为什么必须先裁模块：FilterMenuTree 对未命中 key 的节点会剪掉整条分支。若把
+// 为什么必须先裁模块：FilterMenuTree 仅按角色授予筛选，不检查模块开通状态。若把
 // 「未开通模块的菜单 key」当作普通未授权处理，admin（恒全量，不落库）就绕过了模块闸 ——
 // 菜单还看得见、点进去才 403，正是 ADR 里点名要避免的症状。
 func FilterMenuTreeByModule(tree []SystemMenuNode, enabled func(moduleKey string) bool) []SystemMenuNode {
@@ -493,31 +492,28 @@ func FilterMenuTreeByModule(tree []SystemMenuNode, enabled func(moduleKey string
 	if enabled == nil {
 		return tree
 	}
-	var walk func(nodes []SystemMenuNode, parentOK bool) []SystemMenuNode
-	walk = func(nodes []SystemMenuNode, parentOK bool) []SystemMenuNode {
+	var walk func(nodes []SystemMenuNode) []SystemMenuNode
+	walk = func(nodes []SystemMenuNode) []SystemMenuNode {
 		out := make([]SystemMenuNode, 0, len(nodes))
 		for _, n := range nodes {
-			ok := parentOK && (n.Path == "" || enabledForNode(n, enabled))
-			children := walk(n.Children, ok)
-			// 目录节点（Path==""）自身没有模块归属，ok 恒为 true；若它的子节点
-			// 全被模块闸剪掉，继续保留就只剩一个点不开的空壳分组 —— 线上表现
-			// 正是「抖音/快手/小红书/闲鱼/TikTok 分组标题在，子菜单一个都没有」。
-			// 因此空目录一律剪掉；有 Path 的叶子仍按自身模块开关判定。
-			if len(children) == 0 {
-				if n.Path == "" || !ok {
-					continue
-				}
+			children := walk(n.Children)
+			// 目录默认页与后代分别过闸，避免目录归属变成隐含购买依赖。
+			// 默认页关闭但后代可用时保留纯目录，不能留下一个必然被拦的链接。
+			if n.Path != "" && !enabledForNode(n, enabled) {
+				n.Path = ""
+			}
+			if n.Path == "" && len(children) == 0 {
+				continue
 			}
 			n.Children = children
 			out = append(out, n)
 		}
 		return out
 	}
-	return walk(tree, true)
+	return walk(tree)
 }
 
-// enabledForNode 判定单节点：目录节点看子节点是否还有活的（子节点在 walk 里已算），
-// 有 Path 的叶子看自己归属的模块。
+// enabledForNode 按节点自身归属判定其 Path 是否可用；后代由 walk 独立过滤。
 //
 // 未绑定任何模块的节点默认放行 —— 它们是「不属于任何可售模块」的系统骨架节点
 // （例如未来新增的内部页）。漏绑由 TestModuleMenuBindingsCoverAllMenuKeys 在 CI 兜住。

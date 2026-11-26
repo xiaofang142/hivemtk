@@ -1,0 +1,71 @@
+{
+  "moduleTour": "Replay this module guide",
+  "moduleUnavailable": "This module guide is unavailable. Wait for navigation to finish loading.",
+  "steps": {
+    "navigation": "Choose a workflow in the sidebar",
+    "content": "Complete work on the current page"
+  },
+  "modules": {
+    "workspace": {
+      "title": "Workspace: handle current work",
+      "overview": "Review business summaries and pending work to decide what needs attention today.",
+      "navigation": "Open the workspace pages granted to your account for summaries, tasks and collaboration.",
+      "content": "Check the scope of the figures and task status before opening the relevant work. Detailed customer, outreach and configuration tools live in their respective modules."
+    },
+    "customer": {
+      "title": "Customers and sales: from leads to customer management",
+      "overview": "Manage leads, customer master data and sales follow-up with traceable customer identities and progress.",
+      "navigation": "Start with lead discovery and rules, then move to customer records, profiles and sales follow-up. Available entries follow your account permissions.",
+      "content": "Filter and maintain records before opening details or following up. Customer and lead rule pages offer permitted governance tools; check the affected records before merging, assigning or archiving."
+    },
+    "aiAgent": {
+      "title": "Agents and service: configure support and handle conversations",
+      "overview": "Connect agent configuration with customer service, conversation handling and quality improvements.",
+      "navigation": "Use the sidebar for agent configuration, service conversations and quality management. Configure services and knowledge before handling conversations and human handoffs.",
+      "content": "Confirm the service audience and settings before testing, saving or acting on a conversation. Review outcomes with approvals and issue records."
+    },
+    "reach": {
+      "title": "Outreach operations: organize channels and delivery",
+      "overview": "Manage channel accounts, outreach content and task execution alongside customer groups and campaign feedback.",
+      "navigation": "Choose an authorized channel, configure its account and connection, then prepare drafts, create tasks and review execution records.",
+      "content": "Check recipients, account and content before starting a task. Email sender accounts configure the actual sending identity; the email provider reference supplies connection parameters and authorization guidance."
+    },
+    "knowledge": {
+      "title": "Knowledge center: maintain useful business knowledge",
+      "overview": "Import and maintain business knowledge to provide traceable sources for agent retrieval and answers.",
+      "navigation": "Use the sidebar for import, management, retrieval checks and feedback. Tokens and API entries connect business systems.",
+      "content": "Check sources and import results, then test retrieval matches and answer evidence. Revise content using feedback and review statistics."
+    },
+    "geoTools": {
+      "title": "GEO growth: produce, publish and verify",
+      "overview": "Improve brand content and website discoverability through content production, publishing, monitoring and foundational configuration.",
+      "navigation": "The sidebar follows production → publishing → monitoring → configuration: prepare keywords and content, publish to sites or channels, observe results, then maintain brand, site and connection details.",
+      "content": "UA probe records show active requests made by this system with AI User-Agent headers; they do not prove actual external crawler visits. Source gap tasks track missing coverage, while brand and site configuration maintains foundational data."
+    },
+    "analytics": {
+      "title": "Analytics: review business outcomes",
+      "overview": "Use business metrics, funnels and trends to identify issues and inform operational and sales actions.",
+      "navigation": "Choose an analysis topic in the sidebar to review metrics, conversion paths and reports for the relevant business.",
+      "content": "Check the date range, filters and metric units before comparing trends or exporting results. Distinguish dashboard examples from live business data."
+    },
+    "system": {
+      "title": "System management: maintain organization and settings",
+      "overview": "Maintain accounts, permissions, connections and runtime settings to support your organization’s workflows.",
+      "navigation": "Open the appropriate administration page. Visible entries follow server permissions; confirm the affected accounts and business scope before changing settings.",
+      "content": "Read field guidance and current status before saving, then verify the result. Check the related business entry after changing permissions or connections."
+    }
+  },
+  "pages": {
+    "crmList": {
+      "title": "Customer master data and governance tools",
+      "summary": "Maintain unified customer records filtered by account, industry and owner permissions. Tools on this page appear when your account can use them.",
+      "tools": "Filter customers by keyword, industry or owner first. Authorized tools include deduplication and merging, import and export, contacts, suppliers, service providers and companies. Choose the tool for your current work.",
+      "records": "Check identity, source and owner before editing or opening a 360 profile. Confirm the affected records before merging customers or editing owners."
+    },
+    "leadsRules": {
+      "title": "Lead rules and governance workflow",
+      "summary": "Rules match in account → channel → global priority. Define scope and keywords before creating or editing a rule; lead discovery agents execute discovery tasks.",
+      "records": "Check each rule’s scope and enabled status. Use permitted notification routes, evidence, archive and scoped lead lists to manage delivery destinations, trace sources, review history and select leads for follow-up."
+    }
+  }
+}

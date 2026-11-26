@@ -8,7 +8,7 @@
         <el-col :span="8">
           <el-card>
             <el-statistic
-              title="捕获线索数(L4)"
+              :title="t('navigationContent.geoDetails.leadsCaptured')"
               :value="report.leads_captured || 0"
             />
           </el-card>
@@ -33,7 +33,7 @@
 
       <el-card>
         <template #header>
-          <span>信源缺口补位队列（调控指令）</span>
+          <span>{{ t('menu.geoDecisionReport') }}</span>
         </template>
         <el-table
           v-loading="loading"
@@ -83,10 +83,12 @@
 
 <script setup>
 import { onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { getGeoDecisionReport, getGeoGapTasks, markGeoTaskDone } from '@/api/geoDecision.js'
 import { toList } from '@/utils/list'
 
+const { t } = useI18n()
 const report = ref({})
 const tasks = ref([])
 const loading = ref(false)

@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
 import { createPageTours } from '@/config/onboarding/pageTours'
+import { createI18n } from 'vue-i18n'
+import { messages } from '@/i18n/catalog'
 
 // 页面导览注册表的不变量（任务六）。
 //
@@ -121,12 +123,15 @@ describe('页面导览注册表 · 不变量', () => {
     const keys = collectKeys()
     keys.forEach((key) => {
       expect(DOTTED_KEY.test(key), `非法 i18n 键：${key}`).toBe(true)
-      expect(key.startsWith('setup.onboarding.page.'), `键必须在页面导览命名空间下：${key}`).toBe(true)
+      expect(
+        key.startsWith('setup.onboarding.page.') || key.startsWith('navigationGuide.pages.'),
+        `键必须在已注册的页面导览命名空间下：${key}`
+      ).toBe(true)
     })
   })
 
   it('9 个语言包都收录了全部页面导览词条（coverage 门要求 100%）', () => {
-    const keys = collectKeys()
+    const keys = [...collectKeys()].filter(key => key.startsWith('setup.onboarding.page.'))
     LANGS.forEach((lang) => {
       keys.forEach((key) => {
         const value = pick(locales[lang], key)
@@ -136,9 +141,33 @@ describe('页面导览注册表 · 不变量', () => {
     })
   })
 
+  it('新增页面词条从实际 catalog 解析，双语齐全且九语言按正式配置回落', () => {
+    const keys = [...collectKeys()].filter(key => key.startsWith('navigationGuide.pages.'))
+    expect(keys.length).toBeGreaterThan(0)
+    for (const lang of ['zh', 'en']) {
+      for (const key of keys) {
+        const value = pick(messages[lang], key)
+        expect(value, `${lang} catalog 缺 ${key}`).toBeDefined()
+        expect(typeof value === 'function' || (typeof value === 'string' && value.length > 0)).toBe(true)
+      }
+    }
+    for (const lang of LANGS) {
+      const i18n = createI18n({ legacy: false, locale: lang, fallbackLocale: 'zh', messages, missingWarn: false, fallbackWarn: false })
+      for (const key of keys) {
+        const value = i18n.global.t(key)
+        expect(value, `${lang} 无法解析 ${key}`).not.toBe(key)
+        expect(value.length).toBeGreaterThan(0)
+        expect(value).not.toMatch(/\{\{|\}\}|@[^\s]/)
+      }
+    }
+  })
+
   it('选择器不锚在条件渲染的元素上（否则气泡落到空气里）', () => {
     // 注册表里的选择器 -> 页面组件文件
     const ROUTE_TO_COMPONENT = {
+      '/crm/list': 'views/crm/List.vue',
+      '/leads/rules': 'views/leads/Rules.vue',
+      '/geo-tools/brand-config': 'views/geo/BrandConfig.vue',
       '/messageHub/list': 'views/messageHub/List.vue',
       '/abExperiment/list': 'views/abExperiment/List.vue',
       '/aiAgent/list': 'views/aiAgent/List.vue',

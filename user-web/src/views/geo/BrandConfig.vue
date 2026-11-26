@@ -1,99 +1,119 @@
 <template>
   <div class="geo-brand-config">
+    <el-alert
+      :title="t('navigationContent.brandConfig.previewNotice')"
+      type="info"
+      :closable="false"
+      show-icon
+      class="preview-notice"
+    />
     <el-tabs v-model="activeTab">
       <el-tab-pane
-        label="📄 llms.txt v2 预览"
+        :label="t('navigationContent.brandConfig.llmsTab')"
         name="llms"
       >
         <el-card shadow="never">
           <template #header>
             <div class="card-header">
-              <span>llms.txt — AI 爬虫的内容导航（带 describedby Link 头 + Markdown 孪生）</span>
-              <div>
+              <span>{{ t('navigationContent.brandConfig.llmsTitle') }}</span>
+              <div class="preview-actions">
                 <el-input
                   v-model="previewDomain"
                   placeholder="example.com"
-                  style="width:200px;margin-right:8px"
+                  :aria-label="t('navigationContent.brandConfig.domain')"
+                  :disabled="previews.llms.status === 'loading'"
+                  class="domain-input"
                 />
                 <el-button
                   type="primary"
+                  :loading="previews.llms.status === 'loading'"
                   @click="loadLlms"
                 >
-                  生成预览
+                  {{ t('navigationContent.brandConfig.generate') }}
                 </el-button>
               </div>
             </div>
           </template>
-          <el-empty
-            v-if="!llmsContent"
-            description="输入域名 → 点「生成预览」"
+          <p
+            v-if="previews.llms.status === 'loading'"
+            role="status"
           >
+            {{ t('navigationContent.brandConfig.loading') }}
+          </p>
+          <div v-else-if="previews.llms.status === 'error'">
+            <el-alert
+              :title="t('navigationContent.brandConfig.loadError')"
+              type="error"
+              :closable="false"
+              show-icon
+            />
             <el-button
-              type="primary"
+              class="retry-button"
               @click="loadLlms"
             >
-              示例域名
+              {{ t('navigationContent.brandConfig.retry') }}
             </el-button>
-          </el-empty>
-          <pre
-            v-else
-            class="code-block"
-          >{{ llmsContent }}</pre>
-          <div
-            v-if="llmsContent"
-            style="margin-top:12px"
-          >
-            <el-tag type="success">
-              ✅ 符合 llms.txt v2 规范
-            </el-tag>
-            <el-tag style="margin-left:8px">
-              Markdown 孪生 → LLM 友好
-            </el-tag>
-            <el-tag style="margin-left:8px">
-              Link 头 → describedby → 语义关联
+          </div>
+          <div v-else-if="previews.llms.status === 'preview'">
+            <pre class="code-block">{{ previews.llms.content }}</pre>
+            <el-tag type="info">
+              {{ t('navigationContent.brandConfig.previewStatus') }}
             </el-tag>
           </div>
+          <el-empty
+            v-else
+            :description="t(previews.llms.status === 'empty' ? 'navigationContent.brandConfig.empty' : 'navigationContent.brandConfig.idle')"
+          />
         </el-card>
       </el-tab-pane>
 
       <el-tab-pane
-        label="🤖 robots.txt AI 爬虫白名单"
+        :label="t('navigationContent.brandConfig.robotsTab')"
         name="robots"
       >
         <el-card shadow="never">
           <template #header>
             <div class="card-header">
-              <span>robots.txt — 2026 AI 爬虫完整白名单（8 国内 + 13 海外）</span>
+              <span>{{ t('navigationContent.brandConfig.robotsTitle') }}</span>
               <el-button
                 type="primary"
+                :loading="previews.robots.status === 'loading'"
                 @click="loadRobots"
               >
-                生成预览
+                {{ t('navigationContent.brandConfig.generate') }}
               </el-button>
             </div>
           </template>
-          <el-empty
-            v-if="!robotsContent"
-            description="点「生成预览」查看 robots.txt 内容"
-          />
-          <pre
-            v-else
-            class="code-block"
-          >{{ robotsContent }}</pre>
-          <div
-            v-if="robotsContent"
-            style="margin-top:12px"
+          <p
+            v-if="previews.robots.status === 'loading'"
+            role="status"
           >
-            <el-tag type="success">
-              ✅ 覆盖 21 个 AI 爬虫 UA
-            </el-tag>
-            <el-tag style="margin-left:8px">
-              Bytespider/DeepSeekBot/QwenBot/ErnieBot
-            </el-tag>
-            <el-tag style="margin-left:8px">
-              GPTBot/ClaudeBot/PerplexityBot/Amazonbot
+            {{ t('navigationContent.brandConfig.loading') }}
+          </p>
+          <div v-else-if="previews.robots.status === 'error'">
+            <el-alert
+              :title="t('navigationContent.brandConfig.loadError')"
+              type="error"
+              :closable="false"
+              show-icon
+            />
+            <el-button
+              class="retry-button"
+              @click="loadRobots"
+            >
+              {{ t('navigationContent.brandConfig.retry') }}
+            </el-button>
+          </div>
+          <div v-else-if="previews.robots.status === 'preview'">
+            <pre class="code-block">{{ previews.robots.content }}</pre>
+            <el-tag type="info">
+              {{ t('navigationContent.brandConfig.previewStatus') }}
             </el-tag>
           </div>
+          <el-empty
+            v-else
+            :description="t(previews.robots.status === 'empty' ? 'navigationContent.brandConfig.empty' : 'navigationContent.brandConfig.idle')"
+          />
         </el-card>
       </el-tab-pane>
     </el-tabs>
@@ -101,40 +121,51 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { geoApi } from '@/api/geo'
 
+const { t } = useI18n()
 const activeTab = ref('llms')
 const previewDomain = ref('example.com')
-const llmsContent = ref('')
-const robotsContent = ref('')
+const previewState = () => ({ status: 'idle', content: '' })
+const previews = reactive({ llms: previewState(), robots: previewState() })
+let disposed = false
 
-async function loadLlms() {
+async function loadPreview(preview, read) {
+  if (disposed || preview.status === 'loading') return
+  preview.status = 'loading'
+  preview.content = ''
   try {
-    const res = await geoApi.getLlmsTxtPreview(previewDomain.value)
-    llmsContent.value = res?.content || ''
-  } catch  {
-    llmsContent.value = '（后端暂未部署 llms.txt 生成逻辑）'
+    const res = await read()
+    if (disposed) return
+    if (typeof res?.content !== 'string') {
+      preview.status = 'error'
+      return
+    }
+    preview.content = res.content
+    preview.status = res.content.trim() ? 'preview' : 'empty'
+  } catch {
+    if (!disposed) preview.status = 'error'
   }
 }
 
-async function loadRobots() {
-  try {
-    const res = await geoApi.getRobotsTxtPreview()
-    robotsContent.value = res?.content || ''
-  } catch  {
-    robotsContent.value = '（后端暂未部署 robots.txt 生成逻辑）'
-  }
-}
+const loadLlms = () => loadPreview(previews.llms, () => geoApi.getLlmsTxtPreview(previewDomain.value))
+const loadRobots = () => loadPreview(previews.robots, () => geoApi.getRobotsTxtPreview())
 
 onMounted(() => {
   loadLlms()
   loadRobots()
 })
+onUnmounted(() => { disposed = true })
 </script>
 
 <style scoped>
-.card-header { display: flex; justify-content: space-between; align-items: center; }
+.preview-notice { margin-bottom: 16px; }
+.card-header { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center; }
+.preview-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.domain-input { width: 200px; max-width: 100%; }
+.retry-button { margin-top: 12px; }
 .code-block {
   background: #1e1e2e;
   color: #cdd6f4;

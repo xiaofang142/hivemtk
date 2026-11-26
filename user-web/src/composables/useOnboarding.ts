@@ -1,6 +1,7 @@
 import { driver as Driver } from 'driver.js'
 import 'driver.js/dist/driver.css'
 import { useUserStore } from '@/stores/user'
+import { usePermissionStore } from '@/stores/permission'
 import { useI18n } from 'vue-i18n'
 import { createPageTours, getPageTour, type PageTour } from '@/config/onboarding/pageTours'
 
@@ -16,6 +17,8 @@ const ONBOARDING_TOUR_TYPE_KEY = 'hivemtk_onboarding_tour_type'
  * onNextClick 上，× 关闭 / Esc / 点遮罩三条退出路径都不写标记）。
  */
 const ONBOARDING_PAGE_SEEN_KEY = 'hivemtk_onboarding_page_seen'
+const ONBOARDING_MODULE_SEEN_KEY = 'hivemtk_onboarding_module_seen'
+const MODULE_KEYS = ['workspace', 'customer', 'aiAgent', 'reach', 'knowledge', 'geoTools', 'analytics', 'system'] as const
 
 type TourType = 'global' | 'module' | 'page'
 
@@ -36,6 +39,7 @@ let driverInstance: ReturnType<typeof Driver> | null = null
 let currentTourType: TourType = 'global'
 /** 当前正在跑的页面导览对应的路由模式（用于写「看过」标记） */
 let currentPagePattern = ''
+let currentModuleKey = ''
 
 /**
  * 由 route.matched 还原「路由模式」（带 :param 的那一份）。
@@ -91,6 +95,77 @@ function allTargetsExist(steps: OnboardingStep[]): boolean {
       return false
     }
   })
+}
+
+/** 隐藏的菜单不应成为可用模块；不按尺寸判断，避免图标/折叠布局的误判。 */
+function isPresented(element: Element | null): boolean {
+  if (!element || !element.isConnected) return false
+  for (let node: Element | null = element; node; node = node.parentElement) {
+    if (node.matches('[hidden], [aria-hidden="true"], [inert]')) return false
+    const style = window.getComputedStyle(node)
+    if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse') return false
+  }
+  return true
+}
+
+function getModuleTourSteps(moduleKey: string, t: (key: string) => string): OnboardingStep[] {
+  const modules = {
+    workspace: {
+      title: t('navigationGuide.modules.workspace.title'),
+      overview: t('navigationGuide.modules.workspace.overview'),
+      navigation: t('navigationGuide.modules.workspace.navigation'),
+      content: t('navigationGuide.modules.workspace.content'),
+    },
+    customer: {
+      title: t('navigationGuide.modules.customer.title'),
+      overview: t('navigationGuide.modules.customer.overview'),
+      navigation: t('navigationGuide.modules.customer.navigation'),
+      content: t('navigationGuide.modules.customer.content'),
+    },
+    aiAgent: {
+      title: t('navigationGuide.modules.aiAgent.title'),
+      overview: t('navigationGuide.modules.aiAgent.overview'),
+      navigation: t('navigationGuide.modules.aiAgent.navigation'),
+      content: t('navigationGuide.modules.aiAgent.content'),
+    },
+    reach: {
+      title: t('navigationGuide.modules.reach.title'),
+      overview: t('navigationGuide.modules.reach.overview'),
+      navigation: t('navigationGuide.modules.reach.navigation'),
+      content: t('navigationGuide.modules.reach.content'),
+    },
+    knowledge: {
+      title: t('navigationGuide.modules.knowledge.title'),
+      overview: t('navigationGuide.modules.knowledge.overview'),
+      navigation: t('navigationGuide.modules.knowledge.navigation'),
+      content: t('navigationGuide.modules.knowledge.content'),
+    },
+    geoTools: {
+      title: t('navigationGuide.modules.geoTools.title'),
+      overview: t('navigationGuide.modules.geoTools.overview'),
+      navigation: t('navigationGuide.modules.geoTools.navigation'),
+      content: t('navigationGuide.modules.geoTools.content'),
+    },
+    analytics: {
+      title: t('navigationGuide.modules.analytics.title'),
+      overview: t('navigationGuide.modules.analytics.overview'),
+      navigation: t('navigationGuide.modules.analytics.navigation'),
+      content: t('navigationGuide.modules.analytics.content'),
+    },
+    system: {
+      title: t('navigationGuide.modules.system.title'),
+      overview: t('navigationGuide.modules.system.overview'),
+      navigation: t('navigationGuide.modules.system.navigation'),
+      content: t('navigationGuide.modules.system.content'),
+    },
+  }
+  if (!Object.hasOwn(modules, moduleKey)) return []
+  const copy = modules[moduleKey as keyof typeof modules]
+  return [
+    { element: `.app-shell .top-menu [data-module="${moduleKey}"].is-active`, popover: { title: copy.title, description: copy.overview, side: 'bottom' } },
+    { element: '.app-shell .app-aside', popover: { title: t('navigationGuide.steps.navigation'), description: copy.navigation, side: 'right' } },
+    { element: '.app-shell .app-main', popover: { title: t('navigationGuide.steps.content'), description: copy.content, side: 'top' } },
+  ]
 }
 
 function getGlobalNavSteps(t: (key: string) => string): OnboardingStep[] {
@@ -171,6 +246,7 @@ function buildPageTourSteps(tour: PageTour): OnboardingStep[] {
 
 export function useOnboarding() {
   const userStore = useUserStore()
+  const permissionStore = usePermissionStore()
   const { t, locale } = useI18n()
 
   /**
@@ -427,14 +503,41 @@ export function useOnboarding() {
     return allTargetsExist(steps) ? 'ready' : 'no-target'
   }
 
-  function startModuleTour(moduleKey: string): void {
-    if (!userStore.isLoggedIn) return
-    currentTourType = 'module'
+  function readSeenModules(): string[] {
+    try {
+      const stored = JSON.parse(localStorage.getItem(ONBOARDING_MODULE_SEEN_KEY) || '[]')
+      if (Array.isArray(stored)) return stored.filter(key => typeof key === 'string')
+    } catch { /* 损坏的历史记录不应阻断手动导览。 */ }
+    return []
   }
 
-  function restart(tourType: TourType = 'global'): void {
+  /** 默认供用户菜单手动重看；自动调用须显式传 false，避免重复打扰。 */
+  function startModuleTour(moduleKey: string, force = true): boolean {
+    if (!getAvailableModules().includes(moduleKey)) return false
+    if (!force && readSeenModules().includes(moduleKey)) return false
+    const steps = getModuleTourSteps(moduleKey, t)
+    if (!steps.length || !allTargetsExist(steps) || !steps.every(step => isPresented(document.querySelector(step.element)))) return false
+
+    const driver = createDriver(
+      steps,
+      () => markCompleted('module'),
+      (reason) => {
+        try {
+          localStorage.setItem(ONBOARDING_MODULE_SEEN_KEY, JSON.stringify([...new Set([...readSeenModules(), moduleKey])]))
+        } catch { /* 存储不可用时仍允许关闭导览。 */ }
+        if (reason === 'done') markCompleted('module')
+      },
+    )
+    currentTourType = 'module'
+    currentModuleKey = moduleKey
+    driver.drive()
+    return true
+  }
+
+  function restart(tourType: TourType = 'global', moduleKey = currentModuleKey): void {
     reset(tourType)
     if (tourType === 'global') startGlobalTour()
+    if (tourType === 'module') startModuleTour(moduleKey, true)
   }
 
   function destroy(): void {
@@ -468,12 +571,21 @@ export function useOnboarding() {
     }
   }
 
+  /** 跨模块时关闭旧模块导览，保留锚定布局外壳的全局导览。 */
+  function destroyModuleTour(): void {
+    if (currentTourType === 'module') destroy()
+  }
+
   function shouldAutoStart(tourType: TourType = 'global'): boolean {
     return userStore.isLoggedIn && !isCompleted(tourType)
   }
 
   function getAvailableModules(): string[] {
-    return Object.keys(getTours())
+    if (!userStore.isLoggedIn || !permissionStore.menusLoaded || permissionStore.menusLoadError) return []
+    return permissionStore.navigationMenus
+      .filter(menu => MODULE_KEYS.some(key => key === menu.key))
+      .filter(menu => isPresented(document.querySelector(`.app-shell .top-menu [data-module="${menu.key}"]`)))
+      .map(menu => menu.key)
   }
 
   return {
@@ -484,6 +596,7 @@ export function useOnboarding() {
     restart,
     destroy,
     destroyPageTour,
+    destroyModuleTour,
     isTourActive,
     getActiveTourType,
     isCompleted,

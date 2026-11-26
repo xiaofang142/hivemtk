@@ -1,0 +1,78 @@
+{
+  "identity": {
+    "title": "当前身份未能确认",
+    "approvalDescription": "无法执行待办认领、处理或审批操作。请联系站点管理员确认当前账号身份。",
+    "badCaseDescription": "无法补录、打标或撤销坏例。请联系站点管理员确认当前账号身份。",
+    "orderDraftDescription": "无法确认、取消或修改订单草稿。请联系站点管理员确认当前账号身份。"
+  },
+  "approval": {
+    "unavailableTitle": "待办服务暂不可用",
+    "unavailableDescription": "当前无法读取待办列表和统计，空列表不代表待办已处理完毕。请联系站点管理员检查服务。"
+  },
+  "badCase": {
+    "unavailableTitle": "坏例管理服务暂不可用",
+    "unavailableDescription": "当前无法读取坏例队列和统计，空列表或零值不代表队列已处理完毕。请联系站点管理员检查服务。"
+  },
+  "orderDraft": {
+    "unavailableTitle": "订单草稿服务暂不可用",
+    "unavailableDescription": "当前无法读取订单草稿和统计，空列表不代表没有待确认草稿。请联系站点管理员检查服务。",
+    "detailUnavailableDescription": "当前无法读取或处理这条订单草稿，尚不能确认草稿状态。请联系站点管理员检查服务。",
+    "serviceEnabled": "订单草稿服务已启用",
+    "serviceNeedsAttention": "订单草稿服务异常",
+    "temporaryStorage": "订单草稿暂存中",
+    "temporaryStorageWarning": "当前草稿仅临时保存，服务中断后可能无法恢复。请联系站点管理员确认保存状态。",
+    "countsUnavailable": "草稿数量尚未读取，无法确认待处理数量。",
+    "serviceWarning": "订单草稿服务存在异常，草稿生成或保存可能受影响。请联系站点管理员检查后再处理。",
+    "listLimitHint": "本次返回的草稿数量已达上限，可能还有更多草稿。可提高条数上限（最多 200 条）或缩小归属筛选范围。",
+    "provisionalOrderWarning": "草稿已确认，但正式订单尚未创建。当前编号 {orderId} 为临时编号，请联系站点管理员核实并补建订单。",
+    "owner": "负责人编号",
+    "productNameHint": "同一客户已有该产品的待确认草稿时，请先处理已有草稿。",
+    "editHint": "仅保存已修改的内容。数量至少为 1，单价不能为负数；如需作废，请选择「取消草稿」。保存后将更新草稿及总额。"
+  },
+  "crm": {
+    "contactsSubtitle": "维护客户的联系人资料与关联信息",
+    "suppliersSubtitle": "维护客户的供应商资料与关联信息",
+    "serviceProvidersSubtitle": "维护客户的服务商资料与关联信息",
+    "companiesSubtitle": "维护公司档案并关联客户",
+    "profileSubtitle": "查看客户资料、带有证据的 AI 建议及跨账号行业检索结果"
+  },
+  "leads": {
+    "scopedSubtitle": "查看当前账号获授权的客户和线索数据"
+  },
+  "insight": {
+    "subtitle": "根据证据生成建议草稿，人工确认后更新资料；缺少证据时不提供可应用的操作。",
+    "generateTitle": "根据客户资料生成草稿",
+    "generationDescription": "当前根据已有客户资料生成建议，未使用 AI 模型。缺少可核实证据时，不提供可应用的操作。",
+    "existingRecordsSource": "根据已有客户资料生成（未使用 AI 模型）",
+    "confirmDescription": "确认后将执行建议动作并更新资料。请先核对证据和动作内容。"
+  },
+  "customerImport": {
+    "subtitle": "上传 CSV、预检数据、确认导入，并查看错误报告"
+  },
+  "guide": {
+    "support": "完成上述 5 步后，即可开始正式营销活动。如需帮助，请联系站点管理员。"
+  },
+  "email": {
+    "addSender": "新增发件账号",
+    "editSender": "编辑发件账号",
+    "senderName": "发件账号名称",
+    "senderNamePlaceholder": "请输入发件账号名称",
+    "dailyLimit": "每日发送上限",
+    "dailyLimitPlaceholder": "请输入每日发送上限",
+    "deleteSenderConfirm": "确定要删除该发件账号吗？",
+    "providerReferenceTitle": "邮箱服务商配置参考",
+    "providerReferenceDescription": "查阅常见邮箱服务商的 SMTP 地址、端口和认证要求，再到「发件账号」配置。具体设置以服务商当前说明为准。"
+  },
+  "knowledge": {
+    "label": "RAG知识库",
+    "select": "选择RAG知识库",
+    "optionalSelect": "选择RAG知识库（可选）",
+    "filter": "按RAG知识库筛选",
+    "belongsTo": "所属RAG知识库",
+    "id": "RAG知识库编号",
+    "description": "RAG知识库是用于文档导入与检索的文档集合，请选择要操作的集合。",
+    "required": "请先选择目标RAG知识库。",
+    "queryRequired": "请选择RAG知识库并输入查询文本。",
+    "previewEmpty": "先选择RAG知识库和文件（或粘贴 JSON），再点击「预览解析结果」。"
+  }
+}
