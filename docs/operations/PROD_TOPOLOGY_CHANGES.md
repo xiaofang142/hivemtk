@@ -1008,3 +1008,15 @@ follow_user_channels 扩为八渠道（生产库实值已更新）。链 B 从�
 **验证与发布**：`go test ./internal/bridge/...` 8.233s PASS、`go test ./internal/controller/ -run TestBridgeOutboxWakeController_RealBridgeAuthentication` PASS、`go build ./...`/`go vet ./...` PASS。commit `613d68a59`，push 双远端；链 A 发布成功：线上二进制 sha256 `2615700dce30ecb4…`，运行镜像 `d25975b3130c8a6388a`，容器启动 `2026-11-26T09:29:39.12124947Z`，回滚点镜像 `mtk-user-server:rollback-20261126-172428` / 二进制 `user-server.bak-20261126-172428`；容器内+公网 health 200，默认口令探针 GREEN。
 
 **待复验**：用 ego-browser 重新驱动抖音/小红书私信页，确认 `outbox`/`wake` 不再 4xx、上行 ingest 入租户 18。
+
+## 2026-11-26 17:44 链 A + 链 D — 线索发现独立顶级菜单（HEAD `b721176b6`）
+
+**背景**：用户确认「线索发现」做成独立顶级菜单，把线索相关项从「客户与销售」抽出；全自动落地。
+
+**改动**：`user-server/internal/model/menu.go` 新增顶级分组 `leadDiscovery`（标题「线索发现」，角色 admin/viewer/staff），从 `customer` 移出 `clueList`/`clueStatistics`/`leadMining`/`leadGovernance`（key 与深链不变，既有角色授权行不失效），并把原本藏在菜单外的 `/leads/*` 五条深链收口为菜单项：`leadMiningAgents`/`leadNotifyRoutes`/`leadEvidence`/`leadArchive`/`leadScopedList`（均 admin）。`module_bindings.go` 把新 key 全部归入 `ModuleCustomer`（不新增收费模块）。`menu_navigation_test.go` 指纹/计数随 206→211 叶子、212→217 路径、250→256/60→61/65→66 角色上界同步更新。9 个语种 `menu.*` 补 6 个新 key 标题。
+
+**验证**：`go test ./internal/model/ -run 'TestMenuNavigation|TestMenuWiring|TestModuleBindings'` PASS；`go build ./...` PASS；`npx vitest run` 147 文件 / 1336 用例全绿（含 menuRegistry_routes / menu_navigation / i18n 覆盖）。
+
+**发布**：commit `b721176b6`，push `gitee-upstream`+`upstream`。链 A 线上二进制 sha256 `228de44643081eb0…`，运行镜像 `98f4bedf9fc416a32b4`，容器启动 `2026-11-26T09:44:55.28306318Z`，回滚点镜像 `mtk-user-server:rollback-20261126-174348` / 二进制 `user-server.bak-20261126-174348`，容器内+公网 health 200，默认口令探针 GREEN。链 D 用户前端 `user-web` 构建 `index-Co6Edc2c.js`（buildId `b721176b6-1795686318571`），备份 `user-web.snapshot-20261126-174534.tgz` 后 rsync 到 `/www/wwwroot/hivemtk/user-web/`，公网 `https://work.xapptool.cn/` 回读指纹一致。
+
+**注**：发布前 `git stash push -m "TEMP-parallel-portability-stash-20261126b-do-not-drop" -- <3 并行文件>` 临时藏起 user-server/ 在途改动以过 preflight，发布后已 `git stash pop` 恢复（stash 已 drop），并行文件未丢失。
