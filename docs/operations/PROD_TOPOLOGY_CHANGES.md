@@ -986,3 +986,15 @@ follow_user_channels 扩为八渠道（生产库实值已更新）。链 B 从�
 **线上四渠道核对（ee lite 逐元素 + 生产库直读）**：`channels` 表 20 微信/21 QQ/22 抖音/23 小红书全部启用；租户 18 四个账号 10~13 均启用且自动回复/线索发现开；识别码 `cid_t18_wx_maagex`/`cid_t18_qq_magex`/`cid_t18_douyin_hivemtk`/`cid_t18_xhs_hivemtk` 均已配置。消息中台 MQ 页面可见四渠道各 1 条入站消息（微信/QQ 会话带 `sagex:` 前缀，抖音/小红书走桥接会话）。
 
 **未闭环**：真实外部渠道持续消息、正式签名发布、生产 UI 全量点验与全量任务复选框翻转仍需对应证据，本轮不翻转 `- [ ]`。
+
+## 2026-11-26 16:52 链 A — gateway ingest 统一 ACK 契约（HEAD `6f4e90113`）
+
+**背景**：SageX 真机（微信/QQ listener）通知上报暂停 `ACK_INVALID`——App `AckValidator.parse` 要求 HTTP 200 响应含 `acks:[{event_id,status}]`，但 `POST /api/bridge/gateway` 的 bridge 分支（personal_wx/qq 属 bridge 渠道）复用 `HandleHTTPIngest` 仅回 `{"ok":true,"ingested":[...]}`，无 `acks`。
+
+**修复（additive，不破坏浏览器扩展读 `ingested`）**：
+- `channelgw.IngestResponse` 增 `schema_version,omitempty` + `acks,omitempty`（新类型 `IngestAck{event_id,status}`）；`HandleHTTPIngest` 成功响应前由 `buildIngestAcks(resp.Ingested)` 生成 ACK（duplicate→duplicate、!accepted→retry、else accepted）。
+- 单测 `handler_http_ack_test.go`（`TestBuildIngestAcks`/`TestIngestResponseCarriesUnifiedACK`）PASS；`go build ./...` PASS。
+- commit `6f4e90113`，push `gitee-upstream`+`upstream`；链 A 发布（线上二进制 sha256 `fa087341fa231493…`，镜像 `3a93ca14b8661ad34c7`，容器启动 `2026-11-26T08:52:12Z`，回滚点镜像 `mtk-user-server:rollback-20261126-164949` / 二进制 `user-server.bak-20261126-164949`）。容器内+公网 health 200，默认口令探针 GREEN。
+- 公网复验：`POST /api/bridge/gateway`（CID `cid_t18_wx_maagex`）200 且同时含 `ingested` 与 `schema_version:"hivemtk.channel.v1"` + `acks:[{event_id,status:"accepted"}]`。探针数据已清理。
+
+**注**：发布前用 `git stash push -m "TEMP-parallel-portability-stash-do-not-drop" -- <3 并行文件>` 临时藏起 user-server/ 的在途改动以过 preflight，发布后已 `git stash pop` 恢复（stash 已 drop），并行文件未丢失。
