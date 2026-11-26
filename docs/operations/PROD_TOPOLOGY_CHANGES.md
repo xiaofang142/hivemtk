@@ -1067,3 +1067,11 @@ follow_user_channels 扩为八渠道（生产库实值已更新）。链 B 从�
 - 链 B：`BRIDGE_ONLINE_SERVER=https://workapi.xapptool.cn npm run publish -- --reload` 成功，加载目录仍是 `/Users/xiaofang/Documents/tool/hivebridge-1.0.2`（扩展 ID `ijjfoaghckkdimglbbgdhhagkhemhnam` 保持不变），回滚 `/Users/xiaofang/Documents/tool/hivebridge-rollback-v1.3.10-2026-11-26_10-52-15`；ego 快照回读版本 1.3.11。
 - 链 C：上传并上架 `ast-general-f0121f33fe8793e8d9`，文件 `/files/extensions/2026/11/6662414f-1876-4292-9f5a-c68b112d0a52.zip`，`batch-publish` 200 `approved=1`，用户端 `https://work.xapptool.cn/#/bridge/extension` 回验显示 v1.3.11。
 - commit `4d2bfa0d6` 已推 `gitee-upstream` + `upstream`；本条台账与链 C cookie 适配待随下一提交推送。
+
+## 2026-11-26 19:0x 链 A + 链 D — 菜单整理发布（HEAD `4efcc682d`）
+
+**变更**：渠道一级菜单移入系统管理作为二级菜单；「智能体与客服」→「客服智能体」；「线索发现」→「线索智能体」（后端 `SystemMenuTree` + 前端 zh/en i18n）。
+
+**发布**：
+- 链 A：`./deploy/deploy-api.sh` 成功，线上二进制 sha256 `2c5e1ca00f7ddd8e…`，运行镜像 `ff50700f96ba94e8868`，容器启动 `2026-11-26T11:03:28Z`，回滚点镜像 `mtk-user-server:rollback-20261126-190117` / 二进制 `user-server.bak-20261126-190117`，容器内+公网 health 200，默认口令探针 GREEN。
+- 链 D：前端 `npm run build` 成功，rsync 到 `/www/wwwroot/hivemtk/user-web/`，index.html sha256 `3da503762f509055e2d547f23a34308c78063ceedd0e05d093b571b0ad016e67` 本地/远端一致。
