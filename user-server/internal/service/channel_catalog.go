@@ -79,7 +79,8 @@ func (s *channelCatalogService) Catalog(ctx context.Context, tenantID uint) (*dt
 		}
 		out.Accounts = append(out.Accounts, dto.ChannelAccountCatalogItem{
 			ID: acc.ID, ChannelID: acc.ChannelID, ChannelCode: ch.Code,
-			Name: acc.Name, Label: label, IdentifyCode: acc.IdentifyCode, Type: acc.Type,
+			Name: acc.Name, Label: label, IdentifyCode: acc.IdentifyCode,
+			SelfIdentifyName: acc.SelfIdentifyName, Type: acc.Type,
 		})
 	}
 	return out, nil

@@ -1,9 +1,5 @@
 {
   "channels": {
-    "serviceBindingLabel": "{name} · SageX connection (QQ / Personal WeChat)",
-    "editBinding": "Edit connection binding",
-    "bindingName": "Company or team name",
-    "bindingCode": "Connection binding code",
     "legacyBindings": "Legacy connection bindings",
     "legacyBindingsHint": "These records retain existing account and credential links. SageX connects QQ and personal WeChat; messages use their actual source channel.",
     "personalWechat": "Personal WeChat",
@@ -14,13 +10,15 @@
     "catalog": "Channels",
     "accounts": "Accounts",
     "identifyCodes": "Access codes",
-    "displayName": "Account display name",
-    "displayNamePlaceholder": "For display only, not identity matching",
+    "senderNameMark": "Self/other identity name (reported sender mark)",
+    "senderNameMarkPlaceholder": "Enter the sender name from reported messages, e.g. \"Acme WeChat\"",
+    "senderNameMarkHint": "Only when stable identity is absent and the name exactly matches this account's mark, the speaker is treated as self; never infers customer",
+    "senderNameMarkRequired": "Self/other identity name (reported sender mark) is required",
+    "unmarked": "No mark set",
+    "senderNameMarkColumn": "Sender mark",
     "toggleOnlyHint": "Channels are maintained centrally; this page only toggles them for your tenant.",
-    "enabledOnlyHint": "Dropdowns list only enabled channels and their active accounts.",
     "accountIdentifyCode": "Account access code",
-    "resetAccountCode": "Reset account access code",
-    "noEnabledChannel": "No enabled channel yet. Enable one in channel management first."
+    "resetAccountCode": "Reset account access code"
   },
   "clue": {
     "updated": "Clue updated",

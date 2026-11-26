@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"strings"
+
+	"hivemtk-user/internal/repository"
 )
 
 // ChannelIdentityResolver CH-08 自他识别的统一入口（平台稳定用户身份）。
@@ -67,6 +69,57 @@ func (i *ChannelIdentityResolver) IdentifySpeaker(
 		return nil, err
 	}
 	out.SpeakerID = strings.TrimSpace(speakerPlatformID)
+	return out, nil
+}
+
+// IdentifySpeakerWithSenderName 在统一自他识别上叠加「每个账号的标记」弱提示。
+//
+// 账号标记（channel_accounts.self_identify_name，取自上报消息里的发送者名称）只是
+// 弱证据：①强证据（平台稳定 userID / 显式成员角色）已定论时不覆盖；②仅能把 unknown
+// 提升为 self，绝不据名称推断 customer；③标记为空、名称不匹配、同租户多账号共用同一
+// 标记（歧义）时一律保持 unknown（fail-closed），由业务闸拒绝猜测性自动回复。
+func (i *ChannelIdentityResolver) IdentifySpeakerWithSenderName(
+	ctx context.Context, tenantID, accountID uint, conversationType, speakerPlatformID, senderName, selfPlatformID string, members []GroupMemberRole,
+) (*ChannelIdentity, error) {
+	out, err := i.IdentifySpeaker(ctx, tenantID, accountID, conversationType, speakerPlatformID, selfPlatformID, members)
+	if err != nil || out == nil {
+		return out, err
+	}
+	if out.Evidence != "unknown" || strings.TrimSpace(senderName) == "" {
+		return out, nil
+	}
+	if i.resolver == nil || i.resolver.accountRepo == nil {
+		return out, nil
+	}
+	acc, err := i.resolver.accountRepo.GetByID(ctx, tenantID, accountID)
+	if err != nil || acc == nil {
+		return out, err
+	}
+	mark := strings.TrimSpace(acc.SelfIdentifyName)
+	if mark == "" {
+		return out, nil // 存量账号未设标记：不猜，保持 unknown
+	}
+	name := strings.TrimSpace(senderName)
+	if !strings.EqualFold(mark, name) {
+		return out, nil
+	}
+	// 歧义守卫：同租户另一个账号也用同名标记时，名称不足以归属，保持 unknown。
+	others, err := i.resolver.accountRepo.List(ctx, repository.ChannelAccountListOptions{TenantID: tenantID})
+	if err != nil {
+		return out, err
+	}
+	matches := 0
+	for _, other := range others {
+		if strings.EqualFold(strings.TrimSpace(other.SelfIdentifyName), mark) {
+			matches++
+		}
+	}
+	if matches != 1 {
+		return out, nil
+	}
+	out.Self = true
+	out.Role = "self"
+	out.Evidence = "sender_name"
 	return out, nil
 }
 

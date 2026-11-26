@@ -22,6 +22,9 @@ type InboundMessage struct {
 	ConversationID string
 	SenderID       string
 	SenderType     string
+	// SenderName 上报消息里的发送者名称（T03）。仅作为账号标记的弱提示兜底，
+	// 稳定身份/显式角色优先；缺名称不猜，名称匹配不代表稳定身份。
+	SenderName string
 	// SelfPlatformID 本账号在平台上的稳定 userID（CH-08）。只有它或显式 self 角色
 	// 能判定「自己」，名称/识别码/数据库账号 ID 一律不作为 self 证据。
 	SelfPlatformID string

@@ -46,6 +46,7 @@ func (p *ingressPipeline) deliverInbound(ctx context.Context, events []*model.Me
 			ConversationID: ev.ConversationID,
 			SenderID:       ev.SenderID,
 			SenderType:     ev.SenderType,
+			SenderName:     ev.SenderName,
 			MsgType:        ev.MsgType,
 			Content:        ev.Content,
 			IsGroup:        ev.IsGroup,

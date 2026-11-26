@@ -1,9 +1,5 @@
 {
   "channels": {
-    "serviceBindingLabel": "{name} · SageX 接入（QQ / 个人微信）",
-    "editBinding": "编辑接入绑定",
-    "bindingName": "公司或团队名称",
-    "bindingCode": "接入绑定编码",
     "legacyBindings": "历史接入绑定",
     "legacyBindingsHint": "这些记录保留已有账号和识别码关联。SageX 为 QQ、个人微信提供接入，消息按实际来源归入对应渠道。",
     "personalWechat": "个人微信",
@@ -14,13 +10,15 @@
     "catalog": "渠道",
     "accounts": "账号",
     "identifyCodes": "识别码",
-    "displayName": "本账号显示名称",
-    "displayNamePlaceholder": "用于显示，不作为自他身份判据",
+    "senderNameMark": "自他判断名称（上报发送者标记）",
+    "senderNameMarkPlaceholder": "请输入上报消息里的发送者名称，如「四川同咨微信」",
+    "senderNameMarkHint": "仅当稳定身份缺失且名称精确匹配本账号标记时识别为自己；不会据此判定客户",
+    "senderNameMarkRequired": "自他判断名称（上报发送者标记）必填",
+    "unmarked": "未设置标记",
+    "senderNameMarkColumn": "发送者标记",
     "toggleOnlyHint": "渠道由系统统一维护，此处仅控制本租户启停。",
-    "enabledOnlyHint": "下拉仅列出已开启渠道及其下已启用账号。",
     "accountIdentifyCode": "账号识别码",
-    "resetAccountCode": "重置账号识别码",
-    "noEnabledChannel": "暂无已开启渠道，请先在渠道管理中开启。"
+    "resetAccountCode": "重置账号识别码"
   },
   "clue": {
     "updated": "线索已更新",

@@ -46,6 +46,9 @@ type ChannelIdentity struct {
 	SpeakerID        string
 	Self             bool
 	Role             string
+	// Evidence 判定依据（stable_id / member_role / sender_name / unknown），
+	// 供审计与业务闸区分强证据与账号标记的弱提示；名称匹配绝不冒充稳定身份。
+	Evidence string
 }
 
 // ChannelResolver 渠道统一解析器（FR-028/030）。
@@ -395,6 +398,7 @@ func (r *ChannelResolver) Identify(ctx context.Context, tenantID, accountID uint
 		ConversationType: typ,
 		SpeakerID:        strings.TrimSpace(speakerID),
 		Role:             "unknown",
+		Evidence:         "unknown",
 	}
 	switch typ {
 	case "dm", "single", "direct", "private":
@@ -404,8 +408,10 @@ func (r *ChannelResolver) Identify(ctx context.Context, tenantID, accountID uint
 		if isSelfRole(role) {
 			out.Self = true
 			out.Role = role
+			out.Evidence = "stable_id_or_role"
 		} else if role == "customer" || role == "member" || role == "guest" {
 			out.Role = role
+			out.Evidence = "member_role"
 		} else {
 			out.Role = "unknown" // 缺稳定身份/角色：unknown，不猜 self
 		}
@@ -415,8 +421,10 @@ func (r *ChannelResolver) Identify(ctx context.Context, tenantID, accountID uint
 		case isSelfRole(role):
 			out.Self = true
 			out.Role = role
+			out.Evidence = "member_role"
 		case role == "member" || role == "customer" || role == "guest":
 			out.Role = role
+			out.Evidence = "member_role"
 		default:
 			out.Role = "unknown" // 同名/未知成员：不猜，不触发猜测自动回复
 		}

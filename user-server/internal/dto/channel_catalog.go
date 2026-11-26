@@ -18,7 +18,9 @@ type ChannelAccountCatalogItem struct {
 	Name         string `json:"name"`
 	Label        string `json:"label"`
 	IdentifyCode string `json:"identify_code"`
-	Type         string `json:"type"`
+	// SelfIdentifyName 每个账号的上报发送者名称标记（自他判断弱提示）。
+	SelfIdentifyName string `json:"self_identify_name"`
+	Type             string `json:"type"`
 }
 
 // ChannelCatalogResponse 一次返回渠道列表 + 渠道下账号列表（统一 API 出参）。

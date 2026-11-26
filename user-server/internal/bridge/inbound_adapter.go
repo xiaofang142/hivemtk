@@ -41,6 +41,7 @@ func (h *BridgeIngestHandler) deliverInbound(ctx context.Context, channel, accou
 			ConversationID: conv,
 			SenderID:       m.SenderID,
 			SenderType:     m.SenderType,
+			SenderName:     m.SenderName,
 			MsgType:        m.MsgType,
 			Content:        m.Content,
 			IsGroup:        m.IsGroup,

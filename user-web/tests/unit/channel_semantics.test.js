@@ -8,7 +8,7 @@ import AccountManage from '@/views/channels/account-manage.vue'
 import channelAccountApi from '@/api/channelAccount'
 import channelCatalogApi from '@/api/channelCatalog'
 import { CHANNEL_OPTIONS, getChannelLabel } from '@/constants/channel'
-import { settle } from './settle-helper'
+import { settle, settleBody } from './settle-helper'
 
 vi.mock('@/api/channelAccount', () => ({ default: {
   listChannels: vi.fn(), listAccounts: vi.fn(), getAccount: vi.fn(),
@@ -24,7 +24,7 @@ beforeEach(() => {
   i18n.global.locale.value = 'zh'
   vi.clearAllMocks()
   channelAccountApi.listChannels.mockResolvedValue({ list: [{ id: 2, name: 'QQ', code: 'qq', type: 'dm', remark: '渠道备注', enabled: true }] })
-  channelAccountApi.listAccounts.mockResolvedValue({ list: [{ id: 1, channel_id: 2, name: '四川同咨客服账号', type: 'group', status: 1 }] })
+  channelAccountApi.listAccounts.mockResolvedValue({ list: [{ id: 1, channel_id: 2, name: '四川同咨客服账号', type: 'group', status: 1, self_identify_name: '四川同咨微信' }] })
   channelAccountApi.getAccount.mockResolvedValue({ remark: '账号备注', owner_user_ids: [], data_scope: '{}' })
   channelAccountApi.listLeadMiningAgents.mockResolvedValue([])
   channelCatalogApi.catalog.mockResolvedValue({
@@ -32,7 +32,7 @@ beforeEach(() => {
     accounts: []
   })
   channelCatalogApi.setTenantEnabled.mockResolvedValue({})
-  channelCatalogApi.managedAccounts.mockResolvedValue({ list: [{ id: 1, channel_id: 2, name: '四川同咨客服账号', type: 'group', status: 1 }] })
+  channelCatalogApi.managedAccounts.mockResolvedValue({ list: [{ id: 1, channel_id: 2, name: '四川同咨客服账号', type: 'group', status: 1, self_identify_name: '四川同咨微信' }] })
 })
 
 const mountPage = (Component) => mount(Component, { global: { plugins: [createPinia(), ElementPlus, i18n] } })
@@ -91,6 +91,26 @@ describe('渠道与会话类型分离', () => {
       await clickButton(wrapper, '保存')
       expect(channelAccountApi.updateAccount).toHaveBeenCalledWith(1, expect.objectContaining({ remark: '账号备注' }))
       expect(channelAccountApi.updateAccount.mock.calls[0][1]).not.toHaveProperty('type')
+    } finally { wrapper.unmount() }
+  })
+
+  it('自他判断名称（发送者标记）列表可见，清空标记拒绝保存', async () => {
+    const wrapper = mountPage(AccountManage)
+    try {
+      await settle(wrapper)
+      expect(wrapper.findAll('th').map(cell => cell.text())).toContain('发送者标记')
+      expect(wrapper.text()).toContain('四川同咨微信')
+      await clickButton(wrapper, '编辑')
+      expect(wrapper.find('.el-dialog').text()).toContain('自他判断名称（上报发送者标记）')
+      const markInput = wrapper.findAll('.el-dialog input').find(
+        input => input.attributes('placeholder') === '请输入上报消息里的发送者名称，如「四川同咨微信」'
+      )
+      expect(markInput).toBeTruthy()
+      await markInput.setValue('')
+      await clickButton(wrapper, '保存')
+      expect(channelAccountApi.updateAccount).not.toHaveBeenCalled()
+      await settleBody()
+      expect(document.body.textContent).toContain('自他判断名称（上报发送者标记）必填')
     } finally { wrapper.unmount() }
   })
 })

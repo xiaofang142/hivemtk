@@ -111,9 +111,11 @@ func (o *ChannelInboundOrchestrator) DeliverAndArchive(ctx context.Context, msg 
 		}
 		// CH-08：把平台自己的稳定 userID 与群成员角色证据传到统一识别口，
 		// 不再以空 self / nil members 调用（那会把所有发言人压成 unknown）。
-		identity, aerr = o.resolver.IdentifySpeaker(
+		// T03：叠加每个账号的上报发送者名称标记（弱证据），仅在稳定身份缺失时兜底
+		// 识别为 self；标记缺失/歧义仍保持 unknown，不猜客户、不触发猜测自动回复。
+		identity, aerr = o.resolver.IdentifySpeakerWithSenderName(
 			ctx, acc.TenantID, acc.AccountID, conversationType,
-			msg.SenderID, msg.SelfPlatformID, toGroupMemberRoles(msg.MemberRoles),
+			msg.SenderID, msg.SenderName, msg.SelfPlatformID, toGroupMemberRoles(msg.MemberRoles),
 		)
 		if aerr != nil {
 			out.Status, out.Reason = "rejected", "自他识别失败"

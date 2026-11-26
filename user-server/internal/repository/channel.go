@@ -7,6 +7,7 @@ import (
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/edition"
+	"hivemtk-user/internal/pkg/tenant"
 
 	"gorm.io/gorm"
 )
@@ -88,8 +89,12 @@ func (r *channelRepo) GetByCode(ctx context.Context, code string) (*model.Channe
 	if !r.Available() {
 		return nil, ErrChannelStoreUnavailable
 	}
+	// 预设码是跨租户全局唯一的模板键（global_uniq_channel_code）。必须显式切系统
+	// 作用域：否则租户 callback 会注入 tenant_id=?，把 tenant_id=0 的全局模板行过滤
+	// 掉，EnsurePresets 误判为「未播种」再 INSERT，撞唯一键 -> /api/channels/catalog
+	// 恒 409（2026-11-26 线上实证）。与上方接口注释「显式走系统作用域」一致。
 	var ch model.Channel
-	err := r.db.WithContext(ctx).First(&ch, "code = ?", code).Error
+	err := r.db.WithContext(tenant.WithSystemScope(ctx)).First(&ch, "code = ?", code).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}

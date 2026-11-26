@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
@@ -15,6 +16,11 @@ func (s *WebhookService) deliverInbound(ctx context.Context, req *ReceiveRequest
 		return
 	}
 	tenantID, _ := tenant.FromContext(ctx)
+	// 上报消息里的发送者名称只在 extra.sender_name 里（ParsedPayload 顶层无此列）。
+	var senderName string
+	if v, ok := payload.Extra["sender_name"]; ok && v != nil {
+		senderName = fmt.Sprint(v)
+	}
 	in := &model.InboundMessage{
 		EventID:        payload.EventID,
 		Source:         "webhook",
@@ -23,6 +29,7 @@ func (s *WebhookService) deliverInbound(ctx context.Context, req *ReceiveRequest
 		TenantID:       tenantID,
 		ConversationID: payload.ChatID,
 		SenderID:       payload.Sender,
+		SenderName:     senderName,
 		Content:        payload.Content,
 		Raw:            req.Body,
 		Extra:          payload.Extra,

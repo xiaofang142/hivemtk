@@ -83,6 +83,19 @@
           show-overflow-tooltip
         />
         <el-table-column
+          :label="$t('channels.senderNameMarkColumn')"
+          min-width="130"
+          show-overflow-tooltip
+        >
+          <template #default="{ row }">
+            <span v-if="row.self_identify_name">{{ row.self_identify_name }}</span>
+            <span
+              v-else
+              class="hint"
+            >{{ $t('channels.unmarked') }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column
           label="自动回复"
           width="100"
           align="center"
@@ -208,11 +221,15 @@
             placeholder="请输入账号名称"
           />
         </el-form-item>
-        <el-form-item :label="$t('channels.displayName')">
+        <el-form-item
+          :label="$t('channels.senderNameMark')"
+          required
+        >
           <el-input
             v-model="form.self_identify_name"
-            :placeholder="$t('channels.displayNamePlaceholder')"
+            :placeholder="$t('channels.senderNameMarkPlaceholder')"
           />
+          <span class="hint">{{ $t('channels.senderNameMarkHint') }}</span>
         </el-form-item>
         <el-form-item label="备注">
           <el-input
@@ -359,12 +376,12 @@
           :span="2"
         >
           <el-tag
-            v-for="(t, i) in crossRef.tags"
+            v-for="(tag, i) in crossRef.tags"
             :key="i"
             size="small"
             style="margin-right: 6px"
           >
-            {{ t }}
+            {{ tag }}
           </el-tag>
           <span v-if="!crossRef.tags || !crossRef.tags.length">-</span>
         </el-descriptions-item>
@@ -422,6 +439,7 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import channelAccountApi from '@/api/channelAccount.js'
@@ -432,6 +450,7 @@ import ChannelSelect from '@/components/ChannelSelect.vue'
 import { useChannelCatalogStore } from '@/stores/channelCatalog'
 
 const catalog = useChannelCatalogStore()
+const { t } = useI18n()
 const loading = ref(false)
 const saving = ref(false)
 const rotatingId = ref(null)
@@ -537,6 +556,10 @@ function onLeadMiningToggle(on) {
 async function onSave() {
   if (!form.channel_id || !form.name) {
     ElMessage.warning('渠道与账号名称必填')
+    return
+  }
+  if (!form.self_identify_name || !form.self_identify_name.trim()) {
+    ElMessage.warning(t('channels.senderNameMarkRequired'))
     return
   }
   saving.value = true
