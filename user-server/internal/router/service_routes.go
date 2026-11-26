@@ -200,6 +200,8 @@ func setupMessageRoutes(auth *gin.RouterGroup, db *gorm.DB, ingressSvc *service.
 	auth.GET("/inbox/staff/:staff/load", inboxCtrl.StaffLoad)
 	auth.GET("/inbox/agents", inboxCtrl.Agents)
 	auth.GET("/inbox/metrics/first-reply", inboxCtrl.FirstReplyMetrics)
+	// T10 群聊合并线程口：必须与静态段并列注册在 :id 之前，避免被通配路由吞掉。
+	auth.GET("/inbox/group-thread", inboxCtrl.GetGroupThread)
 	auth.GET("/inbox/conversations/:id", inboxCtrl.GetByID)
 	auth.GET("/inbox/conversations/:id/messages", inboxCtrl.GetMessages)
 	auth.POST("/inbox/conversations/:id/read", inboxCtrl.MarkRead)

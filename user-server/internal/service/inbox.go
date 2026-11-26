@@ -189,6 +189,9 @@ type InboxQuery struct {
 	OrderBy     string
 	// Filter 语义筛选（specs/024 T604）：awaiting_first_reply = 客户在等、我们还没回。
 	Filter string
+	// T10 会话类型（"single" | "group"）与用户昵称（CRM 绑定人）筛选。
+	ConversationType string
+	Nickname         string
 }
 
 type InboxAssignRequest struct {
@@ -349,22 +352,32 @@ func (s *InboxService) List(ctx context.Context, q InboxQuery) ([]*model.InboxCo
 	if s.inboxRepo == nil {
 		return []*model.InboxConversation{}, 0, nil
 	}
-	return s.inboxRepo.ListByQuery(ctx, repository.InboxConversationQuery{
-		Platform:    q.Platform,
-		AccountID:   q.AccountID,
-		CustomerID:  q.CustomerID,
-		Keyword:     q.Keyword,
-		Status:      q.Status,
-		AssignedTo:  q.AssignedTo,
-		AssignedSOP: q.AssignedSOP,
-		Pinned:      q.Pinned,
-		Starred:     q.Starred,
-		Muted:       q.Muted,
-		Page:        q.Page,
-		PageSize:    q.PageSize,
-		OrderBy:     q.OrderBy,
-		Filter:      q.Filter,
+	list, total, err := s.inboxRepo.ListByQuery(ctx, repository.InboxConversationQuery{
+		Platform:         q.Platform,
+		AccountID:        q.AccountID,
+		CustomerID:       q.CustomerID,
+		Keyword:          q.Keyword,
+		Status:           q.Status,
+		AssignedTo:       q.AssignedTo,
+		AssignedSOP:      q.AssignedSOP,
+		Pinned:           q.Pinned,
+		Starred:          q.Starred,
+		Muted:            q.Muted,
+		Page:             q.Page,
+		PageSize:         q.PageSize,
+		OrderBy:          q.OrderBy,
+		Filter:           q.Filter,
+		ConversationType: q.ConversationType,
+		Nickname:         q.Nickname,
 	})
+	if err != nil {
+		return nil, 0, err
+	}
+	// T10 只读投影：会话类型是展示口径，不写库、不回填历史数据。
+	if err := s.inboxRepo.AttachT10ConversationMeta(ctx, list); err != nil {
+		logger.Warnf("[inbox] attach T10 conversation meta failed: %v", err)
+	}
+	return list, total, nil
 }
 
 func (s *InboxService) GetByID(ctx context.Context, id uint) (*model.InboxConversation, error) {
@@ -854,33 +867,10 @@ func (s *InboxService) GetMessagesByConversation(ctx context.Context, conversati
 	}
 	merged := make([]mergedMsg, 0, len(hubs)+len(sms))
 	for _, h := range hubs {
-		merged = append(merged, mergedMsg{
-			ts: h.SentAt,
-			data: map[string]any{
-				"id":              h.ID,
-				"source":          "hub",
-				"msg_id":          h.MsgID,
-				"conversation_id": h.ConversationID,
-				"platform":        h.Platform,
-				"account_id":      h.AccountID,
-				"sender_id":       h.SenderID,
-				"sender_name":     h.SenderName,
-				"receiver_id":     h.ReceiverID,
-				"content":         h.Content,
-				"content_type":    h.MsgType,
-				"media_url":       h.MediaURL,
-				"is_ai_reply":     h.IsAIReply,
-				"is_read":         h.IsRead,
-				// LM-16：方向/群信息直接透传，不让前端从 sender 推断。
-				"direction":    h.Direction,
-				"is_group":     h.IsGroup,
-				"group_id":     h.GroupID,
-				"sent_at":      h.SentAt,
-				"created_at":   h.CreatedAt,
-				"cursor":       inboxMessageCursor(h.SentAt, h.ID),
-				"source_state": inboxSourceState(hubQueryErr),
-			},
-		})
+		data := inboxHubToMessage(h)
+		// T10 新增字段均为附加；source_state 仍由本次查询的实际错误决定。
+		data["source_state"] = inboxSourceState(hubQueryErr)
+		merged = append(merged, mergedMsg{ts: h.SentAt, data: data})
 	}
 	for _, sm := range sms {
 		merged = append(merged, mergedMsg{
@@ -897,8 +887,11 @@ func (s *InboxService) GetMessagesByConversation(ctx context.Context, conversati
 				"media_url":       sm.MediaURL,
 				"is_ai_reply":     sm.SenderType == "ai",
 				"is_read":         sm.IsRead,
-				"sent_at":         sm.CreatedAt,
-				"created_at":      sm.CreatedAt,
+				// T10：session 侧自他同样由 sender_type 权威判定，不在前端猜。
+				"is_self":       inboxPlatformSenderTypes[strings.ToLower(strings.TrimSpace(sm.SenderType))],
+				"sender_avatar": "",
+				"sent_at":       sm.CreatedAt,
+				"created_at":    sm.CreatedAt,
 			},
 		})
 	}

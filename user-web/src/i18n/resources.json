@@ -6,6 +6,7 @@
     { "namespace": "navigationContent", "locales": ["en", "zh"], "root": true },
     { "namespace": "crawlerSource", "locales": ["en", "zh"] },
     { "namespace": "businessCopy", "locales": ["en", "zh"] },
-    { "namespace": "navigationGuide", "locales": ["en", "zh"] }
+    { "namespace": "navigationGuide", "locales": ["en", "zh"] },
+    { "namespace": "inboxT10", "locales": ["en", "zh"] }
   ]
 }

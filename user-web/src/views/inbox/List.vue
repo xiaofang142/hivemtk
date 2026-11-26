@@ -93,6 +93,44 @@
             @change="handleSearch"
           />
           <el-select
+            v-model="searchForm.account_id"
+            :placeholder="$t('inboxT10.allAccounts')"
+            clearable
+            filterable
+            style="width: 140px"
+            @change="handleSearch"
+          >
+            <el-option
+              v-for="a in accountOptions"
+              :key="a.value"
+              :label="a.label"
+              :value="a.value"
+            />
+          </el-select>
+          <el-select
+            v-model="searchForm.conversation_type"
+            :placeholder="$t('inboxT10.allTypes')"
+            clearable
+            style="width: 130px"
+            @change="handleSearch"
+          >
+            <el-option
+              :label="$t('inboxT10.singleChat')"
+              value="single"
+            />
+            <el-option
+              :label="$t('inboxT10.groupChat')"
+              value="group"
+            />
+          </el-select>
+          <el-input
+            v-model="searchForm.nickname"
+            :placeholder="$t('inboxT10.nicknamePlaceholder')"
+            clearable
+            style="width: 150px"
+            @keyup.enter="handleSearch"
+          />
+          <el-select
             v-model="searchForm.status"
             :placeholder="$t('全部状态')"
             clearable
@@ -169,7 +207,13 @@
           class="conv-list"
         >
           <div
-            v-for="conv in conversations"
+            v-if="singleConversations.length"
+            class="conv-section-title"
+          >
+            {{ $t('inboxT10.singleChat') }}
+          </div>
+          <div
+            v-for="conv in singleConversations"
             :key="conv.id"
             class="conv-item"
             role="button"
@@ -219,10 +263,10 @@
               </el-tag>
               <el-tag
                 size="small"
-                :type="isGroupConv(conv) ? 'warning' : 'info'"
+                type="info"
                 effect="plain"
               >
-                {{ isGroupConv(conv) ? '群聊' : '单聊' }}
+                {{ $t('inboxT10.singleChat') }}
               </el-tag>
               <el-tag
                 v-if="conv.account_id"
@@ -275,8 +319,82 @@
               </el-icon>
             </div>
           </div>
+
+          <div
+            v-if="groupConversations.length"
+            class="conv-section-title"
+          >
+            {{ $t('inboxT10.groupChat') }}
+          </div>
+          <div
+            v-for="card in groupConversations"
+            :key="`group-${card.group_key}`"
+            class="conv-item conv-group-item"
+            role="button"
+            tabindex="0"
+            :class="{ active: currentConv && currentConv.group_key === card.group_key }"
+            @click="selectGroupCard(card)"
+            @keydown.enter.prevent="selectGroupCard(card)"
+            @keydown.space.prevent="selectGroupCard(card)"
+          >
+            <div class="conv-item-top">
+              <span class="conv-name">
+                <el-avatar
+                  :size="22"
+                  :src="card.sender_avatar || ''"
+                  class="conv-avatar"
+                >
+                  <el-icon><User /></el-icon>
+                </el-avatar>
+                <el-icon
+                  v-if="card.pinned"
+                  class="pin-icon"
+                ><Top /></el-icon>
+                {{ card.group_name }}
+              </span>
+              <span class="conv-time">{{ formatTime(card.last_message_at) }}</span>
+            </div>
+            <div class="conv-item-mid">
+              <span class="conv-preview">{{ card.last_message_preview || $t('暂无消息') }}</span>
+              <el-badge
+                v-if="card.unread_count > 0"
+                :value="card.unread_count"
+                :max="99"
+                class="conv-badge"
+              />
+            </div>
+            <div class="conv-item-bottom">
+              <el-tag
+                size="small"
+                type="warning"
+                effect="plain"
+              >
+                {{ $t('inboxT10.groupChat') }} · {{ card.member_count }} {{ $t('inboxT10.members') }}
+              </el-tag>
+              <el-tag
+                size="small"
+                :type="getChannelTagType(card.platform) || 'info'"
+              >
+                {{ catalog.channelLabel(card.platform) || card.platform }}
+              </el-tag>
+              <el-tag
+                v-if="card.account_id"
+                size="small"
+                type="info"
+                effect="plain"
+              >
+                {{ catalog.accountLabel(card.account_id) }}
+              </el-tag>
+              <el-tag
+                size="small"
+                :type="statusTagType(card.status)"
+              >
+                {{ statusLabel(card.status) }}
+              </el-tag>
+            </div>
+          </div>
           <el-empty
-            v-if="!loading && conversations.length === 0"
+            v-if="!loading && singleConversations.length === 0 && groupConversations.length === 0"
             :description="$t('暂无会话')"
           />
         </div>
@@ -318,7 +436,7 @@
                 size="small"
                 :type="isGroupConv(currentConv) ? 'warning' : 'info'"
               >
-                {{ isGroupConv(currentConv) ? '群聊会话' : '单聊会话' }}
+                {{ isGroupConv(currentConv) ? $t('inboxT10.groupChatSession') : $t('inboxT10.singleChatSession') }}
               </el-tag>
               <el-tag
                 size="small"
@@ -332,7 +450,7 @@
                 type="info"
                 effect="plain"
               >
-                账号 {{ catalog.accountLabel(currentConv.account_id) }}
+                {{ $t('inboxT10.account') }} {{ catalog.accountLabel(currentConv.account_id) }}
               </el-tag>
               <el-tag
                 size="small"
@@ -342,6 +460,22 @@
               </el-tag>
             </div>
             <div class="thread-actions">
+              <el-select
+                v-if="isGroupConv(currentConv)"
+                v-model="highlightSenderId"
+                :placeholder="$t('inboxT10.highlightMember')"
+                clearable
+                filterable
+                size="small"
+                style="width: 150px"
+              >
+                <el-option
+                  v-for="m in groupMembers"
+                  :key="m.sender_id"
+                  :label="m.sender_name || m.sender_id"
+                  :value="m.sender_id"
+                />
+              </el-select>
               <el-tooltip :content="currentConv.pinned ? $t('取消置顶') : $t('置顶')">
                 <el-button
                   size="small"
@@ -440,21 +574,21 @@
             class="chat-mode-banner"
             :class="isGroupConv(currentConv) ? 'group' : 'single'"
           >
-            <span>{{ isGroupConv(currentConv) ? '群聊模式：显示多成员消息' : '单聊模式：一对一聊天' }}</span>
+            <span>{{ isGroupConv(currentConv) ? $t('inboxT10.groupModeBanner') : $t('inboxT10.singleModeBanner') }}</span>
             <span
               v-if="currentConv.account_id"
               class="banner-account"
-            >渠道账号：{{ catalog.channelLabel(currentConv.platform) || currentConv.platform }} / {{ catalog.accountLabel(currentConv.account_id) }}</span>
+            >{{ $t('inboxT10.channelAccount') }}：{{ catalog.channelLabel(currentConv.platform) || currentConv.platform }} / {{ catalog.accountLabel(currentConv.account_id) }}</span>
           </div>
           <div
             v-for="msg in threadMessages"
             :key="`${msg.source}-${msg.id}`"
             class="msg-row"
-            :class="{ mine: isOutbound(msg) }"
+            :class="{ mine: isPlatformMessage(msg), highlight: isHighlightedMember(msg, activeHighlight) }"
           >
             <!-- M-2 客户头像链路：入站消息展示发送者头像，空头像降级为默认人像图标 -->
             <el-avatar
-              v-if="!isOutbound(msg)"
+              v-if="!isPlatformMessage(msg)"
               :size="28"
               :src="msg.sender_avatar || ''"
               class="msg-avatar"
@@ -464,6 +598,14 @@
             <div class="msg-bubble">
               <div class="msg-meta">
                 <span class="msg-sender">{{ msg.sender_name || msg.sender_id || '-' }}</span>
+                <el-tag
+                  v-if="isHighlightedMember(msg, activeHighlight)"
+                  size="small"
+                  type="warning"
+                  effect="dark"
+                >
+                  {{ $t('inboxT10.me') }}
+                </el-tag>
                 <el-tag
                   v-if="msg.is_ai_reply"
                   size="small"
@@ -797,7 +939,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   Search, RefreshRight, Refresh, DataAnalysis, Top, Star, StarFilled, Mute,
@@ -810,6 +952,10 @@ import { getChannelTagType } from '@/constants/channel'
 import ChannelSelect from '@/components/ChannelSelect.vue'
 import EntityLabel from '@/components/EntityLabel.vue'
 import { useChannelCatalogStore } from '@/stores/channelCatalog'
+import {
+  isPlatformMessage, isGroupConversation, partitionInboxConversations,
+  isHighlightedMember, defaultMemberHighlight, buildInboxListParams
+} from '@/utils/inboxView'
 import i18n from '@/i18n'
 
 const t = (k) => i18n.global.t(k)
@@ -817,16 +963,23 @@ const t = (k) => i18n.global.t(k)
 const loading = ref(false)
 const threadLoading = ref(false)
 const conversations = ref([])
+const groupCards = ref([])
 const currentConv = ref(null)
+const currentGroup = ref(null)
+const groupMembers = ref([])
+const highlightSenderId = ref('')
 const threadMessages = ref([])
 const threadBodyRef = ref(null)
 const stats = ref(null)
 
 const searchForm = reactive({
   platform: '',
+  account_id: '',
+  conversation_type: '',
   status: '',
   filter: '',
   pinned: '',
+  nickname: '',
   keyword: ''
 })
 
@@ -888,6 +1041,19 @@ const assignmentHistory = ref([])
 const userStore = useUserStore()
 const catalog = useChannelCatalogStore()
 let refreshTimer = null
+
+// ---- T10 展示态：单聊/群聊分区、群成员高亮（均为只读投影）----
+const accountOptions = computed(() => catalog.accountOptions(searchForm.platform))
+const singleConversations = computed(() => conversations.value.filter((c) => !isGroupConversation(c)))
+const groupConversations = computed(() => groupCards.value)
+const activeHighlight = computed(() => {
+  const id = String(highlightSenderId.value || '')
+  if (!id) return null
+  const member = groupMembers.value.find((m) => String(m.sender_id || '') === id)
+  return member ? { sender_id: member.sender_id, sender_name: member.sender_name } : { sender_id: id, sender_name: '' }
+})
+// 渠道切换后账号选项变化，清掉不再可选的账号，避免筛出空结果。
+watch(() => searchForm.platform, () => { searchForm.account_id = '' })
 
 // ---- 字典 ----
 const STATUS_MAP = {
@@ -968,19 +1134,8 @@ const mediaFileName = (url) => {
   try { return decodeURIComponent((url || '').split('?')[0].split('/').pop() || '文件') } catch { return '文件' }
 }
 
-// outbound: hub 表 direction 字段在 GetMessages 输出中没有直接暴露，
-// 通过 is_ai_reply 或 sender 与账号无关的客服侧推断；这里以 sender_id 等于会话账号 id 视为坐席侧
-const isGroupConv = (conv) => !!(conv?.is_group || conv?.conversation_type === 'group' || conv?.extra?.is_group || conv?.group_id)
-
-const isOutbound = (msg) => {
-  if (msg.is_ai_reply) return true
-  if (msg.sender_type === 'staff' || msg.sender_type === 'ai' || msg.sender_type === 'system') return true
-  if (msg.source === 'hub' && currentConv.value) {
-    return msg.sender_id && msg.sender_id !== currentConv.value.customer_id &&
-      msg.sender_id === currentConv.value.account_id
-  }
-  return false
-}
+// T10：自他/群类型以服务端投影为准；本地只做保守回退（见 utils/inboxView）。
+const isGroupConv = (conv) => isGroupConversation(conv)
 
 const formatTime = (v) => {
   if (!v) return '-'
@@ -1015,20 +1170,12 @@ const waitingBadge = (conv) => {
 const fetchConversations = async () => {
   loading.value = true
   try {
-    const params = {
-      page: pagination.page,
-      page_size: pagination.pageSize
-    }
-    if (searchForm.platform) params.platform = searchForm.platform
-    if (searchForm.status) params.status = searchForm.status
-    if (searchForm.filter) params.filter = searchForm.filter
-    if (searchForm.keyword) params.keyword = searchForm.keyword
-    if (searchForm.pinned !== '' && searchForm.pinned !== null && searchForm.pinned !== undefined) {
-      params.pinned = searchForm.pinned
-    }
+    const params = buildInboxListParams(searchForm, pagination.page, pagination.pageSize)
     const res = await inboxApi.listConversations(params)
     const data = res?.data || res || {}
     conversations.value = data.list || []
+    // 群聊按 group_key 只读折叠成一张卡；单聊原样保留各自绑定。
+    groupCards.value = partitionInboxConversations(conversations.value).groups
     pagination.total = data.total || 0
   } catch (e) {
     console.error('[inbox] fetchConversations', e)
@@ -1050,11 +1197,29 @@ const fetchThread = async () => {
   if (!currentConv.value) return
   threadLoading.value = true
   try {
-    const res = await inboxApi.getMessages(currentConv.value.id, {
-      page: threadPagination.page,
-      page_size: threadPagination.pageSize
-    })
-    const data = res?.data || res || {}
+    let data
+    if (currentGroup.value) {
+      // 群聊：一次拉全群合并线程，成员下拉来自同一响应，避免逐会话 N+1。
+      const res = await inboxApi.getGroupThread({
+        platform: currentGroup.value.platform,
+        account_id: currentGroup.value.account_id,
+        group_name: currentGroup.value.group_name,
+        page: threadPagination.page,
+        page_size: threadPagination.pageSize
+      })
+      data = res?.data || res || {}
+      groupMembers.value = data.members || []
+      if (!highlightSenderId.value && groupMembers.value.length) {
+        const def = defaultMemberHighlight(currentGroup.value, groupMembers.value)
+        if (def && def.sender_id) highlightSenderId.value = def.sender_id
+      }
+    } else {
+      const res = await inboxApi.getMessages(currentConv.value.id, {
+        page: threadPagination.page,
+        page_size: threadPagination.pageSize
+      })
+      data = res?.data || res || {}
+    }
     // 后端按时间倒序返回，前端展示为正序对话
     threadMessages.value = (data.list || []).slice().reverse()
     threadPagination.total = data.total || 0
@@ -1075,6 +1240,9 @@ const scrollThreadToBottom = () => {
 
 const selectConversation = async (conv) => {
   currentConv.value = conv
+  currentGroup.value = null
+  groupMembers.value = []
+  highlightSenderId.value = ''
   threadPagination.page = 1
   threadPagination.total = 0
   threadMessages.value = []
@@ -1087,6 +1255,27 @@ const selectConversation = async (conv) => {
       conv.unread_count = 0
       if (isUnreadLike) conv.status = 'open'
     } catch (e) { console.warn('[inbox] markRead', e) }
+  }
+}
+
+// 群卡是「同一群所有成员发言」的入口；默认高亮当前卡绑定的 CRM 人（customer_id），
+// 群成员下拉可改选其他人。群卡仍用代表会话 id 做已读/回复，客户绑定不变。
+const selectGroupCard = async (card) => {
+  currentConv.value = card
+  currentGroup.value = card
+  groupMembers.value = []
+  highlightSenderId.value = String(card.customer_id || card.sender_id || '')
+  threadPagination.page = 1
+  threadPagination.total = 0
+  threadMessages.value = []
+  fetchThread()
+  const isUnreadLike = card.status === 'unread' || !['open', 'assigned', 'closed'].includes(card.status)
+  if (card.unread_count > 0 || isUnreadLike) {
+    try {
+      await inboxApi.markRead(card.id)
+      card.unread_count = 0
+      if (isUnreadLike) card.status = 'open'
+    } catch (e) { console.warn('[inbox] markRead group', e) }
   }
 }
 
@@ -1348,6 +1537,19 @@ onUnmounted(stopPolling)
   max-height: calc(100vh - 340px);
   overflow-y: auto;
 }
+/* T10 单聊/群聊分区标题：只读组织，不改任何会话绑定 */
+.conv-section-title {
+  padding: 6px 10px;
+  margin: 4px 0 6px;
+  color: var(--el-text-color-secondary);
+  background: var(--el-fill-color-lighter);
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.conv-group-item .conv-avatar {
+  background: var(--el-color-warning-light-9);
+}
 .conv-item {
   padding: 10px 12px;
   border-bottom: 1px solid var(--el-border-color-lighter);
@@ -1485,6 +1687,11 @@ onUnmounted(stopPolling)
 }
 .msg-row.mine .msg-bubble {
   background: var(--el-color-primary-light-9);
+}
+/* T10 群聊当前成员高亮：仅视觉标记，不影响左右分布（平台发言仍在右） */
+.msg-row.highlight .msg-bubble {
+  border-left: 3px solid var(--el-color-warning);
+  background: var(--el-color-warning-light-9);
 }
 .msg-meta {
   display: flex;

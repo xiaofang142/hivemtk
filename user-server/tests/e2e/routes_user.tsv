@@ -276,6 +276,7 @@ user	POST	/api/inbox/conversations/:id/mute
 user	POST	/api/inbox/conversations/:id/tags
 user	DELETE	/api/inbox/conversations/:id/tags/:tag
 user	GET	/api/inbox/conversations/:id/messages
+user	GET	/api/inbox/group-thread
 user	DELETE	/api/inbox/conversations/:id/messages/:mid
 user	POST	/api/inbox/lock-human
 user	POST	/api/inbox/unlock-human/:session_id

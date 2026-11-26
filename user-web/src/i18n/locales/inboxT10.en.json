@@ -1,0 +1,16 @@
+{
+  "singleChat": "Direct",
+  "groupChat": "Group",
+  "singleChatSession": "Direct chat",
+  "groupChatSession": "Group chat",
+  "singleModeBanner": "Direct chat: one-to-one conversation",
+  "groupModeBanner": "Group chat: messages from all members",
+  "allAccounts": "All accounts",
+  "account": "Account",
+  "allTypes": "All conversation types",
+  "nicknamePlaceholder": "Nickname / customer ID",
+  "members": "members",
+  "highlightMember": "Highlight member",
+  "me": "Me",
+  "channelAccount": "Channel account"
+}

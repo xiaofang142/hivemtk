@@ -52,14 +52,16 @@ func writeScopedError(ctx *gin.Context, err error) {
 // List 列表
 func (c *InboxController) List(ctx *gin.Context) {
 	q := service.InboxQuery{
-		Platform:   ctx.Query("platform"),
-		AccountID:  ctx.Query("account_id"),
-		CustomerID: ctx.Query("customer_id"),
-		Keyword:    ctx.Query("keyword"),
-		Status:     ctx.Query("status"),
-		AssignedTo: ctx.Query("assigned_to"),
-		OrderBy:    ctx.Query("order_by"),
-		Filter:     ctx.Query("filter"),
+		Platform:         ctx.Query("platform"),
+		AccountID:        ctx.Query("account_id"),
+		CustomerID:       ctx.Query("customer_id"),
+		Keyword:          ctx.Query("keyword"),
+		Status:           ctx.Query("status"),
+		AssignedTo:       ctx.Query("assigned_to"),
+		OrderBy:          ctx.Query("order_by"),
+		Filter:           ctx.Query("filter"),
+		ConversationType: ctx.Query("conversation_type"),
+		Nickname:         ctx.Query("nickname"),
 	}
 	if v := ctx.Query("assigned_sop"); v != "" {
 		if n, err := strconv.ParseUint(v, 10, 32); err == nil {
@@ -413,6 +415,35 @@ func (c *InboxController) GetMessages(ctx *gin.Context) {
 		return
 	}
 	response.SuccessWithPage(ctx, list, int64(page), int64(pageSize), total)
+}
+
+// @Summary      群聊合并消息线程（T10）
+// @Tags      inbox
+// @Router    /api/inbox/group-thread [get]
+// GetGroupThread 按渠道+账号+群名称把同一群的所有会话消息合成一个时间流。
+func (c *InboxController) GetGroupThread(ctx *gin.Context) {
+	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "50"))
+	list, total, members, err := c.svc.GetGroupThread(ctx.Request.Context(), service.InboxGroupThreadQuery{
+		Platform:  ctx.Query("platform"),
+		AccountID: ctx.Query("account_id"),
+		GroupName: ctx.Query("group_name"),
+		Page:      page,
+		PageSize:  pageSize,
+	}, inboxScopeFromCtx(ctx))
+	if err != nil {
+		writeScopedError(ctx, err)
+		return
+	}
+	// members 是群成员下拉的附加投影；分页字段与 SuccessWithPage 同形，
+	// 仍由统一 response 出口输出，避免 controller 直接 c.JSON。
+	response.Success(ctx, gin.H{
+		"list":      list,
+		"members":   members,
+		"total":     total,
+		"page":      page,
+		"page_size": pageSize,
+	}, "成功")
 }
 
 // @Summary      删除收件箱会话中的单条消息

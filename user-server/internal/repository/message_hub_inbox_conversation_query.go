@@ -9,6 +9,33 @@ import (
 	"hivemtk-user/internal/model"
 )
 
+// inboxGroupConvPredicate T10 群聊判定 SQL（只读，不依赖新增列）。
+//
+// 两条证据任一命中即群聊：
+//  1. 消息侧权威群标记（message_hub.is_group / group_id）——新 APK / 官方群渠道；
+//  2. 同一 (tenant, platform, account_id, conversation_id) 下存在 >=2 个不同 customer_id
+//     ——旧 APK 把群消息按发言人拆成多个会话，conversation_id 即群名（线上实测 20 组）。
+//
+// 租户列显式对齐，避免跨租户误归并；conversation_id 为空时第 2 条恒不成立。
+const inboxGroupConvPredicate = `(
+	EXISTS (
+		SELECT 1 FROM message_hub mh
+		WHERE mh.conversation_id = inbox_conversations.conversation_id
+		  AND mh.platform = inbox_conversations.platform
+		  AND mh.account_id = inbox_conversations.account_id
+		  AND mh.tenant_id = inbox_conversations.tenant_id
+		  AND (mh.is_group = true OR COALESCE(mh.group_id, '') <> '')
+	)
+	OR (
+		SELECT COUNT(DISTINCT c2.customer_id) FROM inbox_conversations c2
+		WHERE c2.platform = inbox_conversations.platform
+		  AND c2.account_id = inbox_conversations.account_id
+		  AND c2.tenant_id = inbox_conversations.tenant_id
+		  AND c2.conversation_id = inbox_conversations.conversation_id
+		  AND c2.conversation_id <> ''
+	) >= 2
+)`
+
 // ListByQuery 按条件分页查询会话（行为与原 service.List 一致）
 func (r *InboxConversationRepository) ListByQuery(ctx context.Context, q InboxConversationQuery) ([]*model.InboxConversation, int64, error) {
 	if r == nil || r.db == nil {
@@ -51,6 +78,17 @@ func (r *InboxConversationRepository) ListByQuery(ctx context.Context, q InboxCo
 	}
 	if q.Keyword != "" {
 		tx = tx.Where("last_message_preview LIKE ?", "%"+q.Keyword+"%")
+	}
+	// T10 用户昵称：搜索 CRM/线索绑定的具体人（姓名或外部 ID），不是消息正文。
+	if q.Nickname != "" {
+		tx = tx.Where("(customer_name LIKE ? OR customer_id LIKE ?)", "%"+q.Nickname+"%", "%"+q.Nickname+"%")
+	}
+	// T10 会话类型：群聊谓词放到 SQL 里，保证 count 与分页口径一致。
+	switch q.ConversationType {
+	case "group":
+		tx = tx.Where(inboxGroupConvPredicate)
+	case "single":
+		tx = tx.Where("NOT " + inboxGroupConvPredicate)
 	}
 	// 「待首响」筛选（specs/024 T604）：客户在等、我们还没回。
 	// snoozed 排除在外——那是「我稍后再看」，不是「客户在等」；把它算进 SLA 会让数字虚高。

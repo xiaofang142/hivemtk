@@ -118,6 +118,11 @@ type InboxConversationQuery struct {
 	//   ""                     不过滤
 	//   "awaiting_first_reply" 客户在等、我们还没回（waiting_since 有值、first_reply_at 为空、未关闭）
 	Filter string
+	// ConversationType T10 会话类型筛选："single" | "group"（空=全部）。
+	// 群聊判定不依赖新增列，见 inboxGroupConvPredicate。
+	ConversationType string
+	// Nickname T10 用户昵称筛选：匹配 customer_name / customer_id（CRM 绑定的具体人）。
+	Nickname string
 }
 
 // SetDB 注入 db（用于测试）

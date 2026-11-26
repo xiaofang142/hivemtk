@@ -1,0 +1,16 @@
+{
+  "singleChat": "单聊",
+  "groupChat": "群聊",
+  "singleChatSession": "单聊会话",
+  "groupChatSession": "群聊会话",
+  "singleModeBanner": "单聊模式：一对一聊天",
+  "groupModeBanner": "群聊模式：显示多成员消息",
+  "allAccounts": "全部账号",
+  "account": "账号",
+  "allTypes": "全部会话类型",
+  "nicknamePlaceholder": "用户昵称/客户ID",
+  "members": "人",
+  "highlightMember": "高亮成员",
+  "me": "本人",
+  "channelAccount": "渠道账号"
+}

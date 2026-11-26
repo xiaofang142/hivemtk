@@ -17,6 +17,11 @@ export const inboxApi = {
     return http.get(`/api/inbox/conversations/${id}/messages`, params)
   },
 
+  // T10 群聊合并线程：按渠道+账号+群名称一次拉全群消息（避免 46 人群 N+1）
+  getGroupThread(params) {
+    return http.get('/api/inbox/group-thread', params)
+  },
+
   // 标记已读
   markRead(id) {
     return http.post(`/api/inbox/conversations/${id}/read`)

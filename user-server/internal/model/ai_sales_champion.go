@@ -504,6 +504,17 @@ type InboxConversation struct {
 	CreatedAt   time.Time      `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt   time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
 	DeletedAt   gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
+
+	// ---- T10 统一收件箱展示字段（只读投影，gorm:"-" 不落库）----
+	// 群聊按「渠道+账号+群名称」归并；customer_id 仍是 CRM/线索绑定的人，
+	// 两者解耦：群聊展示读这些字段，不改写任何既有绑定或消息数据。
+	IsGroup          bool     `gorm:"-" json:"is_group"`
+	GroupName        string   `gorm:"-" json:"group_name,omitempty"`
+	GroupID          string   `gorm:"-" json:"group_id,omitempty"`
+	ConversationType string   `gorm:"-" json:"conversation_type"` // "single" | "group"
+	GroupKey         string   `gorm:"-" json:"group_key,omitempty"`
+	MemberCount      int      `gorm:"-" json:"member_count,omitempty"`
+	ConversationIDs  []string `gorm:"-" json:"conversation_ids,omitempty"`
 }
 
 func (InboxConversation) TableName() string { return "inbox_conversations" }
