@@ -1087,3 +1087,22 @@ follow_user_channels 扩为八渠道（生产库实值已更新）。链 B 从�
 - 发布后 `deploy.sh check` 七项全绿。
 
 **注**：本轮未做浏览器人工点验；HiveBridge 1.3.11 已在此前链 B/C 发布，本轮 bridge 源码无改动，未重发扩展。
+
+## 2026-11-26 21:0x 链 A + 链 D — 线索发掘工作台去掉全局默认兜底（HEAD `ec6a87ca1`）
+
+**变更**：账号/渠道两级规则成为线索发掘开关与关键词的唯一真实入口，缺失规则 fail-closed 不发掘。
+- 后端：`lead_rule.go` 两粒度解析（account > channel），两级均无启用规则返回 `ErrLeadRuleNotFound`，Save 拒 global scope；删 synthetic global rule、legacy channel 关键词兜底、gate/process 的 legacy 回落；删 `GET/POST /api/lead-mining/config` 控制器/路由/DTO。
+- 前端：删 Index.vue「全局默认（兜底）」tab 与 config 表单/API 函数；AccountMatrix/Rules 文案与 zh/en 导航引导同步；存量 global 行标「全局（历史）」且禁用编辑；新增规则弹窗仅渠道/账号。
+- commit `ec6a87ca1`，push `gitee-upstream` + `upstream`。
+
+**验证与发布**：
+- 后端 `go build ./...`/`go vet ./...`/定向测试/层界/架构/goroutine/seam 全绿；前端 `npx eslint src` 0 errors、`npx vitest run` 147 files/1338 tests 全绿、`npm run build` 成功。
+- 链 A 首次被 test gate BLOCK：无关 flaky `TestCRMActionApprovalDraft_RejectExpireAndVersion`（草稿 ID 碰撞，隔离重跑通过）；重跑通过。
+- 链 A：线上二进制 sha256 `8c76bf6ac81924e0…`，运行镜像 `2f0fe04394ed9cb5`，容器启动 `2026-11-26T13:03:42Z`，回滚点镜像 `mtk-user-server:rollback-20261126-210239` / 二进制 `user-server.bak-20261126-210239`，容器内+公网 health 200，默认口令探针 GREEN。本轮一并发布此前已推未发的 `7aef0fcbd`、`7280b50ca`。
+- 链 D：`index-B6bpGW-Y.js`，index.html sha256 `4a0d135a8268c13c…` 本地/公网一致，备份 `user-web.snapshot-20261126-210420.tgz`，公网 buildId `ec6a87ca1-1795698244706` 与本地一致。
+
+**线上核验（ego-browser TaskSpace `hivemtk-online` space 83）**：
+- `/lead-mining/index` tab 仅 账号级配置/通知路由/判定记录/质量看板/线索库，无「全局默认（兜底）」；4 账号均「账号级」。快照/截图 `t01-workbench-after.png`。
+- `/leads/rules` global 行标「全局（历史）」且编辑按钮 disabled；新增弹窗 scope 选项仅 渠道/账号（evaluate 读 `.el-select-dropdown__item` 仅这两项）。截图 `t01-rules-after.png`。
+- API：`GET/POST /api/lead-mining/config` → 404；`POST /api/manage/leads/rules` scope=global → 400 `INVALID_PARAM_1001`；`GET` rules 200（4 条 account + 1 条存量 global 未被解析使用）。
+- 观察项：`GET /api/channels/catalog` 409 `DUPLICATE_ENTRY_3003`（存量渠道目录重复，与本任务无关，未改）。
