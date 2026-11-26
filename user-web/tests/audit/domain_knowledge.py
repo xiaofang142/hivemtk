@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """L2 知识库域写测试：import/text 真实导入 + 核对 DB documents/chunks 落库 + 清理。"""
 import sys, time
-sys.path.insert(0, "/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/tests/audit")
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from testkit import api, db_count, log
 
 def main():

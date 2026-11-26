@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """测试脚手架 testkit：封装 登录/API调用/DB查询，供各业务域写测试复用。"""
 import json, urllib.request, urllib.error, urllib.parse, ipaddress, time, os
+from pathlib import Path
 
 # SSRF 防护：本脚手架只打本机服务；换受控目标时通过 AUDIT_BASE_URL_ALLOWED_HOSTS 显式追加。
 # 所有 urlopen 出口必须先过 host 白名单，拒绝 userinfo、非 http(s)、私网/保留地址。
@@ -59,7 +60,8 @@ _check_target_url(BASE)  # BASE 可经环境变量注入，模块加载即校验
 # DB 连接（按工作记忆）
 import subprocess as _sp
 def _pgpw():
-    out = _sp.run(["grep", "^POSTGRES_PASSWORD=", "/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/.env"],
+    env_file = Path(__file__).resolve().parents[3] / ".env"
+    out = _sp.run(["grep", "^POSTGRES_PASSWORD=", str(env_file)],
                   capture_output=True, text=True).stdout
     return out.strip().split("=",1)[1] if out.strip() else ""
 

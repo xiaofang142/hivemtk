@@ -19,7 +19,7 @@
 初始化：
 
 ```bash
-cd /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/embed-sdk
+cd hivemtk-user/embed-sdk
 npm install
 ```
 

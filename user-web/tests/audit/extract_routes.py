@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """提取 user-web 全部页面清单：路由模块 -> (path, name, component, title)。"""
 import os, re, json, glob
+from pathlib import Path
 
-WEB = "/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/src"
+WEB = Path(__file__).resolve().parents[2] / "src"
 MOD_DIR = os.path.join(WEB, "router/modules")
 
 def to_fs(path):

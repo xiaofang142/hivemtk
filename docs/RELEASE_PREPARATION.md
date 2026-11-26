@@ -1,6 +1,6 @@
 # 发布准备：配置与安装部署逻辑核查（用户端 · 平台端）
 
-> 目的：把**用户端（hivemtk 仓）**与**平台端（hivemtk-platform 仓）**的配置文件、数据配置逻辑、安装部署逻辑核对成一份事实清单，作为**发布代码到服务器**前的准备依据。
+> 目的：把**用户端（hivemtk-user 仓）**与**平台端（hivemtk-platform 仓）**的配置文件、数据配置逻辑、安装部署逻辑核对成一份事实清单，作为**发布代码到服务器**前的准备依据。
 > 本文只做"核查与清单"，不复述安装步骤——安装步骤见 [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)、[operations/MERCHANT_DEPLOYMENT.md](operations/MERCHANT_DEPLOYMENT.md)。
 > 核查日期：2026-10-18（分支 master）。端口以 [PORT_REGISTRY.md](PORT_REGISTRY.md) + `user-server/internal/config/ports.go` 为唯一权威。
 
@@ -10,7 +10,7 @@
 
 - **2026-08-17 重构后：Docker 只承载数据层（PG + Redis），user-server、platform-server、推理栈、前端全部跑宿主机进程**。生产 Dockerfile 已删除，仓内仅剩 dev 用 `user-server/Dockerfile.dev`。
 - **两个独立 git 仓**：
-  - 用户端：`…/go/hivemtk/hivemtk`（本文以 `R/` 代指）——user-server + user-web + embed-sdk + 数据层 compose；
+  - 用户端：平级产品仓 `hivemtk-user/`（本文以 `R/` 代指）——user-server + user-web + embed-sdk + 数据层 compose；
   - 平台端：`…/go/hivemtk/hivemtk-platform`（本文以 `P/` 代指）——platform-server + platform-web + platform-contributor + 平台 PG compose。
 - **发布一律手工，仓库内无发布脚本**（2026-10-23：`scripts/deploy-user.sh` / `scripts/post_deploy_check.sh` 已删除）：本地构建 → 上传到线上服务器指定目录 → 重启服务。官网发布步骤见 `website/README.md`「发布」章节；后端发布见本文 §发布流程。
 - **线上主机**：`101.35.252.112:57122`（`~/.ssh/config` 别名 `mtk-prod`），站点/服务根 `/www/wwwroot/hivemtk/{website,user-web,user-server,platform-web,platform-contributor,platform-server}`；HTTPS 证书在宝塔（`/www/server/panel/vhost/cert/xapptool.cn/`）；数据库是同机容器 `mtk-postgres`(127.0.0.1:8202) / `mtk-redis`(127.0.0.1:8203)，平台端 `mtk-platform-postgres`(8201)。

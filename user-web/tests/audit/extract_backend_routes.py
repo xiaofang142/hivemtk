@@ -3,8 +3,9 @@
 方法：finditer 找所有 .Group 闭包区间(括号配平)建树，再找 .METHOD 落在最深层 group 内累积前缀。
 """
 import os, re, json
+from pathlib import Path
 
-SRV = "/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server"
+SRV = Path(__file__).resolve().parents[3] / "user-server"
 files = []
 for root, _, fs in os.walk(os.path.join(SRV, "internal/router")):
     for fn in fs:

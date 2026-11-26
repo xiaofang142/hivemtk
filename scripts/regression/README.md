@@ -109,11 +109,12 @@ reload 之间的窗口把**内存态 token 回写** localStorage（启动期无�
 6. 发现缺陷：当轮修复（规则2），修完回归本页 + 相关门禁，才允许标 [x]。
 7. 双形态都要过：SaaS 出现的租户/商务属性，独立部署页必须不出现且不报错。
 
-### 助手用法（导入为绝对 file:// URL，ego-browser 脚本无相对导入基）
+### 助手用法（在产品仓根计算 file:// URL，避免写死个人路径）
 
 ```bash
-ego-browser nodejs <<'EOF'
-import { openWithConsole, drainConsoleErrorsAsync, apiProbe } from 'file:///Users/xiaofang/Documents/www/go/hivemtk/hivemtk/scripts/regression/ego-helpers.mjs';
+HELPERS="file://$(pwd)/scripts/regression/ego-helpers.mjs"
+ego-browser nodejs <<EOF
+import { openWithConsole, drainConsoleErrorsAsync, apiProbe } from '$HELPERS';
 const task = await taskSpace("回归-<轮次>-<形态>");
 const page = task.page("p1");
 await openWithConsole(page, "http://127.0.0.1:8320/#/system/config-params");

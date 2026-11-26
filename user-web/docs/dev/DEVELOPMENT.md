@@ -18,7 +18,7 @@
 ### 1.2 安装依赖
 
 ```bash
-cd /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web
+cd hivemtk-user/user-web
 npm install
 ```
 

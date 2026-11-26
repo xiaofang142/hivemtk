@@ -10,7 +10,7 @@
 #   bash monitor_loop.sh --daemon   # 每 300s 一轮常驻
 # ---------------------------------------------------------------------------
 set -u
-HERE=/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server/scripts/simulate
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$HERE"
 
 INTERVAL=300

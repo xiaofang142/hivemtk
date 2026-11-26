@@ -6,8 +6,9 @@
 # 依赖：scripts/inference-host/start-*.sh（阻塞至 /health 通过）
 # ---------------------------------------------------------------------------
 set -u
-HIVE=/Users/xiaofang/Documents/www/go/hivemtk/hivemtk
-INFRA=$HIVE/scripts/inference-host
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HIVE="$(cd "$HERE/../../.." && pwd)"
+INFRA="$HIVE/scripts/inference-host"
 REPORT_ONLY=0
 [[ "${1:-}" == "--report" ]] && REPORT_ONLY=1
 

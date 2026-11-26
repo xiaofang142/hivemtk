@@ -25,7 +25,7 @@
 APP=$PWD
 while [ "$APP" != "/" ] && [ ! -f "$APP/deploy/deploy-api.sh" ]; do APP=$(dirname "$APP"); done
 [ -f "$APP/deploy/deploy-api.sh" ] || { echo "未找到主代码目录（含 deploy/deploy-api.sh）；若从工作区根启动，请先 cd hivemtk-user"; exit 1; }
-# APP = /Users/xiaofang/Documents/www/go/hivemtk/hivemtk-user
+# APP = <workspace>/hivemtk-user
 
 # 从工作区根启动时，先进入平级产品仓再执行上面同一段：
 cd ~/Documents/www/go/hivemtk/hivemtk-user
@@ -117,7 +117,7 @@ bash scripts/bootstrap-agent-env.sh    # 配置 git 钩子 + 安装 skills 到�
 | `embed-sdk/`（客服 Widget，ADR-011） | `FRONTEND-CODING-STANDARDS.md` §3 | ci-embed-sdk（unit+boundary 62 用例，2026-11-14 补） | **链 D 已成文（2026-11-19 实测）**：build → rsync dist → `mtk-prod:/www/wwwroot/hivemtk/user-server/embed-sdk-dist/`，nginx `/embed/` 伺服，公网验 `/embed/marketing-chat-widget.iife.js` 200（RELEASE-PIPELINE §链 D） |
 | `packages/`（共享 JS：browser-core/http-core） | —（被 user-web `src/utils/request.js` 消费，随其 vitest 门 + ci-embed-sdk 触发） | 同左 | 随消费方 |
 | `website/`（官网/术语/工具脚本） | `website/TERMINOLOGY.md`（命名权威） | markdownlint + docs-link-check + `check_i18n.mjs` | — |
-| `sagex/`（SageX Android 客户端，独立 git 仓库） | — | Android Gradle（Java 17）+ R8 混淆；授权/激活链路见 `app/src/main/java/.../license/` | 独立仓库，不随链 A/B/C/D 发布 |
+| `../sagex/`（SageX Android 客户端，平级独立 git 仓库） | — | Android Gradle（Java 17）+ R8 混淆；授权/激活链路见 `app/src/main/java/.../license/` | 独立仓库，不随链 A/B/C/D 发布 |
 | `migrations/`+`user-server/internal/model/` | — | enum-consistency（SQL↔Go 枚举） | 随链 A |
 | 外层 `hivemtk-platform/`、`assetdpo/` | **各自仓库自治**（各有自己的 CLAUDE.md/GIT_RULES），本仓约束体系不跨仓强制 | 各仓自带 | 各仓自己的发布入口 |
 

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """L2 智能体 + 营销流程域写测试：真实 CRUD + DB 核对 + 清理。"""
 import sys, time
-sys.path.insert(0, "/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/tests/audit")
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from testkit import api, db_count, log
 
 def test_agents():

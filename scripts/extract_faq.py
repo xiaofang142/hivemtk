@@ -24,9 +24,11 @@ import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
-# 默认路径 (基于项目根)
-DEFAULT_INPUT = Path("/Users/xiaofang/Documents/www/go/hivemtk/E_commerce_Customer_Service/test_clean_v2.jsonl")
-DEFAULT_OUTPUT = Path("/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/scripts/faq_seed.json")
+# 默认路径 (基于脚本位置；输入数据在工作区根，输出在产品仓 scripts/)
+SCRIPT_DIR = Path(__file__).resolve().parent
+WORKSPACE_ROOT = SCRIPT_DIR.parent.parent
+DEFAULT_INPUT = WORKSPACE_ROOT / "E_commerce_Customer_Service/test_clean_v2.jsonl"
+DEFAULT_OUTPUT = SCRIPT_DIR / "faq_seed.json"
 DEFAULT_TOP_N = 50
 
 # simhash 指纹位数

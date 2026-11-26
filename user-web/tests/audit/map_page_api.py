@@ -7,8 +7,9 @@
 输出 pages_api.json: [{page, component, module, apis:[{method,url,fn,api_file}]}]
 """
 import os, re, json, glob
+from pathlib import Path
 
-WEB = "/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/src"
+WEB = Path(__file__).resolve().parents[2] / "src"
 API_DIR = os.path.join(WEB, "api")
 VIEW_DIR = os.path.join(WEB, "views")
 

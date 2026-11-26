@@ -4,9 +4,9 @@
 // 三类能力；**不提供**元素枚举、循环点击、跑批驱动——那些是明令禁止的。
 // 每个函数的粒度都是"一次一个元素 / 一次一个请求"，调用方逐页、逐元素串行调用。
 //
-// 用法（ego-browser 脚本无相对导入基，用绝对 file:// URL）：
-//   import { openWithConsole, drainConsoleErrors, apiProbe, loginStandalone, loginSaaS }
-//     from 'file:///Users/xiaofang/Documents/www/go/hivemtk/hivemtk/scripts/regression/ego-helpers.mjs';
+// 用法（在产品仓根按 scripts/regression/README.md 计算 HELPER_URL 后注入）：
+//   HELPER_URL="file://$(pwd)/scripts/regression/ego-helpers.mjs"
+//   ego-browser nodejs <<EOF ... from '$HELPER_URL'; ... EOF
 
 const CDP_ON = new WeakSet()
 

@@ -9,20 +9,15 @@ description: "Publishes HiveMtk changes: chain A deploys the Go API to productio
 
 ## 0. 先定位主代码目录（不要在命令里写死个人路径）
 
-**本仓是嵌套 git 仓库**：外层 `.../go/hivemtk` 与内层 `.../go/hivemtk/hivemtk` 各有 `.git`，
-真实代码（`deploy/`、`user-server/`、`user-web/`）在**内层**。所以
-`git rev-parse --show-toplevel` + `"/hivemtk"` 后缀的写法在正常场景下会指错
-（2026-11-13 实测踩到，勿再用）。正确做法是**从当前目录向上找含 `deploy/deploy-api.sh` 的那层**：
+**本仓是独立的 `hivemtk-user` 产品仓**；工作区根 `.../go/hivemtk` 是普通目录、没有 `.git`，
+`hivemtk-platform/`、`assetdpo/`、`sagex/` 都与本仓平级。真实代码（`deploy/`、`user-server/`、
+`user-web/`）在本仓。不要用 `git rev-parse --show-toplevel` 拼接旧 `/hivemtk` 后缀猜层级。
+正确做法是**从当前目录向上找含 `deploy/deploy-api.sh` 的产品仓根**：
 
 ```bash
 APP=$PWD
 while [ "$APP" != "/" ] && [ ! -f "$APP/deploy/deploy-api.sh" ]; do APP=$(dirname "$APP"); done
-if [ ! -f "$APP/deploy/deploy-api.sh" ]; then
-  # 兜底：从外层仓（含其 docs/ 等子目录）启动时向上找不到——主代码在外层根的 hivemtk/ 内层仓。
-  # 只在向上已失败后才允许 show-toplevel，此时必然不在内层，不存在歧义。
-  T=$(git rev-parse --show-toplevel 2>/dev/null) && [ -f "$T/hivemtk/deploy/deploy-api.sh" ] && APP="$T/hivemtk"
-fi
-[ -f "$APP/deploy/deploy-api.sh" ] || { echo "未找到主代码目录（含 deploy/deploy-api.sh）"; exit 1; }
+[ -f "$APP/deploy/deploy-api.sh" ] || { echo "未找到主代码目录（含 deploy/deploy-api.sh）；若从工作区根启动，请先 cd hivemtk-user"; exit 1; }
 echo "主代码目录: $APP"
 ```
 
@@ -140,7 +135,7 @@ isolated Space 的不可见窗口，System Events 拿不到按钮坐标）；Tar
 
 ## 6. 深度文档与源码
 
-- **本 skill 的权威源在内层仓 `$APP/skills/hivemtk-release/SKILL.md`**：要改本 skill，先改仓库
+- **本 skill 的权威源在产品仓 `$APP/skills/hivemtk-release/SKILL.md`**：要改本 skill，先改仓库
   权威源，再重跑 `$APP/skills/README.md` 的安装命令同步到本机部署副本（`~/.agents/skills` 等）。
   只改部署副本不改权威源 = 下次安装被覆盖，视为违规。
 - 权威文档（含全部历史证据与拓扑台账）：
@@ -157,4 +152,4 @@ isolated Space 的不可见窗口，System Events 拿不到按钮坐标）；Tar
   embed-sdk 伺服于 `/www/wwwroot/hivemtk/user-server/embed-sdk-dist/`，公网路径 `/embed/`）。
 - 问「线上现在是什么版本」⇒ 不要猜，读 `PROD_TOPOLOGY_CHANGES.md` 台账。
 - `go test` 报 `test password is missing` ⇒ 环境问题，不是回归，不要当作发布阻塞。
-- **定位目录一律用 §0 的向上查找**，不要用 `git rev-parse --show-toplevel` 猜层级（本仓嵌套仓库，会指错）。
+- **定位目录一律用 §0 的向上查找**，不要用 `git rev-parse --show-toplevel` 猜层级（工作区根不是 git 仓，不能据此拼接产品仓）。

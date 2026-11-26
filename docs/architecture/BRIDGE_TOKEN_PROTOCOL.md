@@ -46,8 +46,11 @@
 ## 三、三条消息路径统一（FR-031）
 
 bridge HTTP、统一 API 上报、hook/轮询/SageX 三条入口保留为适配器，仅做归一化投递：
-消息统一落 `InboundMessage` 收件箱，租户/账号归属统一走 `ChannelResolver.ResolveByIdentifyCode`
+消息统一落 `InboundMessage` 收件箱（即统一上报中心），租户/账号归属统一走 `ChannelResolver.ResolveByIdentifyCode`
 （识别码全局唯一 → 反查租户/账号；歧义 fail-closed 拒绝，不回落默认租户）。
+
+- Bridge：`/api/bridge/ingest` 与 `/api/bridge/gateway`（action=report）均进入同一上报中心。
+- SageX：通过 `/api/bridge/gateway`（identify_code 鉴权，`sagex` 绑定映射为 `qq`/`personal_wx`）进入同一上报中心，不走独立上报链路。
 
 ## 四、重置与在途窗口（T061）
 
