@@ -30,7 +30,7 @@ func TestFA44_SaveMergeRulesRejectsUnknownField(t *testing.T) {
 		"custom": []any{
 			map[string]any{"name": "x", "fields": []string{"phone"}, "enabled": true},
 		},
-		"strategy":           map[string]any{"primary_rule": "latest_active", "conflict_behavior": "auto_merge"},
+		"strategy":              map[string]any{"primary_rule": "latest_active", "conflict_behavior": "auto_merge"},
 		"unsupported_field_xyz": "should-be-rejected",
 	}
 	payload, err := json.Marshal(body)

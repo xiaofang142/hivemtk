@@ -287,6 +287,10 @@ func newTestService(t *testing.T, cfg *model.LeadMiningConfig, j *fakeJudge) *Se
 		clueRepo:        newFakeClueRepo(),
 		cfgRepo:         &fakeCfgRepo{cfg: cfg},
 		lastJudge:       map[string]time.Time{},
+		// 本组验证判定后的客户/线索、防抖与去重；检测完整性由专门回归覆盖。
+		hitsProvider: func(context.Context, DetectionInput) ([]model.LeadMiningHit, error) {
+			return []model.LeadMiningHit{{Type: "keyword", Complete: true}}, nil
+		},
 	}
 }
 
@@ -485,6 +489,34 @@ func TestProcess_DedupAcrossTime(t *testing.T) {
 	}
 	if fkr.updateCnt != 1 {
 		t.Fatalf("第二次应走 UpdateByID，实际 %d", fkr.updateCnt)
+	}
+}
+
+func TestProcess_IncompleteEvidenceBlocksLeadSideEffects(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		hits []model.LeadMiningHit
+		err  error
+	}{
+		{name: "no_hits"},
+		{name: "incomplete", hits: []model.LeadMiningHit{{Type: "keyword"}}},
+		{name: "degraded", hits: []model.LeadMiningHit{{Type: "keyword", Complete: true, Degraded: true}}},
+		{name: "provider_error", err: &lmRepoError{"detector unavailable"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := &model.LeadMiningConfig{Enabled: true, MinIntentScore: 50, Tags: []string{"高意向"}}
+			judge := &fakeJudge{resp: &LeadJudgement{IsLead: true, IntentScore: 90}}
+			svc := newTestService(t, cfg, judge)
+			svc.hitsProvider = func(context.Context, DetectionInput) ([]model.LeadMiningHit, error) {
+				return tc.hits, tc.err
+			}
+			svc.process(context.Background(), sampleHub("telegram", "evidence-user", "我想购买"))
+			customers := svc.custRepo.(*fakeCustRepo)
+			clues := svc.clueRepo.(*fakeClueRepo)
+			if judge.calls != 1 || len(customers.byID) != 0 || clues.createCnt != 0 || clues.updateCnt != 0 {
+				t.Fatalf("高分但证据不全时只能判定，不得写客户/标签/线索：judge=%d customers=%d create=%d update=%d", judge.calls, len(customers.byID), clues.createCnt, clues.updateCnt)
+			}
+		})
 	}
 }
 

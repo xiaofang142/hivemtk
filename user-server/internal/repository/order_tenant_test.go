@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	"hivemtk-user/internal/model"
-	_type "hivemtk-user/internal/pkg/utils/type"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/testutil"
+	_type "hivemtk-user/internal/pkg/utils/type"
 
 	"gorm.io/gorm"
 )

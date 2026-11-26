@@ -16,9 +16,9 @@ package channelgw
 // 真实持久化/租约仍用 PG；不拿 fake 证明行锁。
 
 import (
-	"hivemtk-user/internal/capregistry"
 	"context"
 	"encoding/json"
+	"hivemtk-user/internal/capregistry"
 	"reflect"
 	"testing"
 	"time"

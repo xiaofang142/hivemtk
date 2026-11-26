@@ -7,8 +7,8 @@ import (
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/tenant"
-	"hivemtk-user/internal/platform"
 	"hivemtk-user/internal/pkg/testutil"
+	"hivemtk-user/internal/platform"
 )
 
 // 任务三：设备信标服务口径测试。

@@ -14,8 +14,8 @@ package service
 // 对无租户 ctx fail-closed）。
 
 import (
-	"hivemtk-user/internal/capregistry"
 	"context"
+	"hivemtk-user/internal/capregistry"
 	"sync"
 	"sync/atomic"
 	"testing"

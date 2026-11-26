@@ -172,7 +172,7 @@ func (f *fakeCustomerRepoScoped) GetByDouyinOpenID(context.Context, string) (*mo
 	return nil, nil
 }
 func (f *fakeCustomerRepoScoped) Update(context.Context, *model.Customer) error { return nil }
-func (f *fakeCustomerRepoScoped) Delete(context.Context, string) error           { return nil }
+func (f *fakeCustomerRepoScoped) Delete(context.Context, string) error          { return nil }
 func (f *fakeCustomerRepoScoped) List(context.Context, int, int, string) ([]*model.Customer, int64, error) {
 	return []*model.Customer{}, 0, nil
 }
@@ -196,7 +196,9 @@ func (f *fakeCustomerRepoScoped) GetByXiaohongshuID(context.Context, string) (*m
 func (f *fakeCustomerRepoScoped) SearchByFilter(context.Context, repository.CustomerSearchFilter) ([]*model.Customer, int64, error) {
 	return nil, 0, nil
 }
-func (f *fakeCustomerRepoScoped) ReassignSessionOneID(context.Context, string, string) error { return nil }
+func (f *fakeCustomerRepoScoped) ReassignSessionOneID(context.Context, string, string) error {
+	return nil
+}
 func (f *fakeCustomerRepoScoped) ReassignOneID(context.Context, string, string, string) error {
 	return nil
 }

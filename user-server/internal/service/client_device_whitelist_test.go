@@ -7,14 +7,16 @@ import (
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/tenant"
-	"hivemtk-user/internal/platform"
 	"hivemtk-user/internal/pkg/testutil"
+	"hivemtk-user/internal/platform"
 )
 
 // TA-06（2026-11-19）信标归属白名单验收：
-//  ① 白名单未配置（默认 fail-closed）→ SaaS 形态下任何来源都不落快照；
-//  ② 白名单配置后仅名单内租户的信标落快照，快照自带 tenant_code（心跳透传可对账）；
-//  ③ 名单外租户的信标拒收且不覆盖既有快照。
+//
+//	① 白名单未配置（默认 fail-closed）→ SaaS 形态下任何来源都不落快照；
+//	② 白名单配置后仅名单内租户的信标落快照，快照自带 tenant_code（心跳透传可对账）；
+//	③ 名单外租户的信标拒收且不覆盖既有快照。
+//
 // 归属以登录租户（ctx JWT）为准，body 自报 tenant_code 仅透传展示。
 func TestClientDeviceWhitelistOwnership(t *testing.T) {
 	prevMode := tenant.CurrentMode()

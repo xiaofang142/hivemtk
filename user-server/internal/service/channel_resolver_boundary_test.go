@@ -4,11 +4,96 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/edition"
 	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/testutil"
 	"hivemtk-user/internal/repository"
 )
+
+type scopedResolverChannelRepo struct {
+	repository.ChannelRepository
+	seen context.Context
+}
+
+func (r *scopedResolverChannelRepo) GetByID(ctx context.Context, tenantID, id uint) (*model.Channel, error) {
+	r.seen = ctx
+	return r.ChannelRepository.GetByID(ctx, tenantID, id)
+}
+
+// 权威识别码确定归属后，真实渠道仓储只能收到保留版本与取消语义的单租户上下文。
+func TestChannelResolver_IdentifyCodePinsChannelRepositoryTenant(t *testing.T) {
+	previousMode := tenant.CurrentMode()
+	tenant.SetMode(tenant.ModeOn)
+	t.Cleanup(func() { tenant.SetMode(previousMode) })
+	db := testutil.NewTestDB(t, &model.Channel{}, &model.ChannelAccount{})
+	seedCtx := edition.WithContext(tenant.WithTenantID(context.Background(), 41), edition.TypeCustom)
+	channel := &model.Channel{TenantID: 41, Name: "scope-regression", Code: "douyin", Type: "dm", Enabled: true}
+	if err := db.WithContext(seedCtx).Create(channel).Error; err != nil {
+		t.Fatalf("创建渠道失败: %v", err)
+	}
+	account := &model.ChannelAccount{
+		TenantID: 41, ChannelID: channel.ID, Name: "scope-regression", Type: "dm",
+		IdentifyCode: "cid_scope_regression", Status: 1, DataScope: "{}", OwnerUserIDs: model.JSONStrings{},
+	}
+	if err := db.WithContext(seedCtx).Create(account).Error; err != nil {
+		t.Fatalf("创建账号失败: %v", err)
+	}
+	for _, tc := range []struct {
+		name     string
+		tenantID uint
+		system   bool
+		conflict bool
+	}{
+		{name: "unbound"},
+		{name: "matching_tenant", tenantID: 41},
+		{name: "system_scope_is_narrowed", tenantID: 99, system: true},
+		{name: "real_tenant_conflict", tenantID: 99, conflict: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(time.Minute))
+			defer cancel()
+			ctx = edition.WithContext(ctx, edition.TypeCustom)
+			if tc.tenantID != 0 {
+				ctx = tenant.WithTenantID(ctx, tc.tenantID)
+			}
+			if tc.system {
+				ctx = tenant.WithSystemScope(ctx)
+			}
+			channels := &scopedResolverChannelRepo{ChannelRepository: repository.NewChannelRepositoryWithDB(db)}
+			resolver := NewChannelResolverWithRepos(repository.NewChannelAccountRepositoryWithDB(db), channels)
+			got, err := resolver.ResolveByIdentifyCode(ctx, account.IdentifyCode)
+			if tc.conflict {
+				if got != nil || !errors.Is(err, ErrChannelIdentityAmbiguous) || channels.seen != nil {
+					t.Fatalf("真实租户冲突未在渠道读取前拒绝: got=%+v err=%v read=%t", got, err, channels.seen != nil)
+				}
+				return
+			}
+			if err != nil || got == nil || got.TenantID != 41 || got.AccountID != account.ID {
+				t.Fatalf("合法识别码解析失败: got=%+v err=%v", got, err)
+			}
+			if channels.seen == nil {
+				t.Fatal("未读取渠道仓储")
+			}
+			if tid, ok := tenant.FromContext(channels.seen); !ok || tid != 41 || tenant.IsSystemScope(channels.seen) {
+				t.Fatalf("渠道读取未钉死账号租户: tenant=%d bound=%t system=%t", tid, ok, tenant.IsSystemScope(channels.seen))
+			}
+			if value, ok := edition.FromContext(channels.seen); !ok || value != edition.TypeCustom {
+				t.Fatalf("渠道读取丢失版本限制: edition=%q present=%t", value, ok)
+			}
+			wantDeadline, _ := ctx.Deadline()
+			if deadline, ok := channels.seen.Deadline(); !ok || !deadline.Equal(wantDeadline) {
+				t.Fatalf("渠道读取丢失截止时间: got=%v want=%v", deadline, wantDeadline)
+			}
+			cancel()
+			if !errors.Is(channels.seen.Err(), context.Canceled) {
+				t.Fatalf("渠道读取未继承取消: %v", channels.seen.Err())
+			}
+		})
+	}
+}
 
 func TestChannelResolver_IdentifySuccessEnforcesBoundary(t *testing.T) {
 	previousMode := tenant.CurrentMode()

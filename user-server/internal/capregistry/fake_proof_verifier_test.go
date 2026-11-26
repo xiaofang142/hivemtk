@@ -37,8 +37,8 @@ func TestFakeCapabilityProofVerifier_RejectsWrongProvenance(t *testing.T) {
 	now := time.Now().UTC()
 	expiry := now.Add(time.Hour)
 	q := CapabilityProofQuery{
-		Key:        CellKey{TenantID: 1, ShopID: "s", Product: "p", Region: "CN", Action: "a", Carrier: ModeBridge},
-		At:         now,
+		Key: CellKey{TenantID: 1, ShopID: "s", Product: "p", Region: "CN", Action: "a", Carrier: ModeBridge},
+		At:  now,
 		Evidence: model.CapabilityEvidence{
 			Provenance:      "other",
 			RuntimeProofRef: "ref1",

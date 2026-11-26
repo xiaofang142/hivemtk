@@ -2,9 +2,9 @@
 package service
 
 import (
-	"hivemtk-user/internal/capregistry"
 	"context"
 	"errors"
+	"hivemtk-user/internal/capregistry"
 	"hivemtk-user/internal/pkg/tenant"
 	"testing"
 	"time"

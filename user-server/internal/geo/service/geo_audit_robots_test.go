@@ -18,54 +18,54 @@ func TestRobotsRuleGroups(t *testing.T) {
 		want   bool
 	}{
 		{
-			name: "名称出现但Disallow全站仍禁止",
+			name:   "名称出现但Disallow全站仍禁止",
 			robots: "# GPTBot is mentioned\nUser-agent: GPTBot\nDisallow: /\n",
-			bot: "gptbot", want: false,
+			bot:    "gptbot", want: false,
 		},
 		{
-			name: "明确允许全站",
+			name:   "明确允许全站",
 			robots: "User-agent: GPTBot\nAllow: /\n",
-			bot: "gptbot", want: true,
+			bot:    "gptbot", want: true,
 		},
 		{
-			name: "通配回退禁止",
+			name:   "通配回退禁止",
 			robots: "User-agent: *\nDisallow: /\n",
-			bot: "gptbot", want: false,
+			bot:    "gptbot", want: false,
 		},
 		{
-			name: "通配仅局部路径根可达",
+			name:   "通配仅局部路径根可达",
 			robots: "User-agent: *\nDisallow: /private\n",
-			bot: "gptbot", want: true,
+			bot:    "gptbot", want: true,
 		},
 		{
-			name: "多组特定bot覆盖通配",
+			name:   "多组特定bot覆盖通配",
 			robots: "User-agent: *\nDisallow: /\n\nUser-agent: GPTBot\nAllow: /\n",
-			bot: "gptbot", want: true,
+			bot:    "gptbot", want: true,
 		},
 		{
-			name: "多组非目标bot仍受通配禁止",
+			name:   "多组非目标bot仍受通配禁止",
 			robots: "User-agent: *\nDisallow: /\n\nUser-agent: GPTBot\nAllow: /\n",
-			bot: "claudebot", want: false,
+			bot:    "claudebot", want: false,
 		},
 		{
-			name: "等长Allow优先于Disallow",
+			name:   "等长Allow优先于Disallow",
 			robots: "User-agent: GPTBot\nDisallow: /\nAllow: /\n",
-			bot: "gptbot", want: true,
+			bot:    "gptbot", want: true,
 		},
 		{
-			name: "根路径不受子路径Allow影响",
+			name:   "根路径不受子路径Allow影响",
 			robots: "User-agent: GPTBot\nDisallow: /\nAllow: /public\n",
-			bot: "gptbot", want: false,
+			bot:    "gptbot", want: false,
 		},
 		{
-			name: "多个User-agent共享一组",
+			name:   "多个User-agent共享一组",
 			robots: "User-agent: GPTBot\nUser-agent: ClaudeBot\nDisallow: /\n",
-			bot: "claudebot", want: false,
+			bot:    "claudebot", want: false,
 		},
 		{
-			name: "无规则组默认放行",
+			name:   "无规则组默认放行",
 			robots: "# nothing here\n",
-			bot: "gptbot", want: true,
+			bot:    "gptbot", want: true,
 		},
 	}
 	for _, tc := range cases {

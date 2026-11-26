@@ -2,8 +2,8 @@
 package service
 
 import (
-	"hivemtk-user/internal/capregistry"
 	"context"
+	"hivemtk-user/internal/capregistry"
 	"testing"
 	"time"
 

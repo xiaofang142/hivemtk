@@ -106,4 +106,3 @@ func TestProcessDocumentAsync_PlainTextFallbackPreserved(t *testing.T) {
 		t.Errorf("纯文本正常路径应产出 chunk 行，实际 0 行")
 	}
 }
-

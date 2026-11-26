@@ -11,8 +11,8 @@ package service
 // 纯文本（.txt）仍正常入库。
 
 import (
-	"net"
 	"context"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"

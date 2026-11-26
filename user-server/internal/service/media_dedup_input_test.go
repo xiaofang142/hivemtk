@@ -8,11 +8,11 @@ import "testing"
 // 媒体消息 content 同为「[图片]」占位符 ⇒ 同一客户在同一会话 5 分钟窗口内连发的
 // 两张不同图 dupKey 完全相同，第二张被判 duplicate 落库留痕但 AI 永远看不到。
 // 本组用例钉住 MediaAwareDedupInput 的口径（Redis 键与 dedup_hash 列共用该函数）：
-//   1. 文本/空类型/system/recall 与旧口径逐字节一致（存量行为不变）；
-//   2. 同占位符、不同 media_url 的两张图输入不同（修复点）；
-//   3. 同图重发输入相同（幂等仍有效）；
-//   4. 类型不同（图 vs 同 URL 视频）输入不同；
-//   5. 分隔符 \x1f 不出现在正文侧 ——「正文尾拼类型首」不会伪造出另一条消息的输入。
+//  1. 文本/空类型/system/recall 与旧口径逐字节一致（存量行为不变）；
+//  2. 同占位符、不同 media_url 的两张图输入不同（修复点）；
+//  3. 同图重发输入相同（幂等仍有效）；
+//  4. 类型不同（图 vs 同 URL 视频）输入不同；
+//  5. 分隔符 \x1f 不出现在正文侧 ——「正文尾拼类型首」不会伪造出另一条消息的输入。
 func TestMediaAwareDedupInput(t *testing.T) {
 	// 1) 文本/空类型/system/recall 与旧口径逐字节一致
 	if got := MediaAwareDedupInput("text", "", "在吗"); got != "在吗" {

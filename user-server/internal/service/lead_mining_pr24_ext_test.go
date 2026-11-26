@@ -58,7 +58,9 @@ func TestLeadMiningExternalMessageDesensitize(t *testing.T) {
 	}
 }
 
-func stringsContains(s, sub string) bool { return len(sub) > 0 && (func() bool { return indexOf(s, sub) >= 0 })() }
+func stringsContains(s, sub string) bool {
+	return len(sub) > 0 && (func() bool { return indexOf(s, sub) >= 0 })()
+}
 
 func indexOf(s, sub string) int {
 	// small helper to avoid importing strings in test if not present; but strings is fine

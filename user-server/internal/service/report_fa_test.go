@@ -76,7 +76,7 @@ func TestFAReport_SameDaySlotsNotOverwritten(t *testing.T) {
 	svc, db := faReportSvc(t)
 	loc := faCST(t)
 	day := faAt(t, loc, 2026, 11, 20, 9, 0)
-	faSeedLog(t, db, day, "early", 2)                       // 09:00 两条
+	faSeedLog(t, db, day, "early", 2)                               // 09:00 两条
 	faSeedLog(t, db, faAt(t, loc, 2026, 11, 20, 23, 55), "late", 3) // 23:55 三条
 	statDate := timeutil.BusinessDate(day)
 
@@ -132,9 +132,9 @@ func TestFAReport_CrossMidnight(t *testing.T) {
 	loc := faCST(t)
 	d0 := faAt(t, loc, 2026, 11, 20, 9, 0)
 	d1 := faAt(t, loc, 2026, 11, 21, 0, 5)
-	faSeedLog(t, db, d0, "day0early", 4)                    // 当日早段
+	faSeedLog(t, db, d0, "day0early", 4)                                // 当日早段
 	faSeedLog(t, db, faAt(t, loc, 2026, 11, 20, 23, 55), "day0late", 2) // 当日尾段
-	faSeedLog(t, db, d1, "day1", 3)                         // 次日
+	faSeedLog(t, db, d1, "day1", 3)                                     // 次日
 	s0 := timeutil.BusinessDate(d0)
 	s1 := timeutil.BusinessDate(d1)
 

@@ -68,10 +68,10 @@ func TestActionHTTP_200CompletesSendsBodyAndCountsOnce(t *testing.T) {
 	})
 
 	wctx, _ := httpActionCtx(9002, model.JSONMap{
-		"url":      rc.server.URL + "/hook",
-		"method":   "POST",
-		"body":     `{"event":"hello"}`,
-		"headers":  map[string]any{"X-Trace": "tr-1"},
+		"url":     rc.server.URL + "/hook",
+		"method":  "POST",
+		"body":    `{"event":"hello"}`,
+		"headers": map[string]any{"X-Trace": "tr-1"},
 	})
 	e := &ActionNodeExecutor{}
 	res := e.executeHTTPAction(context.Background(), wctx, WorkflowSideEffectKey(wctx, "action_http"))

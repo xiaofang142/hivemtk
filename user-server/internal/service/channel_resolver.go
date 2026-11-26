@@ -103,7 +103,7 @@ func (r *ChannelResolver) resolveAccountChannel(ctx context.Context, acc *model.
 	if acc == nil || acc.ID == 0 || acc.TenantID == 0 || acc.ChannelID == 0 {
 		return nil, nil, ErrChannelIdentityInvalid
 	}
-	if tid, bound := tenant.FromContext(ctx); bound && tid != 0 && tid != acc.TenantID {
+	if tid, bound := tenant.FromContext(ctx); bound && tid != 0 && tid != acc.TenantID && !tenant.IsSystemScope(ctx) {
 		return nil, nil, ErrChannelIdentityAmbiguous
 	}
 	if r.channelRepo == nil || !r.channelRepo.Available() {

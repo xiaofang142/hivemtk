@@ -12,9 +12,9 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"gorm.io/gorm"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/repository"
-	"gorm.io/gorm"
 )
 
 // faCredSender 计数发送器：记录调用；可注入失败。

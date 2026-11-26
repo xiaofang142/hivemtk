@@ -15,8 +15,8 @@
 package channelgw
 
 import (
-	"hivemtk-user/internal/capregistry"
 	"context"
+	"hivemtk-user/internal/capregistry"
 	"sync"
 	"testing"
 	"time"

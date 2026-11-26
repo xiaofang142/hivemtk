@@ -57,7 +57,7 @@ func TestWorkflowRun_DecisionChainUpstreamContractClosedLoop(t *testing.T) {
 	)
 	// 决策链执行器：真实探针替身 + 真实思维链/任务仓储（测试库）+ 计数线索端口。
 	svc.RegisterDecisionChainExecutors(DecisionChainDeps{
-		Probe:    &fakeProbe{},
+		Probe:     &fakeProbe{},
 		ChainRepo: repository.NewGeoQueryChainRepositoryWithDB(db),
 		TaskRepo:  repository.NewGeoContentTaskRepositoryWithDB(db),
 		Brand:     "ourbrand",
@@ -127,7 +127,7 @@ func TestWorkflowRun_MissingUpstreamFailsExplicitly(t *testing.T) {
 		nil,
 	)
 	svc.RegisterDecisionChainExecutors(DecisionChainDeps{
-		Probe: &fakeProbe{},
+		Probe:     &fakeProbe{},
 		ChainRepo: repository.NewGeoQueryChainRepositoryWithDB(db),
 		TaskRepo:  repository.NewGeoContentTaskRepositoryWithDB(db),
 		Brand:     "ourbrand",
@@ -143,8 +143,7 @@ func TestWorkflowRun_MissingUpstreamFailsExplicitly(t *testing.T) {
 	// 旧契约形状（map[string]string）：不得被误读为有效上游——这是防「类型契约回退」的守卫。
 	if _, err := exec(context.Background(), map[string]interface{}{
 		"our_domains":   "oursite.example.com",
-		"_step_results": map[string]string{"qp": `{"cited_domains":{"rival-source.example.com":2}}`,
-		},
+		"_step_results": map[string]string{"qp": `{"cited_domains":{"rival-source.example.com":2}}`},
 	}); err == nil {
 		t.Fatal("旧类型形状不得通过上游校验（契约已冻结为 StepResult）")
 	}

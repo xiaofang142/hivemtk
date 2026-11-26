@@ -40,7 +40,7 @@ func TestReclaimOutboundSweep(t *testing.T) {
 			TenantID: 1, Platform: "taobao", AccountID: "reclaim-sweep-acc", Direction: "outbound",
 			Status: status, MsgType: "text", SenderID: "reclaim-sweep-acc", ReceiverID: "reclaim-sweep-peer",
 			Content: "回收巡检样本", ConversationID: "reclaim-sweep-conv",
-			MsgID: fmt.Sprintf("reclaim-sweep-%s-%d-%d", status, seq, time.Now().UnixNano()),
+			MsgID:        fmt.Sprintf("reclaim-sweep-%s-%d-%d", status, seq, time.Now().UnixNano()),
 			PushAttempts: attempts, Extra: extra,
 		}
 		if claimedAge >= 0 {
@@ -53,15 +53,15 @@ func TestReclaimOutboundSweep(t *testing.T) {
 	}
 
 	seed := []model.MessageHub{
-		mk("inflight", time.Hour, 2*time.Minute, 1, nil),                                        // ① 超时 inflight → pending
-		mk("pending", time.Hour, -1, MaxOutboundPushAttempts, nil),                              // ② 到界 pending → failed
-		mk("inflight", time.Hour, 2*time.Minute, MaxOutboundPushAttempts, nil),                  // ② 到界 inflight → failed
-		mk("pending", 30*24*time.Hour, -1, 1, nil),                                              // ③ 陈旧 pending → expired
-		mk("inflight", 30*24*time.Hour, 2*time.Minute, 1, nil),                                  // ③ 陈旧 inflight → expired
-		mk("pending", time.Hour, -1, 1, nil),                                                    // 新鲜 pending → 不动
-		mk("pending", 30*24*time.Hour, -1, 1, model.JSONMap{"duplicate_of": "mh:orig"}),         // duplicate 占位行 → 不动
-		mk("pending", 30*24*time.Hour, -1, 1, model.JSONMap{"delivery_kind": "audit"}),          // 审计行 → 不动
-		mk("send_failed", 30*24*time.Hour, -1, 1, nil),                                          // send_failed 终态 → 不动
+		mk("inflight", time.Hour, 2*time.Minute, 1, nil),                                // ① 超时 inflight → pending
+		mk("pending", time.Hour, -1, MaxOutboundPushAttempts, nil),                      // ② 到界 pending → failed
+		mk("inflight", time.Hour, 2*time.Minute, MaxOutboundPushAttempts, nil),          // ② 到界 inflight → failed
+		mk("pending", 30*24*time.Hour, -1, 1, nil),                                      // ③ 陈旧 pending → expired
+		mk("inflight", 30*24*time.Hour, 2*time.Minute, 1, nil),                          // ③ 陈旧 inflight → expired
+		mk("pending", time.Hour, -1, 1, nil),                                            // 新鲜 pending → 不动
+		mk("pending", 30*24*time.Hour, -1, 1, model.JSONMap{"duplicate_of": "mh:orig"}), // duplicate 占位行 → 不动
+		mk("pending", 30*24*time.Hour, -1, 1, model.JSONMap{"delivery_kind": "audit"}),  // 审计行 → 不动
+		mk("send_failed", 30*24*time.Hour, -1, 1, nil),                                  // send_failed 终态 → 不动
 	}
 	for i := range seed {
 		if err := database.Create(&seed[i]).Error; err != nil {

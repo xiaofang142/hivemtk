@@ -561,8 +561,6 @@ func uintToStr(n uint) string {
 	return fmtUint(n)
 }
 
-
-
 func min(a, b int) int {
 	if a < b {
 		return a

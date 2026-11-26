@@ -40,7 +40,7 @@ func TestMenuNavigation_AllLeafKeysAndPathsPreserved(t *testing.T) {
 	}
 }
 
-// 包含全部目录的原角色上界也逐 key 固定，确保分配页与能力面没有额外授权空间。
+// 原角色上界逐 key 固定；渠道归组只允许新增 admin 专用的 channels 容器键。
 func TestMenuNavigation_AllRoleCeilingsPreserved(t *testing.T) {
 	cases := []struct {
 		role   string
@@ -53,7 +53,15 @@ func TestMenuNavigation_AllRoleCeilingsPreserved(t *testing.T) {
 	}
 	for _, tc := range cases {
 		var keys []string
-		for key := range EligibleMenuKeys(tc.role) {
+		eligible := EligibleMenuKeys(tc.role)
+		_, hasChannels := eligible["channels"]
+		if hasChannels != (tc.role == SystemRoleCodeAdmin) {
+			t.Errorf("channels 容器必须仅对 admin 开放，role=%s eligible=%v", tc.role, hasChannels)
+		}
+		for key := range eligible {
+			if tc.role == SystemRoleCodeAdmin && key == "channels" {
+				continue // 独立渠道入口不改变任何原有业务键的角色上界。
+			}
 			keys = append(keys, key)
 		}
 		sort.Strings(keys)
@@ -64,9 +72,9 @@ func TestMenuNavigation_AllRoleCeilingsPreserved(t *testing.T) {
 	}
 }
 
-// 八个业务入口必须直接来自后端注册表，不能由前端另造一棵显示树。
+// 渠道入口与原八个业务入口必须直接来自后端注册表。
 func TestMenuNavigation_AuthoritativeGroups(t *testing.T) {
-	want := []string{"workspace", "customer", "aiAgent", "reach", "knowledge", "geoTools", "analytics", "system"}
+	want := []string{"channels", "workspace", "customer", "aiAgent", "reach", "knowledge", "geoTools", "analytics", "system"}
 	got := make([]string, 0, len(SystemMenuTree))
 	for _, n := range SystemMenuTree {
 		got = append(got, n.Key)
@@ -75,6 +83,7 @@ func TestMenuNavigation_AuthoritativeGroups(t *testing.T) {
 		t.Fatalf("后端一级业务分组应为 %v，实际 %v", want, got)
 	}
 	parents := map[string]string{
+		"channelManage": "channels", "channelAccount": "channels", "channelIdentifyCode": "channels",
 		"inbox": "workspace", "approvalTask": "workspace", "badCase": "workspace",
 		"salesCockpit": "customer", "orderDraft": "customer", "salesWorkbench": "customer", "followups": "customer",
 		"agentSalesIntel": "customer", "commerceOperations": "customer",
@@ -92,6 +101,10 @@ func TestMenuNavigation_AuthoritativeGroups(t *testing.T) {
 		if hits != 1 || node == nil || parent == nil || parent.Key != wantParent {
 			t.Errorf("%s 应唯一挂在 %s 下，实际节点=%v 父节点=%v 命中=%d", key, wantParent, node, parent, hits)
 		}
+	}
+	channels, _, hits := menuNodeWithParent("channels")
+	if hits != 1 || channels == nil || !reflect.DeepEqual(channels.Roles, []string{SystemRoleCodeAdmin}) || len(channels.Children) != 3 {
+		t.Fatalf("渠道容器必须唯一、仅 admin 可见且恰好包含三个既有渠道入口，实际 %+v（命中=%d）", channels, hits)
 	}
 	node, _, _ := menuNodeWithParent("workspace")
 	if len(node.Children) != 3 {

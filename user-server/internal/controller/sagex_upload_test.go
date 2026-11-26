@@ -67,17 +67,20 @@ type ctrlUploadIdentifyAccountRepo struct {
 	repository.ChannelAccountRepository
 }
 
+func (r *ctrlUploadIdentifyAccountRepo) Available() bool { return true }
+
 func (r *ctrlUploadIdentifyAccountRepo) GetByIdentifyCode(_ context.Context, code string) (*model.ChannelAccount, error) {
 	if code != sageXUploadIdentifyCode {
 		return nil, nil
 	}
-	return &model.ChannelAccount{TenantID: 1, ID: 1, IdentifyCode: sageXUploadIdentifyCode}, nil
+	return &model.ChannelAccount{TenantID: 1, ID: 1, ChannelID: 1, IdentifyCode: sageXUploadIdentifyCode}, nil
 }
 
 func newSageXUploadTestController(inst *model.SageXInstallation) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	svc := service.NewSageXUploadService(&ctrlSageXInstRepo{inst: inst}, &ctrlSageXReceiptRepo{}, &ctrlSageXIngress{})
-	svc.SetChannelResolver(service.NewChannelResolverWithRepos(&ctrlUploadIdentifyAccountRepo{}, nil))
+	channels := &ctrlBootstrapChannelRepo{channel: &model.Channel{ID: 1, TenantID: 1, Code: "sagex"}}
+	svc.SetChannelResolver(service.NewChannelResolverWithRepos(&ctrlUploadIdentifyAccountRepo{}, channels))
 	ctrl := NewSageXUploadController(svc)
 	r := gin.New()
 	r.POST("/api/integrations/sagex/upload", ctrl.Upload)

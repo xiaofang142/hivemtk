@@ -17,11 +17,12 @@ import (
 // （controller 映射 400 +「尚未启用静态站」操作引导）。
 //
 // 验收判据：
-//  ① 无 active 站点时 ExportToHugo 返回 ErrSiteConfigInvalid（errors.Is 命中）；
-//  ② 文案含操作引导「尚未启用静态站」；
-//  ③ DB 层真故障（非 ErrRecordNotFound）不误伤为配置态——仍走原 500 路径
-//     （此处以被驱逐的 ctx 触发连接级错误近似不可行，DB 故障分支保持原样不动，
-//     由 errors.Is 的精确判定保证不会把任何错误都吞成 400）。
+//
+//	① 无 active 站点时 ExportToHugo 返回 ErrSiteConfigInvalid（errors.Is 命中）；
+//	② 文案含操作引导「尚未启用静态站」；
+//	③ DB 层真故障（非 ErrRecordNotFound）不误伤为配置态——仍走原 500 路径
+//	   （此处以被驱逐的 ctx 触发连接级错误近似不可行，DB 故障分支保持原样不动，
+//	   由 errors.Is 的精确判定保证不会把任何错误都吞成 400）。
 func TestExportToHugo_NoActiveSite_IsConfigInvalid(t *testing.T) {
 	if testing.Short() {
 		t.Skip("需要测试库")

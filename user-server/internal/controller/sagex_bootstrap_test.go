@@ -120,10 +120,12 @@ func newSageXBootstrapTestController(
 		acc = &account
 	}
 	channelTenantID := uint(11)
+	channelID := uint(101)
 	if acc != nil && acc.TenantID != 0 {
 		channelTenantID = acc.TenantID
+		channelID = acc.ChannelID
 	}
-	channel := &model.Channel{TenantID: channelTenantID, ID: 101, Code: "telegram"}
+	channel := &model.Channel{TenantID: channelTenantID, ID: channelID, Code: "telegram"}
 	gin.SetMode(gin.TestMode)
 	svc := service.NewSageXUploadService(repo, &ctrlSageXReceiptRepo{}, &ctrlSageXIngress{})
 	svc.SetChannelResolver(service.NewChannelResolverWithRepos(
@@ -158,7 +160,7 @@ func sagexBootstrapReason(t *testing.T, body []byte) string {
 }
 
 func TestSageXBootstrapControllerTypedErrors(t *testing.T) {
-	validAccount := &model.ChannelAccount{TenantID: 11, ID: 101, IdentifyCode: "code-a"}
+	validAccount := &model.ChannelAccount{TenantID: 11, ID: 101, ChannelID: 1, IdentifyCode: "code-a"}
 	tests := []struct {
 		name        string
 		body        string
@@ -293,7 +295,7 @@ func TestSageXBootstrapControllerTypedErrors(t *testing.T) {
 }
 
 func TestSageXBootstrapControllerSuccessReturnsTokenOnlyAfterValidation(t *testing.T) {
-	acc := &model.ChannelAccount{TenantID: 11, ID: 101, IdentifyCode: "code-a"}
+	acc := &model.ChannelAccount{TenantID: 11, ID: 101, ChannelID: 1, IdentifyCode: "code-a"}
 	repo := &ctrlBootstrapInstRepo{}
 	engine := newSageXBootstrapTestController(repo, acc, nil)
 	w := postSageXBootstrap(engine, `{"installation_id":"id-a","identify_code":"code-a"}`)

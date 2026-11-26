@@ -12,8 +12,8 @@ import (
 	"hivemtk-user/internal/cache"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
-	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/pkg/testutil"
+	"hivemtk-user/internal/repository"
 )
 
 type stubAITrigger struct {
@@ -192,10 +192,10 @@ func TestAIDebounce_NewWindowAfterClose(t *testing.T) {
 	}
 }
 
-
 // 自适应合并（2026-11-15 首响时延优化）回归钉：
 //   - 会话静默后首条消息（上一条 inbound 距本条 ≥ 合并窗）→ 跳过合并窗立即触发；
 //   - 连发中（上一条 inbound 距本条 < 窗）→ 进窗合并（既有 TestAIDebounce_CoalesceWindow 已钉）。
+//
 // 判定数据源 = PrevInboundCreatedAt（本条之前最近一条同会话 inbound），需 testdb。
 func TestAIDebounce_AdaptiveSilentFirstMessageImmediate(t *testing.T) {
 	database := testutil.NewTestDB(t, &model.MessageHub{})

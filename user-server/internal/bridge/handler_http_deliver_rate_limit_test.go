@@ -9,8 +9,8 @@ package bridge
 // DB 门禁：缺 POSTGRES_TEST_PASSWORD 时 fail-closed 跳过（环境问题非代码问题，AGENTS §3 口径）。
 
 import (
-	"hivemtk-user/internal/capregistry"
 	"context"
+	"hivemtk-user/internal/capregistry"
 	"testing"
 	"time"
 

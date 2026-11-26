@@ -117,15 +117,15 @@ func TestFALiveCode_ExpiryAndDailyLimitReal(t *testing.T) {
 	// 昨日创建 + ExpireDays=1 → 已过期。
 	yesterday := now.AddDate(0, 0, -1)
 	qr := &model.LiveCodeQR{
-		ID:          "fa-exp-qr-1",
-		LiveCodeID:  lc.ID,
-		QRType:      "entry",
-		QRContent:   liveCodeFullEntryLink(lc),
-		ImageURL:    "mem://fa-exp-qr-1",
-		DailyLimit:  200,
-		ExpireDays:  1,
-		Status:      1,
-		CreatedAt:   yesterday,
+		ID:         "fa-exp-qr-1",
+		LiveCodeID: lc.ID,
+		QRType:     "entry",
+		QRContent:  liveCodeFullEntryLink(lc),
+		ImageURL:   "mem://fa-exp-qr-1",
+		DailyLimit: 200,
+		ExpireDays: 1,
+		Status:     1,
+		CreatedAt:  yesterday,
 	}
 	if err := database.Create(qr).Error; err != nil {
 		t.Fatalf("Create QR: %v", err)
@@ -138,7 +138,7 @@ func TestFALiveCode_ExpiryAndDailyLimitReal(t *testing.T) {
 		t.Fatalf("昨日创建 ExpireDays=1 应 IsExpired=true, got false (expire=%v now=%v)", stats.ExpireTime, now)
 	}
 	if stats.ExpireTime.After(now) {
-		t.Fatalf("ExpireTime 应为 CreatedAt+ExpireDays=%v, got %v", yesterday.AddDate(0,0,1), stats.ExpireTime)
+		t.Fatalf("ExpireTime 应为 CreatedAt+ExpireDays=%v, got %v", yesterday.AddDate(0, 0, 1), stats.ExpireTime)
 	}
 }
 

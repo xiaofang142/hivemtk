@@ -141,6 +141,8 @@ type uploadIdentifyAccountRepo struct {
 	account *model.ChannelAccount
 }
 
+func (r *uploadIdentifyAccountRepo) Available() bool { return true }
+
 func (r *uploadIdentifyAccountRepo) GetByIdentifyCode(_ context.Context, code string) (*model.ChannelAccount, error) {
 	if r.account == nil || code != r.account.IdentifyCode {
 		return nil, nil
@@ -159,9 +161,10 @@ func newSageXUploadTestService(
 		account: &model.ChannelAccount{
 			TenantID:     1,
 			ID:           1,
+			ChannelID:    1,
 			IdentifyCode: sageXUploadIdentifyCode,
 		},
-	}, nil))
+	}, &resolverChannelRepoStub{available: true, channel: &model.Channel{ID: 1, TenantID: 1, Code: "sagex", Enabled: true}}))
 	return svc
 }
 
@@ -287,10 +290,10 @@ func TestSageXUpload_NonTextNotificationsRejected(t *testing.T) {
 				SchemaVersion: SageXSchemaVersion, BatchID: "b1", InstallationID: "i1",
 				Events: []SageXEventItem{{
 					EventID: "e1", EventType: "notification.posted", CapturedAt: "2026-11-23T10:00:00Z",
-					Source: SageXSource{Platform: "android", Package: "com.tencent.mobileqq"},
-					ParseStatus: tc.parseStatus,
+					Source:       SageXSource{Platform: "android", Package: "com.tencent.mobileqq"},
+					ParseStatus:  tc.parseStatus,
 					Conversation: SageXConversation{Type: "group", Title: "项目群"},
-					Message: SageXMessage{Sender: "张三", Text: tc.text},
+					Message:      SageXMessage{Sender: "张三", Text: tc.text},
 				}},
 			}, 10)
 			if err != nil {

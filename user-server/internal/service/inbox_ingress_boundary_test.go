@@ -1,8 +1,8 @@
 package service
 
 import (
-	"hivemtk-user/internal/capregistry"
 	"context"
+	"hivemtk-user/internal/capregistry"
 	"strconv"
 	"sync"
 	"testing"

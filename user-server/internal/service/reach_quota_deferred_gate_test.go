@@ -12,14 +12,14 @@ import (
 
 // FA-08 判据测试：延迟触达不得提前消耗不可退还的配额。
 //
-//  ① 入队→取消：reserved 释放返额（含跨日计数行归属）；
-//  ② 入队→重启→实际发送：同一 intent 只 commit 一次；
-//  ③ committed 后取消：不返额（已发生动作不得当未发生）。
+//	① 入队→取消：reserved 释放返额（含跨日计数行归属）；
+//	② 入队→重启→实际发送：同一 intent 只 commit 一次；
+//	③ committed 后取消：不返额（已发生动作不得当未发生）。
 type quotaDeferredFixture struct {
-	q        *PersistentQuietHoursQueue
-	drepo    *repository.ReachDeferredOutboundRepository
-	m        *ReachQuotaManager
-	qrepo    *repository.ReachQuotaRepository
+	q     *PersistentQuietHoursQueue
+	drepo *repository.ReachDeferredOutboundRepository
+	m     *ReachQuotaManager
+	qrepo *repository.ReachQuotaRepository
 }
 
 func setupQuotaDeferred(t *testing.T) *quotaDeferredFixture {

@@ -10,9 +10,9 @@ import (
 
 // faOperationLogRepo 内存 fake，实现 OperationLogRepository 全部方法。
 type faOperationLogRepo struct {
-	logs             map[uint]*model.OperationLog
-	nextID           uint
-	updateNewCalled  int
+	logs            map[uint]*model.OperationLog
+	nextID          uint
+	updateNewCalled int
 }
 
 func newFAOperationLogRepo() *faOperationLogRepo {
@@ -51,8 +51,12 @@ func (r *faOperationLogRepo) GetAllKeyset(ctx context.Context, cursor string, pa
 func (r *faOperationLogRepo) GetByUserID(ctx context.Context, userID uint, page, pageSize int) ([]*model.OperationLog, int64, error) {
 	return nil, 0, nil
 }
-func (r *faOperationLogRepo) DeleteOldLogs(ctx context.Context, beforeDate time.Time) error { return nil }
-func (r *faOperationLogRepo) DeleteByIDs(ctx context.Context, ids []uint) (int64, error)     { return 0, nil }
+func (r *faOperationLogRepo) DeleteOldLogs(ctx context.Context, beforeDate time.Time) error {
+	return nil
+}
+func (r *faOperationLogRepo) DeleteByIDs(ctx context.Context, ids []uint) (int64, error) {
+	return 0, nil
+}
 func (r *faOperationLogRepo) UpdateNewValue(ctx context.Context, id uint, newValue string) error {
 	r.updateNewCalled++
 	return nil

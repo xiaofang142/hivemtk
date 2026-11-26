@@ -186,7 +186,7 @@ func (s *stubOrderRepo) UpdateOrderStatusById(ctx context.Context, id string, st
 func (s *stubOrderRepo) GetRecentOrderList(ctx context.Context) ([]*model.Order, error) {
 	return nil, nil
 }
-func (s *stubOrderRepo) Update(ctx context.Context, order *model.Order) error { return nil }
+func (s *stubOrderRepo) Update(ctx context.Context, order *model.Order) error         { return nil }
 func (s *stubOrderRepo) CountByUnifiedID(ctx context.Context, unifiedID string) int64 { return 0 }
 
 // TestComputeRawMetrics_PhoneNotTreatedAsTgID 回归：手机号不得被 ParseInt 当 TgID 查订单。

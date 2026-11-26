@@ -9,8 +9,8 @@ import (
 	"hivemtk-user/internal/identity"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
-	"hivemtk-user/internal/pkg/testutil"
 	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/testutil"
 	"hivemtk-user/internal/repository"
 
 	"gorm.io/gorm"

@@ -12,14 +12,14 @@ import (
 // 通过注入 seam 做纯单测，不依赖真实 HTTP/DB，覆盖无路由/离线/拒收/ACK 丢失/本地写失败。
 
 type faIM01Dispatch struct {
-	calls    int
-	channel  WebhookChannel
-	account  string
-	eventID  string
-	content  string
-	sent     bool
-	platMsg  string
-	err      error
+	calls   int
+	channel WebhookChannel
+	account string
+	eventID string
+	content string
+	sent    bool
+	platMsg string
+	err     error
 }
 
 func (f *faIM01Dispatch) fn(ctx context.Context, ch WebhookChannel, accountID, eventID, content string, hub *model.MessageHub) (bool, string, error) {

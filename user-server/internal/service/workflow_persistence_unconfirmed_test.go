@@ -24,7 +24,7 @@ import (
 )
 
 // fa02Executor 输出可控标记的执行器：completed 且把 inject 键写进 Output
-//（Output 会被合入 exec.Context，从而出现在上下文写的 dest 里）。
+// （Output 会被合入 exec.Context，从而出现在上下文写的 dest 里）。
 type fa02Executor struct {
 	inject bool
 }

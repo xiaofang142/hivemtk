@@ -78,8 +78,8 @@ func TestCrossAccountSearchController_SearchCustomers_Success(t *testing.T) {
 		Code int `json:"code"`
 		Data struct {
 			List  []repository.CrossAccountSearchRow `json:"list"`
-			Total int64                             `json:"total"`
-			Scope service.CrossAccountSearchScope   `json:"scope"`
+			Total int64                              `json:"total"`
+			Scope service.CrossAccountSearchScope    `json:"scope"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
@@ -102,7 +102,8 @@ func TestCrossAccountSearchController_SearchCustomers_Success(t *testing.T) {
 func TestCrossAccountSearchController_SearchCustomers_MissingTenant(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctrl := NewCrossAccountSearchControllerWithService(&fakeCrossAccountSearchService{})
-	ctrl.audit = func(*gin.Context, uint, uint, string, string, string, int, int, int64, service.CrossAccountSearchScope) {}
+	ctrl.audit = func(*gin.Context, uint, uint, string, string, string, int, int, int64, service.CrossAccountSearchScope) {
+	}
 
 	r := gin.New()
 	ctrl.RegisterRoutes(r.Group("/api"))

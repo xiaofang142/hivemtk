@@ -14,8 +14,8 @@ package channelgw
 // 再走一次 ClaimOutbound 触发惰性回收+重领（与 inbox_ingress_ack_test.go 的 StaleReset 同款）。
 
 import (
-	"hivemtk-user/internal/capregistry"
 	"context"
+	"hivemtk-user/internal/capregistry"
 	"sync"
 	"testing"
 	"time"

@@ -374,15 +374,15 @@ func TestDefaultParamDefsEmptyDefaultRatchet(t *testing.T) {
 		"platform.api_host":    true,
 		// —— SaaS 配置面改造（2026-11-17）env 迁移批次：空默认=未配置语义
 		//（读侧各自回落代码兜底/env，见各读取点注释），空才是对的。
-		"urls.frontend_url":                 true,
+		"urls.frontend_url":                          true,
 		"channelbot.whatsapp_fallback_template":      true,
 		"channelbot.whatsapp_fallback_template_lang": true,
-		"channelbot.qq_api_base_url":        true,
-		"misc.upload_virus_scan_url":        true,
-		"etl.parser_sidecar_url":            true,
-		"etl.image_describe_url":            true,
-		"alerting.email_recipients":         true,
-		"alerting.webhook_url":              true,
+		"channelbot.qq_api_base_url":                 true,
+		"misc.upload_virus_scan_url":                 true,
+		"etl.parser_sidecar_url":                     true,
+		"etl.image_describe_url":                     true,
+		"alerting.email_recipients":                  true,
+		"alerting.webhook_url":                       true,
 	}
 	seen := map[string]bool{}
 	for _, d := range DefaultParamDefs() {

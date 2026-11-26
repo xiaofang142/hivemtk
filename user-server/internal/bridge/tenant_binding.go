@@ -128,24 +128,21 @@ func resolveBridgeIdentity(rctx context.Context, channel, accountID, _codeHint, 
 	}
 
 	resolved, err := service.NewChannelResolver().ResolveByIdentifyCode(rctx, identifyCode)
-	if err != nil && !errors.Is(err, service.ErrChannelIdentityUnresolved) {
-		if errors.Is(err, service.ErrChannelIdentityAmbiguous) {
-			return rctx, false, nil, ErrBridgeTenantAmbiguous
-		}
-		if errors.Is(err, service.ErrChannelIdentityInvalid) {
-			return rctx, false, nil, ErrBridgeTenantUnresolved
-		}
-		return rctx, false, nil, err
-	}
-	if err != nil || resolved == nil || resolved.TenantID == 0 {
+	if errors.Is(err, service.ErrChannelIdentityUnresolved) {
 		// Fallback: channel-level identify code (channel_identify_codes table).
 		resolved, err = resolveBridgeIdentityByChannelCode(rctx, identifyCode)
-		if err != nil {
-			return rctx, false, nil, err
-		}
-		if resolved == nil || resolved.TenantID == 0 {
-			return rctx, false, nil, ErrBridgeTenantUnresolved
-		}
+	}
+	if errors.Is(err, service.ErrChannelIdentityAmbiguous) {
+		return rctx, false, nil, ErrBridgeTenantAmbiguous
+	}
+	if errors.Is(err, service.ErrChannelIdentityInvalid) {
+		return rctx, false, nil, ErrBridgeTenantUnresolved
+	}
+	if err != nil {
+		return rctx, false, nil, err
+	}
+	if resolved == nil || resolved.TenantID == 0 {
+		return rctx, false, nil, ErrBridgeTenantUnresolved
 	}
 	// ChannelResolver 的 channel-level fallback 可能在未绑定 rctx 下读不到 ChannelCode。
 	// 身份记录已证明 tenant；这里只用内部 child ctx 补读，不改写原 rctx/request。
@@ -212,6 +209,9 @@ func resolveBridgeIdentity(rctx context.Context, channel, accountID, _codeHint, 
 func resolveBridgeIdentityByChannelCode(rctx context.Context, identifyCode string) (*service.ResolvedChannelAccount, error) {
 	codeRepo := repository.NewChannelIdentifyCodeRepository()
 	rec, err := codeRepo.GetByCode(rctx, identifyCode)
+	if errors.Is(err, repository.ErrAmbiguousIdentifyCode) {
+		return nil, ErrBridgeTenantAmbiguous
+	}
 	if err != nil {
 		return nil, err
 	}

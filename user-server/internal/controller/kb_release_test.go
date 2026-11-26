@@ -1710,6 +1710,9 @@ func TestKBReleaseController_RealStack(t *testing.T) {
 	if result == nil || result["to_version"] != float64(1) {
 		t.Fatalf("发布结果不对：%v", getData(t, w)["result"])
 	}
+	if result["embedding_status"] != "unavailable" || result["embedding_audit_recorded"] != true {
+		t.Errorf("未装配向量通路时必须明确返回 unavailable 且记下补算审计，实得 %v", result)
+	}
 	if err := database.Table("knowledge_chunks").Count(&chunkN).Error; err != nil {
 		t.Fatalf("数语料失败: %v", err)
 	}
@@ -1731,7 +1734,7 @@ func TestKBReleaseController_RealStack(t *testing.T) {
 
 	// 留痕：这条变更该有两条 —— 提交时的 submitted 与落库时的 published（后者记的是
 	// pending → applied@v1，也就是"这条改动确实进过线上"这条历史事实）；
-	// 库那一侧该有 governed + published 两条。只数条数不判动作的话，两条同动作的
+	// 库那一侧该有 governed + published + embedding_status 三条。只数条数不判动作的话，同动作的
 	// 留痕也能凑够数，而"谁在什么时候把它推到哪一格"恰恰就是动作名给出的。
 	w = kbCtrlDo(t, engine, "GET", "/api/kb-changes/"+changeID+"/audit", "")
 	audit := getData(t, w)
@@ -1742,8 +1745,14 @@ func TestKBReleaseController_RealStack(t *testing.T) {
 	w = kbCtrlDo(t, engine, "GET", "/api/kb-releases/"+product+"/audit", "")
 	releaseAudit := getData(t, w)
 	releaseActions := kbCtrlAuditActions(t, releaseAudit)
-	if len(releaseActions) != 2 || !releaseActions["governed"] || !releaseActions["published"] {
-		t.Errorf("库的留痕该是 governed+published 两条，实得 %v（total=%v）", releaseActions, releaseAudit["total"])
+	if len(releaseActions) != 3 || releaseAudit["total"] != float64(3) || !releaseActions["governed"] || !releaseActions["published"] || !releaseActions[model.KBAuditEmbeddingStatus] {
+		t.Errorf("库的留痕该是 governed+published+embedding_status 三条，实得 %v（total=%v）", releaseActions, releaseAudit["total"])
+	}
+	for _, item := range releaseAudit["list"].([]any) {
+		row, _ := item.(map[string]any)
+		if row["action"] == model.KBAuditEmbeddingStatus && (row["subject_key"] != "release:"+product || row["actor"] != "3" || row["new_value"] != "version=1 chunks=1 status=unavailable") {
+			t.Errorf("补算留痕必须包含准确的归属、操作者、版本和状态，实得 %v", row)
+		}
 	}
 
 	// 统计口径：闸门 off ⇒ in_force == total（观察期读数），pending 归零。

@@ -14,9 +14,9 @@ import (
 // 不触发 AI、不进下行队列、IsAIReply 不误标。回复策略（是否应答）由 LLM 判断。
 func TestIsPlatformSystemNotice(t *testing.T) {
 	cases := []struct {
-		name  string
-		text  string
-		want  bool
+		name string
+		text string
+		want bool
 	}{
 		{"xhs 关注提示", "对方关注或回复你之前，24小时内最多只能发1条文字消息", true},
 		{"xhs 聊天状态", "已连续聊天3天，获得聊天状态去看看", true},

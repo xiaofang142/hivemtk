@@ -27,8 +27,8 @@ type fa01Executor struct {
 }
 
 type fa01Outcome struct {
-	err       error  // 非 nil = 执行器返回 error（瞬时路径）
-	retryable bool   // 与 failResult 搭配：failed 结果的 Retryable 判定
+	err        error // 非 nil = 执行器返回 error（瞬时路径）
+	retryable  bool  // 与 failResult 搭配：failed 结果的 Retryable 判定
 	failResult bool  // true = 返回 failed 结果（而非完成）
 }
 

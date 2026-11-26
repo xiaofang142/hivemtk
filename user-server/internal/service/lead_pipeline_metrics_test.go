@@ -5,13 +5,13 @@ import "testing"
 // 分阶段计数必须各用各的分母：消息数≠分析任务数≠候选数≠有效需求数≠投递数。
 func TestLeadPipelineMetrics_StageDenominators(t *testing.T) {
 	m := LeadPipelineMetrics{
-		MessagesIngest: 100,
-		TasksAnalyzed:  80,
-		NoSignal:       20,
-		Failed:         5,
-		Candidates:     30,
-		ValidLeads:     18,
-		EventsSubmitted: 12,
+		MessagesIngest:      100,
+		TasksAnalyzed:       80,
+		NoSignal:            20,
+		Failed:              5,
+		Candidates:          30,
+		ValidLeads:          18,
+		EventsSubmitted:     12,
 		RecipientDeliveries: 24,
 	}
 	if m.AnalysisRateBPS() != 8000 {

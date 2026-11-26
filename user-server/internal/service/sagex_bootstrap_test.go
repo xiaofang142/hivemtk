@@ -113,10 +113,12 @@ func newBootstrapService(repo *bootstrapInstRepo, acc *model.ChannelAccount, res
 		acc = &account
 	}
 	channelTenantID := uint(11)
+	channelID := uint(101)
 	if acc != nil && acc.TenantID != 0 {
 		channelTenantID = acc.TenantID
+		channelID = acc.ChannelID
 	}
-	channel := &model.Channel{TenantID: channelTenantID, ID: 101, Code: "telegram"}
+	channel := &model.Channel{TenantID: channelTenantID, ID: channelID, Code: "telegram"}
 	svc := NewSageXUploadService(repo, &fakeSageXReceiptRepo{}, &fakeSageXIngress{})
 	svc.SetChannelResolver(NewChannelResolverWithRepos(
 		&bootstrapAccountRepo{acc: acc, err: resolveErr},
@@ -130,8 +132,8 @@ func TestSageXBootstrapInstallationPinsResolvedTenantForEveryAccess(t *testing.T
 	t.Cleanup(func() { tenant.SetMode(tenant.ModeOff) })
 
 	repo := &bootstrapInstRepo{createHook: func(*model.SageXInstallation) {}}
-	svc := newBootstrapService(repo, &model.ChannelAccount{TenantID: 11, ID: 101, IdentifyCode: "code-a"}, nil)
-	ctx := tenant.WithSystemScope(context.Background())
+	svc := newBootstrapService(repo, &model.ChannelAccount{TenantID: 11, ID: 101, ChannelID: 1, IdentifyCode: "code-a"}, nil)
+	ctx := tenant.WithSystemScope(tenant.WithTenantID(context.Background(), 99))
 
 	inst, err := svc.BootstrapInstallation(ctx, "installation-a", "code-a")
 	if err != nil || inst == nil {
@@ -152,7 +154,7 @@ func TestSageXBootstrapInstallationRejectsCrossTenantExistingRow(t *testing.T) {
 	repo := &bootstrapInstRepo{rows: []*model.SageXInstallation{{
 		TenantID: 22, InstallationID: "victim-id", AccountID: "202", Token: "victim-token", Status: 1,
 	}}, createHook: func(*model.SageXInstallation) {}}
-	svc := newBootstrapService(repo, &model.ChannelAccount{TenantID: 11, ID: 101}, nil)
+	svc := newBootstrapService(repo, &model.ChannelAccount{TenantID: 11, ID: 101, ChannelID: 1}, nil)
 
 	inst, err := svc.BootstrapInstallation(context.Background(), "victim-id", "code-a")
 	if err == nil || inst != nil {
@@ -167,7 +169,7 @@ func TestSageXBootstrapInstallationRejectsCrossAccountExistingRow(t *testing.T) 
 	repo := &bootstrapInstRepo{rows: []*model.SageXInstallation{{
 		TenantID: 11, InstallationID: "shared-id", AccountID: "999", Token: "other-account-token", Status: 1,
 	}}, createHook: func(*model.SageXInstallation) {}}
-	svc := newBootstrapService(repo, &model.ChannelAccount{TenantID: 11, ID: 101}, nil)
+	svc := newBootstrapService(repo, &model.ChannelAccount{TenantID: 11, ID: 101, ChannelID: 1}, nil)
 
 	inst, err := svc.BootstrapInstallation(context.Background(), "shared-id", "code-a")
 	if err == nil || inst != nil {
@@ -182,7 +184,7 @@ func TestSageXBootstrapInstallationRejectsDisabledExistingRow(t *testing.T) {
 	repo := &bootstrapInstRepo{rows: []*model.SageXInstallation{{
 		TenantID: 11, InstallationID: "disabled-id", AccountID: "101", Token: "disabled-token", Status: 0,
 	}}, createHook: func(*model.SageXInstallation) {}}
-	svc := newBootstrapService(repo, &model.ChannelAccount{TenantID: 11, ID: 101}, nil)
+	svc := newBootstrapService(repo, &model.ChannelAccount{TenantID: 11, ID: 101, ChannelID: 1}, nil)
 
 	inst, err := svc.BootstrapInstallation(context.Background(), "disabled-id", "code-a")
 	if err == nil || inst != nil {
@@ -198,7 +200,7 @@ func TestSageXBootstrapInstallationReadErrorDoesNotCreate(t *testing.T) {
 		getErr:     errors.New("database unavailable"),
 		createHook: func(*model.SageXInstallation) {},
 	}
-	svc := newBootstrapService(repo, &model.ChannelAccount{TenantID: 11, ID: 101}, nil)
+	svc := newBootstrapService(repo, &model.ChannelAccount{TenantID: 11, ID: 101, ChannelID: 1}, nil)
 
 	inst, err := svc.BootstrapInstallation(context.Background(), "installation-a", "code-a")
 	if err == nil || inst != nil {
@@ -213,7 +215,7 @@ func TestSageXBootstrapInstallationSameOwnerIsIdempotent(t *testing.T) {
 	repo := &bootstrapInstRepo{rows: []*model.SageXInstallation{{
 		TenantID: 11, InstallationID: "same-id", AccountID: "101", Token: "same-token", Status: 1,
 	}}, createHook: func(*model.SageXInstallation) {}}
-	svc := newBootstrapService(repo, &model.ChannelAccount{TenantID: 11, ID: 101}, nil)
+	svc := newBootstrapService(repo, &model.ChannelAccount{TenantID: 11, ID: 101, ChannelID: 1}, nil)
 
 	inst, err := svc.BootstrapInstallation(context.Background(), "same-id", "code-a")
 	if err != nil || inst == nil || inst.Token != "same-token" {
@@ -233,7 +235,7 @@ func TestSageXBootstrapInstallationConflictRereadValidatesOwner(t *testing.T) {
 			TenantID: 11, InstallationID: "race-id", AccountID: "101", Token: "race-token", Status: 1,
 		}}
 	}
-	svc := newBootstrapService(repo, &model.ChannelAccount{TenantID: 11, ID: 101}, nil)
+	svc := newBootstrapService(repo, &model.ChannelAccount{TenantID: 11, ID: 101, ChannelID: 1}, nil)
 
 	inst, err := svc.BootstrapInstallation(context.Background(), "race-id", "code-a")
 	if err != nil || inst == nil || inst.Token != "race-token" {
@@ -246,7 +248,7 @@ func TestSageXBootstrapInstallationConflictRereadValidatesOwner(t *testing.T) {
 
 func TestSageXBootstrapInstallationRejectsOversizedIDBeforeRepositoryAccess(t *testing.T) {
 	repo := &bootstrapInstRepo{createHook: func(*model.SageXInstallation) {}}
-	svc := newBootstrapService(repo, &model.ChannelAccount{TenantID: 11, ID: 101}, nil)
+	svc := newBootstrapService(repo, &model.ChannelAccount{TenantID: 11, ID: 101, ChannelID: 1}, nil)
 
 	inst, err := svc.BootstrapInstallation(context.Background(), strings.Repeat("x", 101), "code-a")
 	if err == nil || inst != nil {
@@ -259,7 +261,7 @@ func TestSageXBootstrapInstallationRejectsOversizedIDBeforeRepositoryAccess(t *t
 
 func TestSageXBootstrapInstallationEmptyIDUsesLegacyPrefix(t *testing.T) {
 	repo := &bootstrapInstRepo{createHook: func(*model.SageXInstallation) {}}
-	svc := newBootstrapService(repo, &model.ChannelAccount{TenantID: 11, ID: 101}, nil)
+	svc := newBootstrapService(repo, &model.ChannelAccount{TenantID: 11, ID: 101, ChannelID: 1}, nil)
 
 	inst, err := svc.BootstrapInstallation(context.Background(), "   ", "code-a")
 	if err != nil || inst == nil || !strings.HasPrefix(inst.InstallationID, "inst_") {

@@ -124,4 +124,3 @@ func storeWechatAPIBase(base string) {
 // 外部包测试编译期就看不见。2026-11-19 二次审核收口：写侧 accessor
 // storeAIReplyQuietHoursFn 随它的产码调用链迁回 webhook_outbound.go（本家文件），
 // 注册表 setter 列同步改回本家形态；直摸全局 ×4 的门禁红也一并闭掉。
-

@@ -40,7 +40,7 @@ func (f *fakeCrossAccountSearchRepo) SearchCustomers(_ context.Context, tid uint
 
 func TestCrossAccountSearchService_SearchCustomers_AdminAllAccounts(t *testing.T) {
 	repo := &fakeCrossAccountSearchRepo{
-		rows: []repository.CrossAccountSearchRow{{ID: "c1", Name: "Alice", Phone: "13800138000", Email: "alice@example.com"}},
+		rows:  []repository.CrossAccountSearchRow{{ID: "c1", Name: "Alice", Phone: "13800138000", Email: "alice@example.com"}},
 		total: 1,
 	}
 	scopeSvc := NewBusinessScopeServiceWithReaders(
@@ -98,7 +98,7 @@ func TestCrossAccountSearchService_SearchCustomers_RestrictedNoAuthReturnsEmpty(
 
 func TestCrossAccountSearchService_SearchCustomers_RestrictedAuthorizedFilters(t *testing.T) {
 	repo := &fakeCrossAccountSearchRepo{
-		rows: []repository.CrossAccountSearchRow{{ID: "c2", Name: "Bob"}},
+		rows:  []repository.CrossAccountSearchRow{{ID: "c2", Name: "Bob"}},
 		total: 1,
 	}
 	scopeSvc := NewBusinessScopeServiceWithReaders(

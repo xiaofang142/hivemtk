@@ -155,20 +155,21 @@ func startMockServer(t *testing.T) (*mockIngestHandler, string, map[string]strin
 		ChannelJDWeb, ChannelBilibiliWeb, ChannelWeiboWeb, ChannelPersonalWX, ChannelPDDWeb,
 	}
 	accounts := make(map[string]string, len(channels)+1)
-	codes := make(map[string]string, len(channels))
+	codes := make(map[string]string, len(channels)+1)
 	for i, channel := range channels {
 		fixture := seedCanonicalBridgeFixtureWithID(t, database, 1, channel, "mock-"+channel, uint(i+1))
 		accounts[channel] = fixture.AccountID
-		codes[NormalizeBridgeChannel(channel)] = fixture.Code
+		codes[fixture.AccountID] = fixture.AccountCode
 	}
 	other := seedCanonicalBridgeFixtureWithID(t, database, 1, ChannelDouyinWeb, "mock-other", uint(len(channels)+1))
 	accounts["douyin-other"] = other.AccountID
+	codes[other.AccountID] = other.AccountCode
 	store := newOutboxStore()
 	m := newMockIngestHandler(store)
 	h := newMockIngestHandlerWith(m)
 	engine := gin.New()
 	engine.Use(func(c *gin.Context) {
-		if code := codes[NormalizeBridgeChannel(c.Query("channel"))]; code != "" {
+		if code := codes[c.Query("account_id")]; code != "" {
 			c.Request.Header.Set("X-Channel-Identify-Code", code)
 		}
 	})

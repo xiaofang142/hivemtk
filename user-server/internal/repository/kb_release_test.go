@@ -597,8 +597,8 @@ func TestKBReleaseRepo_PublishAddStampsAndAdvances(t *testing.T) {
 		if tr.OldValue != "effective=0 draft=0" {
 			t.Errorf("首次发布的改前读数=%q，期望 effective=0 draft=0", tr.OldValue)
 		}
-		if tr.NewValue != "effective=1 previous=0 applied=2" {
-			t.Errorf("首次发布的改后读数=%q，期望 effective=1 previous=0 applied=2", tr.NewValue)
+		if tr.NewValue != "effective=1 previous=0 applied=2 embedding=unconfirmed" {
+			t.Errorf("首次发布的改后读数=%q，期望 effective=1 previous=0 applied=2 embedding=unconfirmed", tr.NewValue)
 		}
 		if tr.Actor != "op-1" {
 			t.Errorf("留痕操作者=%q，期望 op-1（这次发布的按的人）", tr.Actor)

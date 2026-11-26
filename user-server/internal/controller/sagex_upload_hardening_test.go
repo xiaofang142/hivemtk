@@ -68,7 +68,8 @@ func (r *ctrlHardeningInstRepo) TouchLastSeen(context.Context, uint, time.Time) 
 func newCtrlHardeningController(repo *ctrlHardeningInstRepo) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	svc := service.NewSageXUploadService(repo, &ctrlSageXReceiptRepo{}, &ctrlSageXIngress{})
-	svc.SetChannelResolver(service.NewChannelResolverWithRepos(&ctrlUploadIdentifyAccountRepo{}, nil))
+	channels := &ctrlBootstrapChannelRepo{channel: &model.Channel{ID: 1, TenantID: 1, Code: "sagex"}}
+	svc.SetChannelResolver(service.NewChannelResolverWithRepos(&ctrlUploadIdentifyAccountRepo{}, channels))
 	ctrl := NewSageXUploadController(svc)
 	r := gin.New()
 	r.POST("/api/integrations/sagex/upload", ctrl.Upload)

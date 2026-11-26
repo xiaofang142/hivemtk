@@ -97,6 +97,25 @@ describe('用户端菜单展示与路由上下文', () => {
     expect(permission.navigationMenus.map(node => node.key)).toEqual(['analytics'])
   })
 
+  it('聚合渠道入口时保留后端浏览器分组和原始授权', () => {
+    const browser = group('browserAutomation', [tasks], tasks.path)
+    permission.menus = [
+      group('analytics', [browser]),
+      group('channels', [item('channelAccount', '/channels/accounts')])
+    ]
+    const original = JSON.parse(JSON.stringify(permission.menus))
+
+    expect(permission.navigationMenus.map(node => node.key)).toEqual(['analytics', 'channels'])
+    expect(permission.navigationMenus[0].children).toEqual([browser])
+    expect(permission.getNavigationTrail({ path: tasks.path }).map(node => node.key))
+      .toEqual(['analytics', 'browserAutomation', 'baTasks'])
+    expect(permission.canAccessPath(tasks.path)).toBe(true)
+    expect(permission.canAccessPath('/channels/accounts')).toBe(true)
+    expect(permission.canAccessPath('/channels/manage')).toBe(false)
+    expect(permission.canAccessPath('/channels/identify-codes')).toBe(false)
+    expect(permission.menus).toEqual(original)
+  })
+
   it('采用真实子菜单而非同址父组，并为创建、编辑和详情保留列表上下文', () => {
     const keywordMining = item('geoKeywordMining', '/geo-tools/keyword-mining')
     permission.menus = [
