@@ -1149,3 +1149,16 @@ follow_user_channels 扩为八渠道（生产库实值已更新）。链 B 从�
 - `page.fetch` 同源 `/api/lead-mining/config` GET/POST → 404 `{"error":"not found"}`（路由已下线）。
 - `GET /api/manage/leads/rules` → 200 `code=0`，5 条规则；`POST /api/manage/leads/rules` `{scope:"global"}` → 400 `INVALID_PARAM_1001`（fail-closed，未写入；全局行仍为 13:29 的存量 id=12，未被本次 POST 创建或修改）。
 - 本轮只改 user-server，未走链 D/B/C。
+
+## 2026-11-26 23:1x–23:2x 链 A + 链 D + 平台种子 — T04 平台账号收口到渠道账号（HEAD `2e0d867b7`）
+
+**变更**：删除菜单树/模块绑定中的重复半成品「平台账号」(`platformAccount` → `/platformAccount/list`)，统一到「系统管理 → 渠道 → 渠道账号」(`channelAccount` → `/channels/accounts`)，后端 `/api/platform-accounts*` 兼容端点保留但授权键改挂 `channelAccount`；tg/qq/whatsapp/飞书/企微等机器人统一归渠道下拉源（`PresetChannelCodes` + `GET /api/channels/catalog`），`/telegram`、`/qq`、`/whatsapp`、`/feishu` 四个同页别名路由改为重定向。平台端两份 module_catalog_seed 同步 259→258（commit `0b766cc`，已推 origin）。
+
+**验证**：user-server `go test ./internal/model ./internal/router` 定向门（菜单导航/模块种子/能力键存在/路由清单）ok、`go test ./internal/service` 全量 ok 277.238s、T04 机器人渠道码契约 PASS；user-web vitest 149 files/1346 tests 全绿、`npm run build` ok、eslint 0 error/5 warning（既有）。链 A 发布门仍被存量 `TestFullMigrationChainUpThenRollback`（v3.116.0 xhs_web enum，T01 前基线同样失败）阻断，按脚本文档 `--skip-tests` 显式跳过，不宣称发布门 go test 全绿。
+
+**发布**：
+- 链 A：线上二进制 sha256 `a669891bcfa4f86acc2c0d7db11b53b0b712868f6ea136eb12e3d62b15450ded`，镜像 `sha256:56691d549fc3ac20b2004beb1f57283ea80e20e3f790185119fa0a345e52e844`，容器启动 `2026-11-26T15:17:35.711069875Z`，回滚点镜像 `mtk-user-server:rollback-20261126-231643` / 二进制 `user-server.bak-20261126-231643`，health 200。
+- 链 D：快照 `user-web.snapshot-20261126-T04-231042.tgz`，公网资产 `index-C35CJ0JQ.js` / `index-sL46khOG.css` 200 且与本地 dist 一致。
+- 平台种子：按真实部署布局手工交叉编译并替换二进制 sha256 `26f7387ac468f81809bbe5cdb108e0d083180426c1ac6916ed115f2ea53270e5`，备份 `platform-server.prev-T04-20261126-231415` / 镜像 `mtk-platform-server:rollback-t04-20261126-231415`；容器 running，公网 `/api/health` 200；未调用 seed 接口（避免覆盖运营自定义菜单绑定），新种子随二进制内嵌。
+
+**线上核验（ego-browser space 88 施工 / 89 主智能体独立复算）**：`GET /api/menus` 200 且全文无 `platformAccount`/`/platformAccount/list`、`channelAccount` 存在；`GET /api/channels/catalog` 200；五条深链显式导航实测重定向：`#/platformAccount/list`→`#/channels/accounts`、`#/telegram`→`#/telegram/account`、`#/qq`→`#/qq/account`、`#/whatsapp`→`#/whatsapp/account`、`#/feishu`→`#/feishu/account`。截图 `t04-channels-accounts.png` / `t04-verify-channels-accounts.png`。
