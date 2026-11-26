@@ -17,8 +17,10 @@
 // 上传接口（权威）：
 //   POST /platform/asset-market/file-assets   multipart/form-data
 //   字段：file(blob, filename=zip名) / name / industry / version / changelog
-//   头：Authorization: Bearer <localStorage.token>（必需且充分；
-//       X-Contract-Version: 1 可选，实测带与不带都 200）
+//   头：优先 Authorization: Bearer <localStorage.token>；2026-11-26 起平台后台
+//       改为 HttpOnly cookie 会话（localStorage.token 为空），此时用 same-origin
+//       fetch 的 credentials:'include' 携带 cookie，实测列表/详情接口 200。
+//       X-Contract-Version: 1 可选，实测带与不带都 200。
 //   成功返回 {code:200, msg:'安装包上传成功，请核对内容并审核上架',
 //            data:{asset_id, file_sha256, file_url, filename, name,
 //                  size_bytes, status:'pending', version}}
@@ -88,9 +90,10 @@ const fail = (step, extra) => { write({ ok: false, step, ...(extra || {}) }); re
     const session = await p.evaluate(() => {
       const t = localStorage.getItem('token') || '';
       const body = document.body ? document.body.innerText.replace(/\\s+/g, ' ') : '';
-      return { hasToken: t.length > 20, loginPage: /登录/.test(body.slice(0, 200)) && !/资产市场/.test(body), tokenLen: t.length };
+      const hasSession = t.length > 20 || (/资产市场/.test(body) && !/^登录/.test(body.trim()));
+      return { hasToken: t.length > 20, hasSession, loginPage: /登录/.test(body.slice(0, 200)) && !/资产市场/.test(body), tokenLen: t.length, body: body.slice(0, 160) };
     });
-    if (!session.hasToken) { await ts.finish({ keep: [] }); return fail('not-logged-in', { session }); }
+    if (!session.hasSession) { await ts.finish({ keep: [] }); return fail('not-logged-in', { session }); }
     if (DRY) { await ts.finish({ keep: [] }); return write({ ok: true, dryRun: true, session }); }
 
     // 读 zip → FormData → POST 上传（全部在已登录页面上下文里完成）
@@ -112,7 +115,8 @@ const fail = (step, extra) => { write({ ok: false, step, ...(extra || {}) }); re
       fd.append('changelog', NOTES || ('v' + VERSION + ' 发行构建'));
       const r = await fetch('/platform/asset-market/file-assets', {
         method: 'POST',
-        headers: { Authorization: 'Bearer ' + token, 'X-Contract-Version': '1' },
+        headers: { ...(token ? { Authorization: 'Bearer ' + token } : {}), 'X-Contract-Version': '1' },
+        credentials: 'include',
         body: fd,
       });
       const text = await r.text();
@@ -138,8 +142,8 @@ const fail = (step, extra) => { write({ ok: false, step, ...(extra || {}) }); re
       const review = await p.evaluate(async (arg) => {
         const [id, expectedVersion, expectedSHA256] = arg;
         const token = localStorage.getItem('token') || '';
-        const headers = { Authorization: 'Bearer ' + token, 'X-Contract-Version': '1' };
-        const listResponse = await fetch('/platform/asset-market/assets?status=pending&page=1&size=100', { headers });
+        const headers = { ...(token ? { Authorization: 'Bearer ' + token } : {}), 'X-Contract-Version': '1' };
+        const listResponse = await fetch('/platform/asset-market/assets?status=pending&page=1&size=100', { headers, credentials: 'include' });
         const listText = await listResponse.text();
         let listEnvelope = null;
         try { listEnvelope = JSON.parse(listText); } catch { /* 保持原文 */ }
@@ -151,7 +155,7 @@ const fail = (step, extra) => { write({ ok: false, step, ...(extra || {}) }); re
         if (!row || !Number.isInteger(row.id) || row.id <= 0) {
           return { ok: false, step: 'review-row-not-found', error: 'uploaded asset was not present in pending review list' };
         }
-        const detailResponse = await fetch('/platform/asset-market/assets/' + encodeURIComponent(row.id), { headers });
+        const detailResponse = await fetch('/platform/asset-market/assets/' + encodeURIComponent(row.id), { headers, credentials: 'include' });
         const detailText = await detailResponse.text();
         let detailEnvelope = null;
         try { detailEnvelope = JSON.parse(detailText); } catch { /* 保持原文 */ }
@@ -175,10 +179,11 @@ const fail = (step, extra) => { write({ ok: false, step, ...(extra || {}) }); re
         const r = await fetch('/platform/asset-market/assets/batch-publish', {
           method: 'POST',
           headers: {
-            Authorization: 'Bearer ' + token,
+            ...(token ? { Authorization: 'Bearer ' + token } : {}),
             'X-Contract-Version': '1',
             'Content-Type': 'application/json',
           },
+          credentials: 'include',
           body: JSON.stringify({ asset_ids: [target.asset_id], targets: [target] }),
         });
         const text = await r.text();

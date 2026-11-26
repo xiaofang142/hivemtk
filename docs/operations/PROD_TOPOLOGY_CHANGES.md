@@ -1050,3 +1050,20 @@ follow_user_channels 扩为八渠道（生产库实值已更新）。链 B 从�
 - commit `3edd01b7c`，push `gitee-upstream`+`upstream`。链 A 线上二进制 sha256 `2052b0cc4094cf17…`，运行镜像 `05f19f4a731008e59e4`，容器启动 `2026-11-26T10:42:28Z`，回滚点镜像 `mtk-user-server:rollback-20261126-184123` / 二进制 `user-server.bak-20261126-184123`，容器内+公网 health 200，默认口令探针 GREEN。
 - 链 D 用户前端 `index-CJM9zHeV.js`，备份 `user-web.snapshot-20261126-183938.tgz` 后 rsync 到 `/www/wwwroot/hivemtk/user-web/`，公网指纹一致。
 - 发布前 stash 3 个并行会话文件过 preflight，发布后已 `git stash pop` 恢复（stash 已 drop），并行文件未丢失。
+
+## 2026-11-26 19:0x 链 B + 链 C — HiveBridge v1.3.11 抖音新版私信面板适配发布（HEAD `4d2bfa0d6`）
+
+**背景**：四渠道生产复核中，抖音新版私信面板改版（会话行 `.semi-list-item-body-main`、气泡 `.box-item-message-*`、消息容器 `.box-content-qyCVPY`）使旧选择器全部失效；同时平台后台会话从 `localStorage.token` 改为 HttpOnly cookie，链 C 原登录门误判未登录。
+
+**修复（源码）**：
+- `user-web/bridge/src/channels/douyin.js`：新面板 class 进入默认选择器；`getMessageListRoot()` 优先用用户配置选择器取「可见且含消息项」的容器；活动会话识别兼容外层 `li.active-BApUO3`。
+- `user-web/bridge/src/channels/douyin-identity.js`：MAIN 读器在新面板写入 `conv:<规范化昵称>` 证据（无 sec_uid 时仍可归属当前会话），严格身份口径不变，裸昵称不得派生身份。
+- `user-web/bridge/src/core/channel-adapter.js`：`_backfill()` 以当前 `getMessageRoot()` 为准，不再用切换瞬间的陈旧 root；`openConversation()` 多候选点击 + 每次复核活动会话，命中即停。
+- `user-web/bridge/scripts/lib/platform-asset.mjs`：登录门接受 HttpOnly cookie 会话（页面可见「资产市场」即视为已登录），所有直调 API 加 `credentials:'include'`，有 token 时仍带 Bearer。
+- 版本 1.3.10 → 1.3.11，`scripts/release.mjs` 补 CHANGELOGS。
+
+**验证与发布**：
+- `npm run lint`（0 error / 8 既有 warning）、`npm test`（108 files / 1328 passed / 7 skipped）、`npm run build` 全绿；包内 manifest v1.3.11。
+- 链 B：`BRIDGE_ONLINE_SERVER=https://workapi.xapptool.cn npm run publish -- --reload` 成功，加载目录仍是 `/Users/xiaofang/Documents/tool/hivebridge-1.0.2`（扩展 ID `ijjfoaghckkdimglbbgdhhagkhemhnam` 保持不变），回滚 `/Users/xiaofang/Documents/tool/hivebridge-rollback-v1.3.10-2026-11-26_10-52-15`；ego 快照回读版本 1.3.11。
+- 链 C：上传并上架 `ast-general-f0121f33fe8793e8d9`，文件 `/files/extensions/2026/11/6662414f-1876-4292-9f5a-c68b112d0a52.zip`，`batch-publish` 200 `approved=1`，用户端 `https://work.xapptool.cn/#/bridge/extension` 回验显示 v1.3.11。
+- commit `4d2bfa0d6` 已推 `gitee-upstream` + `upstream`；本条台账与链 C cookie 适配待随下一提交推送。
