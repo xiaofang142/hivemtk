@@ -998,3 +998,13 @@ follow_user_channels 扩为八渠道（生产库实值已更新）。链 B 从�
 - 公网复验：`POST /api/bridge/gateway`（CID `cid_t18_wx_maagex`）200 且同时含 `ingested` 与 `schema_version:"hivemtk.channel.v1"` + `acks:[{event_id,status:"accepted"}]`。探针数据已清理。
 
 **注**：发布前用 `git stash push -m "TEMP-parallel-portability-stash-do-not-drop" -- <3 并行文件>` 临时藏起 user-server/ 的在途改动以过 preflight，发布后已 `git stash pop` 恢复（stash 已 drop），并行文件未丢失。
+
+## 2026-11-26 17:24 链 A — 网页桥接第三方账号标识放行（HEAD `613d68a59`）
+
+**背景**：ego-browser 复验抖音/小红书时，HiveBridge 1.3.10 上报的 `account_id` 是第三方平台会话标识（如 `69c62722000000003203b0fe`），不是本系统 `channel_accounts` 行 ID（12/13）；`resolveBridgeIdentity` 把两者格式差异判为账号冲突，导致 `GET /api/bridge/outbox` 404 `tenant_unresolved`、`/outbox/wake` 400，抖音/小红书消息无法入租户 18。
+
+**修复**：`internal/bridge/tenant_binding.go` 仅在调用方显式传本系统行 ID（纯数字）且与识别码解析结果冲突时拒绝；非数字的第三方标识只作为客户端提示，不覆盖识别码解析出的内部账号。保留内部行 ID 冲突的 400 安全门（`bridge_outbox_wake_test.go` 改为用 `999999` 验证），新增 bridge 包测试验证第三方标识不会覆盖租户/账号。
+
+**验证与发布**：`go test ./internal/bridge/...` 8.233s PASS、`go test ./internal/controller/ -run TestBridgeOutboxWakeController_RealBridgeAuthentication` PASS、`go build ./...`/`go vet ./...` PASS。commit `613d68a59`，push 双远端；链 A 发布成功：线上二进制 sha256 `2615700dce30ecb4…`，运行镜像 `d25975b3130c8a6388a`，容器启动 `2026-11-26T09:29:39.12124947Z`，回滚点镜像 `mtk-user-server:rollback-20261126-172428` / 二进制 `user-server.bak-20261126-172428`；容器内+公网 health 200，默认口令探针 GREEN。
+
+**待复验**：用 ego-browser 重新驱动抖音/小红书私信页，确认 `outbox`/`wake` 不再 4xx、上行 ingest 入租户 18。
