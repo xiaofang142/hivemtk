@@ -1,8 +1,9 @@
 export default [
+  // T04：同一页面的重复别名路径收口为重定向，菜单与深链只认 /whatsapp/account。
   {
     path: '/whatsapp',
     name: 'Whatsapp',
-    component: () => import('@/views/whatsapp/WhatsappAccount.vue'),
+    redirect: '/whatsapp/account',
     meta: { title: 'WhatsApp 社群', group: 'community', icon: 'ChatDotRound' }
   },
   {

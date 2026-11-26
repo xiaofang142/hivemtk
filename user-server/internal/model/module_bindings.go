@@ -206,8 +206,8 @@ var ModuleMenuBindings = map[string][]string{
 		"systemDictionaries", "systemFeatureFlags", "ltcConfig", "opsOverview",
 		// 团队
 		"teamGroup", "systemUser", "roleManage", "permissionManage",
-		// 渠道与集成
-		"permissionGroup", "platformAccount", "integration", "channelIdentifyCode",
+		// 渠道与集成（T04：platformAccount 已收口到 channelAccount，menu.go 不再声明该 key）
+		"permissionGroup", "integration", "channelIdentifyCode",
 		// 2026-11-24：渠道统一治理（渠道预设 + 渠道账号）与识别码同属渠道接入这一摊，
 		// 归 core（与 T057「旧散落账号配置收敛到渠道账号管理」口径一致）。
 		"channels", "channelManage", "channelAccount",

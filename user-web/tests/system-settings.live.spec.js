@@ -14,7 +14,8 @@ const PAGES = [
   { group: '站点配置', name: '备份恢复', path: '/backup/list' },
   { group: '团队', name: '团队成员', path: '/teamUser/list' },
   { group: '团队', name: '角色权限', path: '/teamUser/role' },
-  { group: '权限设置', name: '平台账号', path: '/platformAccount/list' },
+  // T04：平台账号已收口到渠道账号；旧 /platformAccount/list 仅保留重定向，这里验合并后的落点。
+  { group: '渠道', name: '渠道账号', path: '/channels/accounts' },
   { group: '权限设置', name: '第三方对接', path: '/integration/list' },
   { group: '权限设置', name: '操作日志', path: '/operationLog/list' },
   { group: '权限设置', name: '安全审计', path: '/securityAudit/list' },

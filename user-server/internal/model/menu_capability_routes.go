@@ -319,10 +319,12 @@ var MenuCapabilities = []MenuCapability{
 	{Pattern: "/api/objection/handle", MenuKeys: []string{"objectionList"}},
 	{Pattern: "/api/objection/usage", MenuKeys: []string{"objectionList"}},
 	{Pattern: "/api/office-hours", MenuKeys: []string{"automationCenter"}},
-	{Pattern: "/api/platform-accounts", MenuKeys: []string{"platformAccount"}},
-	{Pattern: "/api/platform-accounts/*", MenuKeys: []string{"platformAccount"}},
-	{Pattern: "/api/platform-accounts/*/status", MenuKeys: []string{"platformAccount"}},
-	{Pattern: "/api/platform-accounts/platforms", MenuKeys: []string{"platformAccount"}},
+	// T04：旧 platformAccount 菜单已收口到渠道账号；兼容端点沿用统一渠道账号的授权键，
+	// 避免出现「菜单树不存在的 key」导致 CapabilityMenuKeysExist 门变红。
+	{Pattern: "/api/platform-accounts", MenuKeys: []string{"channelAccount"}},
+	{Pattern: "/api/platform-accounts/*", MenuKeys: []string{"channelAccount"}},
+	{Pattern: "/api/platform-accounts/*/status", MenuKeys: []string{"channelAccount"}},
+	{Pattern: "/api/platform-accounts/platforms", MenuKeys: []string{"channelAccount"}},
 	{Pattern: "/api/quick-replies", MenuKeys: []string{"agentStatus", "aiSuggestion", "customerSession", "messageHub", "quickReply", "sessionTag"}},
 	{Pattern: "/api/quick-replies/*", MenuKeys: []string{"agentStatus", "aiSuggestion", "customerSession", "messageHub", "quickReply", "sessionTag"}},
 	{Pattern: "/api/rag/eval/diff", MenuKeys: []string{"knowledgeRagEval"}},

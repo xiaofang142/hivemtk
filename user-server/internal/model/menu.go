@@ -466,7 +466,11 @@ var SystemMenuTree = []SystemMenuNode{
 				Key: "permissionGroup", Title: "渠道与集成", Icon: "Connection",
 				Roles: []string{"admin"},
 				Children: []SystemMenuNode{
-					{Key: "platformAccount", Title: "平台账号", Icon: "Platform", Path: "/platformAccount/list"},
+					// T04（2026-11-26）菜单去重：旧「平台账号」(/platformAccount/list, platform_accounts 表)
+					// 与「系统管理 → 渠道 → 渠道账号」(/channels/accounts, channel_accounts 表) 回答同一个
+					// 事实「有哪些外部平台账号」，但前者是未接入统一目录/下拉/发送者标记的半成品。
+					// 菜单行删除，前端 /platformAccount/list 改为重定向到 /channels/accounts，旧深链不失效；
+					// 后端 /api/platform-accounts 保留为兼容端点，能力归属改挂 channelAccount。
 					{Key: "integration", Title: "第三方对接", Icon: "Connection", Path: "/integration/list"},
 					{Key: "bridgeExtension", Title: "扩展安装包", Icon: "Download", Path: "/bridge/extension"},
 					{Key: "wecomAccount", Title: "多账号聚合", Icon: "Connection", Path: "/wecomAccount/list", Roles: []string{"admin"}},

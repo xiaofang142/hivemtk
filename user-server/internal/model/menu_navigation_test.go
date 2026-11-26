@@ -28,17 +28,18 @@ func TestMenuNavigation_AllLeafKeysAndPathsPreserved(t *testing.T) {
 	walk(SystemMenuTree)
 	sort.Strings(leaves)
 	got := fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(leaves, "\n"))))
-	// 2026-11-26：线索发现独立顶级模块，新增 5 个深链叶子 + 1 个带页容器，
-	// 原有 206/212 个 key/Path 全部保留（仅改父分组），此处上调计数与指纹。
-	const want = "c64f72c68445c9707f50f8263b6e2e905e62a6270806d38639793a86a26ea9f1"
-	if len(leaves) != 211 || got != want {
-		t.Fatalf("211 个业务叶子的 key/Path 必须完整保留，实际 %d 个 / %s；清单:\n%s", len(leaves), got, strings.Join(leaves, "\n"))
+	// 2026-11-26：线索发现独立顶级模块新增 5 个深链叶子 + 1 个带页容器（原 206/212 → 211/217）；
+	// T04 菜单去重把重复半成品「平台账号」(/platformAccount/list) 收口到渠道账号，
+	// 唯一删除的叶子/深链就是它，故 211/217 → 210/216，其余 key/Path 全部保留。
+	const want = "87964826c01f51ec1cbb43c2623dad8aad0bb2fd06ed687b3dfbd0f3aa993b2c"
+	if len(leaves) != 210 || got != want {
+		t.Fatalf("210 个业务叶子的 key/Path 必须完整保留（T04 仅移除 platformAccount），实际 %d 个 / %s；清单:\n%s", len(leaves), got, strings.Join(leaves, "\n"))
 	}
 	sort.Strings(paths)
 	got = fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(paths, "\n"))))
-	const wantPaths = "9c76592c240f7703781f1db9a21178698820d08f9f430202aa00b5c7a505e19b"
-	if len(paths) != 217 || got != wantPaths {
-		t.Fatalf("含带页目录的 217 个 key/Path 必须完整保留，实际 %d 个 / %s", len(paths), got)
+	const wantPaths = "8a486db7e9f9c3a52236fb54fd7d826102f4de48756d310e89c6b29da989591f"
+	if len(paths) != 216 || got != wantPaths {
+		t.Fatalf("含带页目录的 216 个 key/Path 必须完整保留（T04 仅移除 platformAccount），实际 %d 个 / %s", len(paths), got)
 	}
 }
 
@@ -46,13 +47,15 @@ func TestMenuNavigation_AllLeafKeysAndPathsPreserved(t *testing.T) {
 // T02（2026-11-26）：线索智能体族新增 leadConfigGroup / leadEvidenceGroup 两个
 // 纯布局容器（无 Path、不带任何新业务叶子），上界计数与指纹相应 +1/+2；
 // 所有原有 key 的角色上界未变，见上方逐 key 断言与叶子路径指纹。
+// T04（2026-11-26）：platformAccount 仅对 admin 开放，收口到 channelAccount 后
+// admin 上界 258 → 257；customer_service/staff 上界与指纹不变。
 func TestMenuNavigation_AllRoleCeilingsPreserved(t *testing.T) {
 	cases := []struct {
 		role   string
 		count  int
 		digest string
 	}{
-		{SystemRoleCodeAdmin, 258, "a55b387bdcecf341cdff06bbb78449faa41b50bee020b230faba840e52d8c6a7"},
+		{SystemRoleCodeAdmin, 257, "3f52668b6360ab671a2c17d0f756fb336d6f6a67f72f1b92f01db95faccf192c"},
 		{SystemRoleCodeCustomerService, 62, "5beb004f7dcb0a3dd681d31c7171cbd46a64d7ae70d61700462bc6a5a2644cad"},
 		{SystemRoleCodeStaff, 67, "7536303eadb161bc3b3abfd1130ed120db31b3845bb59ab2f8613b0769804131"},
 	}
