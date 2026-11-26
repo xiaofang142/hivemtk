@@ -1194,3 +1194,13 @@ follow_user_channels 扩为八渠道（生产库实值已更新）。链 B 从�
 - 链 D：`npm run build` buildId `9182c0a74-1795712486029`，入口 `assets/index-DSfnK7F0.js`；快照 `user-web.snapshot-20261127-010136.tgz`；rsync dist → `/www/wwwroot/hivemtk/user-web/`；index.html SHA-256 `5722e81b9f0981d9e48aec3b6ac0cd70597b3be48bc4464dd5f1e40dd7e1aefc`，本地/公网一致，version.json buildId 一致，入口资源 HTTP 200。
 
 **线上核验（ego-browser TaskSpace `hivemtk-online` id=94，逐页显式 goto + snapshot，未点任何写按钮）**：`GET/POST /api/pilot/contract` 均 404；`GET /api/identify-codes/20/rotate` 404（渠道级写入入口已移除，以 GET 探测避免误写）；`GET /api/identify-codes` 200，4 行全部带 account_id/account_name（10–13），无重复渠道行；`GET /api/channels/catalog`、`GET /api/channel-accounts/managed`、`GET /api/menus` 均 200，T03/T04 契约未破。UI：`/#/system/config` 快照无「试点启动基线与契约」；`/#/channels/identify-codes` 表头为「账号 ID / 账号名称 / 渠道 / 账号识别码 / 操作」、4 行账号名与 API 一致。注意首次 hash-only 导航沿用部署前 JS bundle，已用 `?t=` cache-bust + reload 硬刷新后复验。快照/截图：`t07-ui-system-config.*`、`t07-ui-identify-codes.*`（临时证据目录）。收口 `task.finish({ keep: [] })`。
+
+## 2026-11-27 01:1x 链 D — T08 渠道裸路径深链归一化与左右分栏（HEAD `d8dcd8838`）
+
+**变更**：新增 `src/utils/hashDeepLink.js`，在 router 首次导航前把不带 `#` 的 `/channels/...` 裸路径归一化为 `/#/channels/...`（保留 query、仅认 `/channels/` 前缀、防循环）；`views/channels/index.vue` 的 `el-tabs` 改为 `tab-position="left"`（左竖排导航 200px + 右侧内容，窄屏响应式），三个子组件业务逻辑未动，T07 账号级识别码语义保持。提交 `d8dcd8838`，push `gitee-upstream` + `upstream`。
+
+**验证**：vitest 定向 2 files/9 tests、全量 150 files/1353 tests 全绿；eslint 0 error / 5 既有 warning；i18n 9 语言 100%；build ok（PWA 709 entries）；后端未改。
+
+**发布（链 D）**：快照 `user-web.snapshot-20261127-011516.tgz`，入口 `assets/index-CK8CqW9U.js`，线上 index.html 与 version.json buildId 与本地一致（`.user.ini` 宝塔保护文件 unlink 失败 rc=23 无害）。
+
+**线上核验（ego-browser space 96 施工 / 97 主智能体独立复算）**：裸路径 `/channels/identify-codes`、`/channels/accounts` 修复前落默认页 `#/messageHub/list`，修复后均正确落到 `#/channels/identify-codes` / `#/channels/accounts`；两页 `el-tabs--left=true` 且 header/content 矩形左右并列（header 宽 200px），identify 表头「账号 ID/账号名称/渠道/账号识别码/操作」4 行、accounts 表头 9 列含发送者标记 4 行；`GET /api/identify-codes`、`/api/channels/catalog`、`/api/channel-accounts/managed` 均 200。逐元素点验：tab「识别码」/「账号」切换、「新增账号」弹窗打开（含「所属渠道」）、「取消」关闭未写库。截图 `t08-independent-identify.png` / `t08-independent-dialog.png`。收口 `task.finish({ keep: [] })`。
