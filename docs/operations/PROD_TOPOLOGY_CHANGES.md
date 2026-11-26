@@ -1204,3 +1204,13 @@ follow_user_channels 扩为八渠道（生产库实值已更新）。链 B 从�
 **发布（链 D）**：快照 `user-web.snapshot-20261127-011516.tgz`，入口 `assets/index-CK8CqW9U.js`，线上 index.html 与 version.json buildId 与本地一致（`.user.ini` 宝塔保护文件 unlink 失败 rc=23 无害）。
 
 **线上核验（ego-browser space 96 施工 / 97 主智能体独立复算）**：裸路径 `/channels/identify-codes`、`/channels/accounts` 修复前落默认页 `#/messageHub/list`，修复后均正确落到 `#/channels/identify-codes` / `#/channels/accounts`；两页 `el-tabs--left=true` 且 header/content 矩形左右并列（header 宽 200px），identify 表头「账号 ID/账号名称/渠道/账号识别码/操作」4 行、accounts 表头 9 列含发送者标记 4 行；`GET /api/identify-codes`、`/api/channels/catalog`、`/api/channel-accounts/managed` 均 200。逐元素点验：tab「识别码」/「账号」切换、「新增账号」弹窗打开（含「所属渠道」）、「取消」关闭未写库。截图 `t08-independent-identify.png` / `t08-independent-dialog.png`。收口 `task.finish({ keep: [] })`。
+
+## 2026-11-27 01:3x 链 A — T09 统一上报格式网关补齐（HEAD `9ea8e309a`）
+
+**变更**：`user-server/internal/bridge/handler_http.go` 的 `UnifiedGatewayMessage` 增 `sender_avatar`（omitempty 兼容旧客户端），两条入站转换路径（`handleGatewayReport` 的 bridge 分支、`handleGatewayBridgeIngest`）把头像透传给 `HTTPIngestMessage`；非 bridge 分支 `gatewayMessageToEvent` 写 `MessageEvent.SenderAvatar`（`TruncateMediaURL` 收口 varchar(500)）与 `Extra["group_name"]`（MessageEvent 无独立列，与 `channelgw.ToEvent` 同口径）。`handler_gateway_boundary_test.go` 新增 `TestGatewayMessageCarriesUnifiedReportFields`（头像逐字透传/空值/截断、群聊 is_group/group_id/group_name、sender_type 缺省 customer）。additive 兼容，不 bump 协议版本，不动 T01–T08 语义。
+
+**跨仓**：`sagex@8044fd8`（origin/main）两端 `UploadBatch.toGatewayMessage` 由 `sender_type=contact` 改为 canonical `customer`（满足服务端 `bridgeLeadEventEligible` 只认 customer/user 的线索资格门，QQ/微信入站得以挂载线索智能体），并补顶层 `sender_avatar=""`（拿不到头像留空）、`is_group`/`group_id`（优先通知 group_key，回退会话标题）/`group_name`；`raw_event` 原样保留。两端各新增 2 例 payload 契约单测。
+
+**验证**：Go `go build ./...` / `go vet ./...` 通过；`go test ./internal/bridge/...`（含新用例）ok 7.729s、`./internal/service/` ok 206.764s、`./internal/channelgw/...` ok 9.331s；layer-boundary 0 违规、enum-consistency 通过、api-contract 清单无新增路由（无需改 `routes_user.tsv`）。SageX 两端 `./gradlew testDebugUnitTest` BUILD SUCCESSFUL（JDK 21），新增 `UploadBatchUnifiedFormatTest` 各 2/2 PASS。**本轮未改 user-web，链 B/C/D 不涉及。**
+
+**发布（链 A）**：`./deploy/deploy-api.sh` 默认全量测试门通过（未用 `--skip-tests`），退出码 0；线上二进制 sha256 `2768695c037ffd813f7833c6bda07e4f43e190e8fb19ba69cad5adcff3ccea97`，运行镜像 `sha256:22fc0ed2fa1838d2582899f959ed826808d2b91a49b17b0f25f17809c35c7c5a`，容器启动 `2026-11-26T17:36:24.315467339Z`，容器内 + 公网 health 200 / ok，默认口令探针 GREEN（401）。回滚点镜像 `mtk-user-server:rollback-20261127-013449` / 二进制 `/www/wwwroot/hivemtk/user-server/user-server.bak-20261127-013449`，state 写入 `2026-11-27T01:36:34+08:00`。
