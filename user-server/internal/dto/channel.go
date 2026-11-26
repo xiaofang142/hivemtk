@@ -46,12 +46,17 @@ type ChannelAccountDetail struct {
 }
 
 // ChannelIdentifyCodeView 识别码出参（明文仅管理面返回，解析侧只按 code 查）。
+//
+// 账号级语义：AccountID/AccountName 标识这枚码归属的渠道账号；存量渠道级码
+// 没有账号归属（AccountID=0），仅作历史兼容展示，管理面不可再重置。
 type ChannelIdentifyCodeView struct {
-	ID        uint       `json:"id"`
-	ChannelID uint       `json:"channel_id"`
-	Code      string     `json:"code"`
-	Version   int        `json:"version"`
-	ResetAt   *time.Time `json:"reset_at,omitempty"`
+	ID          uint       `json:"id"`
+	ChannelID   uint       `json:"channel_id"`
+	AccountID   uint       `json:"account_id"`
+	AccountName string     `json:"account_name,omitempty"`
+	Code        string     `json:"code"`
+	Version     int        `json:"version"`
+	ResetAt     *time.Time `json:"reset_at,omitempty"`
 }
 
 // ChannelSave 渠道新增/编辑入参。

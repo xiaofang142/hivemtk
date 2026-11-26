@@ -165,25 +165,6 @@
     "configureMerchantBundle": "加盟店用スクリプトパックを設定",
     "roleGroupingHint": "下のツリーは権限カタログの分類に従います。ナビゲーションではブラウザー自動化はシステム設定にあります。表示位置は権限に影響しません。"
   },
-  "pilotContract": {
-    "title": "試行契約と起動基準",
-    "boundary": "模擬試行の下書きのみを検証・保存します。実際のプラットフォーム、加盟店の承認、注文の事後条件は未検証で、本番実行は引き続きブロックされています。",
-    "identity": "既存のインストール識別子",
-    "tenant": "現在のテナント",
-    "configured": "下書き保存済み",
-    "unconfigured": "未設定",
-    "empty": "店舗の所有者と承認参照、読み書き範囲、資金上限、承認者、監視時間、ロールバック担当者、単一注文、および FA/AR/CH の完了コミットとテスト証跡を設定してください。",
-    "blockers": "ローカル検証の阻害要因",
-    "draft": "PilotContract JSON 下書き",
-    "hint": "fake/simulated のみ使用してください。認証情報や顧客データは入力しないでください。開発時間とプラットフォーム承認待ち時間は別々に記録してください。",
-    "validate": "ローカル検証",
-    "save": "下書きを保存",
-    "retry": "再読み込み",
-    "loadFailed": "読み込みに失敗しました。設定状態を確認できません。",
-    "submitFailed": "保存または検証に失敗しました。JSON、識別情報、リビジョンを確認してください。リビジョン競合時は再読み込みして下書きを統合してください。",
-    "saved": "下書きを保存しました。本番実行は引き続きブロックされています。",
-    "validated": "保存せずにローカル契約を確認しました。本番実行は引き続きブロックされています。"
-  },
   "bulkLeadHandoff": {
     "template": "メッセージテンプレート",
     "account": "送信アカウント",
@@ -488,7 +469,7 @@
     "emailTo": "[JA] Recipient",
     "knowledgeBase": "[JA] Knowledge Base Management",
     "permissionManage": "[JA] Permissions",
-    "channelIdentifyCode": "チャネル識別コード",
+    "channelIdentifyCode": "アカウント識別コード",
     "roleManage": "[JA] Roles",
     "sendEmail": "[JA] Send Email",
     "systemUser": "[JA] Personnel",
@@ -2011,16 +1992,6 @@
           "actions": "更新とローカル取り消し",
           "actionsSummary": "更新は現在の認証情報バージョンを使用し、失敗時は状態を再取得します。ローカル取り消しは遠隔での取り消しを確認せず、ログインセッションを保持します。"
         },
-        "pilotContract": {
-          "title": "試行契約",
-          "summary": "インストールとテナントの識別情報を確認し、模擬試行の下書きと阻害要因を確認します。保存しても本番実行は許可されません。",
-          "identity": "識別情報",
-          "identitySummary": "インストール識別情報は読み取り専用で、現在のテナントと照合されます。",
-          "blockers": "阻害要因",
-          "blockersSummary": "模擬検証前に不足している条件を確認します。",
-          "draft": "契約の下書き",
-          "draftSummary": "模擬データのみを使用し、認証情報や顧客データを含めないでください。"
-        },
         "common": {
           "overview": "このページの目的",
           "action": "操作の要はここ"
@@ -2960,8 +2931,7 @@
     "merchantEditorCloseNoGate": "オフ（危機感ゲートを発動しない）",
     "merchantEditorFriendlyLegacy": "フレンドリー（旧設定互換）"
   },
-  "dashboardScreenPage": {
-  },
+  "dashboardScreenPage": {},
   "assetMarketPage": {
     "notFound": "アセットが存在しないか、このデプロイはアセットマーケットに接続されていません"
   },

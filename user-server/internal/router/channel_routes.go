@@ -48,9 +48,9 @@ func setupChannelRoutes(auth *gin.RouterGroup) {
 	// 共享对话上下文 / 交叉引用（T054 前端展示）
 	auth.GET("/conversation-context", ctxCtl.Get)
 
-	// 识别码（T016 只双写，不改读路径）
+	// 识别码：权威是账号级 identify_code；列表/重置均以账号为单位。
+	// GET /:channel_id 保留供历史渠道码只读兼容；渠道级 rotate 入口已移除。
 	auth.GET("/identify-codes", identifyCtl.List)
 	auth.GET("/identify-codes/:channel_id", identifyCtl.Get)
-	auth.POST("/identify-codes/:channel_id/rotate", identifyCtl.Rotate)
 	auth.POST("/identify-codes/:channel_id/rotate-for-account", identifyCtl.RotateForAccount)
 }

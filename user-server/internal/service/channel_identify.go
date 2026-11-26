@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"hivemtk-user/internal/dto"
@@ -21,24 +22,23 @@ const ChannelIdentifyCodeGraceEnv = "CHANNEL_IDENTIFY_GRACE_SECONDS"
 
 const defaultIdentifyGraceSeconds = 60
 
-// ErrIdentifyAccountRequired 多账号渠道必须给出消歧账号 ID，拒绝取首条。
+// ErrIdentifyAccountRequired 账号级识别码必须给出消歧账号 ID，拒绝取首条。
 var ErrIdentifyAccountRequired = errors.New("识别码定位需要明确的账号 ID")
 
 // ChannelIdentifyService 识别码服务。
 //
-// T058 已完成读路径一次性切换（凭证闸门只认渠道识别码，旧 Bridge token 0% 接受）；
-// T061 起**停用 Phase2 的双写**——不再把识别码写进旧 Bridge token 的 KV 位。
-// CH-06：识别码是渠道级唯一码（每渠道一枚），不再把同码冗余写到该渠道**所有**账号
-// （那与 channel_accounts.identify_code 全局唯一索引冲突，且无法多账号消歧）。
-// 冗余列只写给显式指定的一个账号；未指定时清空冗余列，读路径统一走权威码表 +
-// 明确账号信息定位。
+// 语义（T07 修正）：识别码是**每个渠道账号一枚**的唯一凭证，权威列是
+// channel_accounts.identify_code。channel_identify_codes 是存量渠道级兼容表：
+// 老码继续被凭证闸门与解析器接受，管理面不再为渠道生成新码，避免同渠道
+// 多账号互相顶掉（CH-06 旧口径）。
 type ChannelIdentifyService interface {
+	// Get 读取存量渠道级码（历史兼容；管理面主列表已改为账号级 List）。
 	Get(ctx context.Context, tenantID, channelID uint) (*dto.ChannelIdentifyCodeView, error)
+	// List 账号级列表：每个有识别码的账号一行；无账号归属的存量渠道码附后。
 	List(ctx context.Context, tenantID uint) ([]dto.ChannelIdentifyCodeView, error)
-	// CreateOrRotate 生成/重置识别码（version+1），旧码进入短暂在途窗口。
-	// 不写冗余列（多账号渠道由权威表 + 明确账号信息消歧）。
+	// CreateOrRotate 历史渠道级轮转（仅兼容保留，管理面不再调用）。
 	CreateOrRotate(ctx context.Context, tenantID, channelID uint) (*dto.ChannelIdentifyCodeView, error)
-	// CreateOrRotateForAccount 生成/重置并只把冗余码写给指定的单一账号（原子一致）。
+	// CreateOrRotateForAccount 账号级唯一写入口：只写账号行（含在途窗口），不写渠道表。
 	CreateOrRotateForAccount(ctx context.Context, tenantID, channelID, accountID uint) (*dto.ChannelIdentifyCodeView, error)
 }
 
@@ -106,17 +106,50 @@ func (s *channelIdentifyService) Get(ctx context.Context, tenantID, channelID ui
 	return &view, nil
 }
 
+// List 账号级识别码列表：权威的账号行在前，无账号归属的历史渠道码附后（只读兼容）。
+// 按 code 去重：存量渠道码与账号码同值时只展示账号一行。
 func (s *channelIdentifyService) List(ctx context.Context, tenantID uint) ([]dto.ChannelIdentifyCodeView, error) {
 	if tenantID == 0 {
 		return nil, ErrChannelAccountInvalid
 	}
-	rows, err := s.codeRepo.ListByTenant(ctx, tenantID)
+	if s.accountRepo == nil || !s.accountRepo.Available() {
+		return nil, repository.ErrChannelStoreUnavailable
+	}
+	accounts, err := s.accountRepo.List(ctx, repository.ChannelAccountListOptions{TenantID: tenantID, Limit: 1000})
 	if err != nil {
 		return nil, err
 	}
-	out := make([]dto.ChannelIdentifyCodeView, 0, len(rows))
-	for i := range rows {
-		out = append(out, toIdentifyView(&rows[i]))
+	out := make([]dto.ChannelIdentifyCodeView, 0, len(accounts))
+	seen := make(map[string]bool, len(accounts))
+	for i := range accounts {
+		acc := &accounts[i]
+		code := strings.TrimSpace(acc.IdentifyCode)
+		if code == "" || seen[code] {
+			continue
+		}
+		seen[code] = true
+		out = append(out, dto.ChannelIdentifyCodeView{
+			ID: acc.ID, ChannelID: acc.ChannelID,
+			AccountID: acc.ID, AccountName: acc.Name,
+			Code: code, Version: 1,
+		})
+	}
+	// 历史渠道级码：仅在没有任何账号持有同码时附后，避免重复展示。
+	if s.codeRepo != nil && s.codeRepo.Available() {
+		legacy, err := s.codeRepo.ListByTenant(ctx, tenantID)
+		if err != nil {
+			return nil, err
+		}
+		for i := range legacy {
+			code := strings.TrimSpace(legacy[i].Code)
+			if code == "" || seen[code] {
+				continue
+			}
+			seen[code] = true
+			view := toIdentifyView(&legacy[i])
+			view.AccountName = "存量渠道码（兼容）"
+			out = append(out, view)
+		}
 	}
 	return out, nil
 }
@@ -124,11 +157,12 @@ func (s *channelIdentifyService) List(ctx context.Context, tenantID uint) ([]dto
 // ErrChannelIdentifyNotFound 渠道尚未生成识别码（Controller 映射 404）。
 var ErrChannelIdentifyNotFound = fmt.Errorf("渠道识别码不存在")
 
+// CreateOrRotate 历史渠道级轮转，仅保留给旧调用方；管理面已改走账号级入口。
 func (s *channelIdentifyService) CreateOrRotate(ctx context.Context, tenantID, channelID uint) (*dto.ChannelIdentifyCodeView, error) {
 	return s.rotate(ctx, tenantID, channelID, 0)
 }
 
-// CreateOrRotateForAccount 仅把冗余码写给显式指定的账号（消歧信息必须校验）。
+// CreateOrRotateForAccount 账号级唯一写入口：校验账号属于该渠道后只改账号行。
 func (s *channelIdentifyService) CreateOrRotateForAccount(ctx context.Context, tenantID, channelID, accountID uint) (*dto.ChannelIdentifyCodeView, error) {
 	if accountID == 0 || s.accountRepo == nil || !s.accountRepo.Available() {
 		return nil, ErrIdentifyAccountRequired
@@ -140,11 +174,40 @@ func (s *channelIdentifyService) CreateOrRotateForAccount(ctx context.Context, t
 	if acc == nil || acc.ChannelID != channelID {
 		return nil, ErrIdentifyAccountRequired // 错账号/跨渠道：拒绝，不取首条
 	}
-	return s.rotate(ctx, tenantID, channelID, accountID)
+	return s.rotateAccount(ctx, tenantID, channelID, acc)
 }
 
-// rotate 核心：先 CAS 写权威码（版本单调 + 并发受控），成功后才动冗余列；
-// 冗余写失败不回滚权威码，但会返回明确错误供对账（不静默半写成功）。
+// rotateAccount 生成新码并原子写回账号行（identify_code + prev_code + prev_valid_until）。
+// 不写 channel_identify_codes：每个账号各自持码，同渠道多账号互不顶替。
+func (s *channelIdentifyService) rotateAccount(ctx context.Context, tenantID, channelID uint, acc *model.ChannelAccount) (*dto.ChannelIdentifyCodeView, error) {
+	if tenantID == 0 || channelID == 0 || acc == nil || acc.ID == 0 {
+		return nil, ErrIdentifyAccountRequired
+	}
+	code, err := generateIdentifyCode()
+	if err != nil {
+		return nil, err
+	}
+	updates := map[string]any{"identify_code": code, "prev_code": "", "prev_valid_until": nil}
+	if grace := identifyGraceWindow(); grace > 0 {
+		old := strings.TrimSpace(acc.IdentifyCode)
+		if old != "" && old != code {
+			until := time.Now().Add(grace)
+			updates["prev_code"] = old
+			updates["prev_valid_until"] = &until
+		}
+	}
+	if err := s.accountRepo.Update(ctx, tenantID, acc.ID, updates); err != nil {
+		return nil, err
+	}
+	return &dto.ChannelIdentifyCodeView{
+		ID: acc.ID, ChannelID: channelID,
+		AccountID: acc.ID, AccountName: acc.Name,
+		Code: code, Version: 1,
+	}, nil
+}
+
+// rotate 历史渠道级轮转实现：CAS 写权威渠道码 + 清空/指定账号冗余码。
+// 已被账号级 rotateAccount 取代，仅为旧调用方与兼容测试保留。
 func (s *channelIdentifyService) rotate(ctx context.Context, tenantID, channelID, accountID uint) (*dto.ChannelIdentifyCodeView, error) {
 	if tenantID == 0 || channelID == 0 || s.codeRepo == nil || !s.codeRepo.Available() {
 		return nil, ErrChannelAccountInvalid
@@ -177,14 +240,11 @@ func (s *channelIdentifyService) rotate(ctx context.Context, tenantID, channelID
 		Version: version, ResetAt: resetAt,
 		PrevCode: prevCode, PrevValidUntil: prevUntil,
 	}
-	// CH-06：权威码写入与冗余列写入纳入同一事务，避免半写。
-	// 生产仓储实现 WithTransaction 端口时走事务；替身仓储不支持时退回直接写入（测试用）。
 	type txProvider interface {
 		WithTransaction(ctx context.Context, fn func(ctx context.Context) error) error
 	}
 	if tp, ok := s.codeRepo.(txProvider); ok && s.codeRepo.Available() {
 		err := tp.WithTransaction(ctx, func(txCtx context.Context) error {
-			// CAS 写权威码（事务内仓储必支持 CAS）。
 			type casRotator interface {
 				RotateCAS(ctx context.Context, tenantID, channelID uint, expectVersion int, rec *model.ChannelIdentifyCode) error
 			}
@@ -195,7 +255,6 @@ func (s *channelIdentifyService) rotate(ctx context.Context, tenantID, channelID
 			if err := cas.RotateCAS(txCtx, tenantID, channelID, version-1, rec); err != nil {
 				return err
 			}
-			// 冗余列：只写给显式账号；未指定时清空该渠道全部冗余码，避免多账号同码冲突。
 			if s.accountRepo != nil && s.accountRepo.Available() {
 				if accountID > 0 {
 					if err := s.accountRepo.Update(txCtx, tenantID, accountID, map[string]any{"identify_code": code}); err != nil {
@@ -210,21 +269,14 @@ func (s *channelIdentifyService) rotate(ctx context.Context, tenantID, channelID
 			return nil
 		})
 		if err != nil {
-			if errors.Is(err, repository.ErrIdentifyVersionConflict) {
-				return nil, err // 并发重置明确冲突，不静默覆盖
-			}
 			return nil, err
 		}
 	} else {
-		// 替身/非事务仓储：退回直接写入（测试用）。
 		type casRotator interface {
 			RotateCAS(ctx context.Context, tenantID, channelID uint, expectVersion int, rec *model.ChannelIdentifyCode) error
 		}
 		if cas, ok := s.codeRepo.(casRotator); ok {
 			if err := cas.RotateCAS(ctx, tenantID, channelID, version-1, rec); err != nil {
-				if errors.Is(err, repository.ErrIdentifyVersionConflict) {
-					return nil, err
-				}
 				return nil, err
 			}
 		} else if err := s.codeRepo.Upsert(ctx, rec); err != nil {

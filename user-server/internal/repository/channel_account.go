@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"time"
 
 	"hivemtk-user/internal/model"
 	_db "hivemtk-user/internal/pkg/db"
@@ -214,9 +215,23 @@ func (r *channelAccountRepo) GetByIdentifyCode(ctx context.Context, code string)
 		return &byCode[0], nil
 	}
 
-	// 权威码表：闸门与解析必须一致——当前码或在途窗口内旧码都接受，
-	// 窗口外旧码返回 nil（fail-closed）。渠道码只确定 tenant+channel，
-	// 多账号时由调用方用明确账号信息消歧，这里绝不取首条。
+	// 账号级重置在途窗口：旧码在 PrevValidUntil 之前仍解析回同一账号。
+	// 与 ValidCodes 的账号候选源保持同一时间判定，窗口外旧码一律 nil（fail-closed）。
+	var byPrev []model.ChannelAccount
+	if err := applyChannelEditionGate(ctx, dbFromCtx(sysCtx).Model(&model.ChannelAccount{}).
+		Where("prev_code = ? AND prev_valid_until > ?", code, time.Now())).Limit(2).Find(&byPrev).Error; err != nil {
+		return nil, err
+	}
+	if len(byPrev) > 1 {
+		return nil, ErrAmbiguousIdentifyCode
+	}
+	if len(byPrev) == 1 {
+		return &byPrev[0], nil
+	}
+
+	// 历史兼容的渠道级码表：当前码或在途窗口内旧码都接受，窗口外旧码返回 nil
+	// （fail-closed）。渠道码只确定 tenant+channel，多账号时由调用方用明确账号
+	// 信息消歧，这里绝不取首条。
 	rec, err := findValidIdentifyCode(ctx, dbFromCtx(ctx), code)
 	if err != nil {
 		return nil, err

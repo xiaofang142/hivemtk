@@ -425,7 +425,7 @@ var SystemMenuTree = []SystemMenuNode{
 					// 保留权限键和深链；前端投影为一个入口，模块内部切换管理面。
 					{Key: "channelManage", Title: "渠道", Icon: "SetUp", Path: "/channels/manage", Roles: []string{"admin"}},
 					{Key: "channelAccount", Title: "渠道账号", Icon: "Connection", Path: "/channels/accounts", Roles: []string{"admin"}},
-					{Key: "channelIdentifyCode", Title: "识别码", Icon: "Key", Path: "/channels/identify-codes", Roles: []string{"admin"}},
+					{Key: "channelIdentifyCode", Title: "账号识别码", Icon: "Key", Path: "/channels/identify-codes", Roles: []string{"admin"}},
 				},
 			},
 			{

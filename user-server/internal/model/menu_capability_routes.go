@@ -230,7 +230,7 @@ var MenuCapabilities = []MenuCapability{
 	{Pattern: "/api/i18n/stats/quality", MenuKeys: []string{"i18nDashboard"}},
 	{Pattern: "/api/identify-codes", MenuKeys: []string{"channelIdentifyCode"}},
 	{Pattern: "/api/identify-codes/*", MenuKeys: []string{"channelIdentifyCode"}},
-	{Pattern: "/api/identify-codes/*/rotate", MenuKeys: []string{"channelIdentifyCode"}},
+	{Pattern: "/api/identify-codes/*/rotate-for-account", MenuKeys: []string{"channelIdentifyCode"}},
 	{Pattern: "/api/kb/crawler/batches", MenuKeys: []string{"knowledgeCrawlerSources", "knowledgeQaCandidates"}},
 	{Pattern: "/api/kb/crawler/batches/*/retry", MenuKeys: []string{"knowledgeCrawlerSources", "knowledgeQaCandidates"}},
 	{Pattern: "/api/kb/crawler/sources", MenuKeys: []string{"knowledgeCrawlerSources", "knowledgeQaCandidates"}},

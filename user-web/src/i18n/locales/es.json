@@ -165,25 +165,6 @@
     "configureMerchantBundle": "Configurar paquete de guiones del comercio",
     "roleGroupingHint": "Este árbol sigue el catálogo de permisos. En la navegación, la automatización del navegador está en Configuración del sistema. Su ubicación no afecta los permisos."
   },
-  "pilotContract": {
-    "title": "Contrato y base piloto",
-    "boundary": "Solo se validan y guardan borradores simulados. La plataforma, la autorización del comercio y las postcondiciones del pedido no están validadas en vivo; la producción sigue bloqueada.",
-    "identity": "Identidad de instalación existente",
-    "tenant": "Inquilino actual",
-    "configured": "Borrador guardado",
-    "unconfigured": "Sin configurar",
-    "empty": "Configure la propiedad y referencia de autorización de la tienda, los alcances de lectura/escritura, el límite de fondos, el autorizador de pruebas, la ventana de observación, el responsable de reversión, un pedido y los commits de cierre y pruebas FA/AR/CH.",
-    "blockers": "Bloqueos de validación local",
-    "draft": "Borrador JSON de PilotContract",
-    "hint": "Use solo fake/simulated. No introduzca credenciales ni datos de clientes. Registre por separado los minutos de ingeniería y la espera de aprobación de la plataforma.",
-    "validate": "Validar localmente",
-    "save": "Guardar borrador",
-    "retry": "Volver a leer",
-    "loadFailed": "Error de lectura; se desconoce el estado de configuración.",
-    "submitFailed": "Error al guardar o validar. Revise JSON, identidad y revisión. Si hay conflicto, vuelva a cargar y combine el borrador.",
-    "saved": "Borrador guardado; la producción sigue bloqueada.",
-    "validated": "Contrato local validado sin guardar; la producción sigue bloqueada."
-  },
   "bulkLeadHandoff": {
     "template": "Plantilla del mensaje",
     "account": "Cuenta de envío",
@@ -473,7 +454,7 @@
     "systemUser": "Personnel",
     "roleManage": "Roles",
     "permissionManage": "Permissions",
-    "channelIdentifyCode": "Códigos de identificación de canal",
+    "channelIdentifyCode": "Códigos de identificación de cuenta",
     "permissionGroup": "Access Control",
     "assetBundle": "Asset Bundles",
     "assetBundleList": "Bundle Management",
@@ -2011,16 +1992,6 @@
           "actions": "Renovar y revocar localmente",
           "actionsSummary": "La renovación usa la versión actual y consulta el estado ante errores. La revocación local no confirma la del proveedor y conserva su sesión."
         },
-        "pilotContract": {
-          "title": "Contrato piloto",
-          "summary": "Compruebe la instalación y el inquilino, edite un borrador simulado y revise los bloqueos. Guardar no habilita la ejecución en producción.",
-          "identity": "Asignación de identidad",
-          "identitySummary": "La identidad de instalación es de solo lectura y se comprueba con el inquilino actual.",
-          "blockers": "Bloqueos",
-          "blockersSummary": "Revise las condiciones pendientes antes de la validación simulada.",
-          "draft": "Borrador del contrato",
-          "draftSummary": "Use solo datos simulados; no incluya credenciales ni datos de clientes."
-        },
         "common": {
           "overview": "Para qué sirve esta página",
           "action": "Dónde están las acciones clave"
@@ -2960,8 +2931,7 @@
     "merchantEditorCloseNoGate": "Desactivado (sin puerta de urgencia)",
     "merchantEditorFriendlyLegacy": "Cercano (compatible con la configuración anterior)"
   },
-  "dashboardScreenPage": {
-  },
+  "dashboardScreenPage": {},
   "assetMarketPage": {
     "notFound": "Activo no encontrado, o esta implementación no está conectada al mercado de activos"
   },

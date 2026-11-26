@@ -12,7 +12,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// ChannelIdentifyCodeController 识别码管理（T016 仅双写，切换读路径在 US4）。
+// ChannelIdentifyCodeController 账号级识别码管理：列表以渠道账号为单位，
+// 写入只走 RotateForAccount；渠道级轮转入口已随账号级语义调整移除。
 type ChannelIdentifyCodeController struct {
 	svc service.ChannelIdentifyService
 }
@@ -60,26 +61,7 @@ func (c *ChannelIdentifyCodeController) Get(ctx *gin.Context) {
 	response.Success(ctx, row, "ok")
 }
 
-// Rotate 生成/重置识别码（version+1 + 双写），T016 阶段不改读路径。
-func (c *ChannelIdentifyCodeController) Rotate(ctx *gin.Context) {
-	tid, ok := channelTenantID(ctx)
-	if !ok {
-		return
-	}
-	channelID, err := strconv.ParseUint(ctx.Param("channel_id"), 10, 32)
-	if err != nil || channelID == 0 {
-		response.Error(ctx, http.StatusBadRequest, "无效的渠道 ID")
-		return
-	}
-	row, err := c.svc.CreateOrRotate(ctx.Request.Context(), tid, uint(channelID))
-	if err != nil {
-		response.ErrorFromDB(ctx, err, "生成识别码失败")
-		return
-	}
-	response.Success(ctx, row, "生成成功")
-}
-
-// RotateForAccount 生成/重置识别码并把冗余码写给指定账号（CH-06 多账号精确定位）。
+// RotateForAccount 生成/重置账号级识别码（唯一写入口，旧码进入短暂在途窗口）。
 func (c *ChannelIdentifyCodeController) RotateForAccount(ctx *gin.Context) {
 	tid, ok := channelTenantID(ctx)
 	if !ok {

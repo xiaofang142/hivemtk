@@ -9,7 +9,7 @@ import (
 
 // ErrLegacyBridgeTokenRetired 旧 Bridge 通道凭证已退役（T058/T063 一次性替换）。
 // 管理端旧页面调用 Reset 时收到本错误，应引导改用识别码管理页重置。
-var ErrLegacyBridgeTokenRetired = errors.New("旧 Bridge 通道凭证已退役，请在渠道识别码管理页重置识别码")
+var ErrLegacyBridgeTokenRetired = errors.New("旧 Bridge 通道凭证已退役，请在账号识别码管理页重置识别码")
 
 // BridgeTokenService 旧 Bridge 通道凭证的只读退役提示器。
 //
@@ -39,9 +39,9 @@ func (s *BridgeTokenService) Status(ctx context.Context) map[string]any {
 		"identify_codes":  count,
 		"main_configured": count > 0,
 		"prev_configured": false,
-		"source":          "channel_identify_codes",
+		"source":          "channel_accounts.identify_code（含存量渠道码）",
 		"token":           "",
-		"message":         "旧 Bridge token 已退役，请使用渠道识别码",
+		"message":         "旧 Bridge token 已退役，请使用账号识别码",
 	}
 }
 

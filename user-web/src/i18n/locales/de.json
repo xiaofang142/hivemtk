@@ -165,25 +165,6 @@
     "configureMerchantBundle": "Händler-Skriptpaket konfigurieren",
     "roleGroupingHint": "Diese Baumansicht folgt dem Berechtigungskatalog. In der Navigation finden Sie die Browserautomatisierung unter Systemeinstellungen. Ihre Position hat keinen Einfluss auf Berechtigungen."
   },
-  "pilotContract": {
-    "title": "Pilot-Basis und Vertrag",
-    "boundary": "Nur simulierte Entwürfe werden geprüft und gespeichert. Plattform, Händlerautorisierung und Auftragsbedingungen sind nicht live validiert; Produktion bleibt gesperrt.",
-    "identity": "Bestehende Installations-ID",
-    "tenant": "Aktueller Mandant",
-    "configured": "Entwurf gespeichert",
-    "unconfigured": "Nicht konfiguriert",
-    "empty": "Shop-Zuordnung und Autorisierungsreferenz, Lese-/Schreibumfang, Ausgabenlimit, Testautorisierende, Beobachtungsfenster, Rollback-Verantwortliche, Einzelauftrag sowie FA/AR/CH-Abschluss-Commits und Tests erfassen.",
-    "blockers": "Lokale Prüfsperren",
-    "draft": "PilotContract-JSON-Entwurf",
-    "hint": "Nur fake/simulated verwenden. Keine Zugangsdaten oder Kundendaten eingeben. Engineering-Minuten und Plattform-Genehmigungswartezeit getrennt erfassen.",
-    "validate": "Lokal prüfen",
-    "save": "Entwurf speichern",
-    "retry": "Erneut laden",
-    "loadFailed": "Lesen fehlgeschlagen; Konfigurationsstatus unbekannt.",
-    "submitFailed": "Speichern oder Prüfung fehlgeschlagen. JSON, Identität und Revision prüfen. Bei Revisionskonflikt neu laden und Entwurf zusammenführen.",
-    "saved": "Entwurf gespeichert; Produktion bleibt gesperrt.",
-    "validated": "Lokaler Vertrag ohne Speichern geprüft; Produktion bleibt gesperrt."
-  },
   "bulkLeadHandoff": {
     "template": "Nachrichtenvorlage",
     "account": "Absenderkonto",
@@ -473,7 +454,7 @@
     "systemUser": "Personnel",
     "roleManage": "Roles",
     "permissionManage": "Permissions",
-    "channelIdentifyCode": "Kanal-Identifikationscodes",
+    "channelIdentifyCode": "Konto-Identifikationscodes",
     "permissionGroup": "Access Control",
     "assetBundle": "Asset Bundles",
     "assetBundleList": "Bundle Management",
@@ -2011,16 +1992,6 @@
           "actions": "Erneuern und lokal widerrufen",
           "actionsSummary": "Die Erneuerung nutzt die aktuelle Zugangsdatenversion und lädt bei Fehlern den Status neu. Ein lokaler Widerruf bestätigt keinen Widerruf beim Anbieter und erhält Ihre Anmeldung."
         },
-        "pilotContract": {
-          "title": "Pilotvertrag",
-          "summary": "Installation und Mandant prüfen, einen simulierten Entwurf bearbeiten und Blockaden ansehen. Speichern erlaubt keine Produktionsausführung.",
-          "identity": "Identitätszuordnung",
-          "identitySummary": "Die Installations-ID ist schreibgeschützt und wird mit dem aktuellen Mandanten geprüft.",
-          "blockers": "Blockaden",
-          "blockersSummary": "Fehlende Bedingungen vor der simulierten Validierung prüfen.",
-          "draft": "Vertragsentwurf",
-          "draftSummary": "Nur Simulationsdaten verwenden; keine Zugangsdaten oder Kundendaten eingeben."
-        },
         "common": {
           "overview": "Wofür diese Seite da ist",
           "action": "Wo die wichtigen Aktionen sind"
@@ -2960,8 +2931,7 @@
     "merchantEditorCloseNoGate": "Aus (kein Dringlichkeits-Gate)",
     "merchantEditorFriendlyLegacy": "Freundlich (kompatibel zur Altkonfiguration)"
   },
-  "dashboardScreenPage": {
-  },
+  "dashboardScreenPage": {},
   "assetMarketPage": {
     "notFound": "Asset nicht gefunden oder diese Bereitstellung ist nicht mit dem Asset-Markt verbunden"
   },

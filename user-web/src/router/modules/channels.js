@@ -15,6 +15,6 @@ export default [
     path: '/channels/identify-codes',
     name: 'ChannelIdentifyCodeManage',
     component: () => import('@/views/channels/index.vue'),
-    meta: { title: '渠道识别码管理', group: 'channel', icon: 'Key', requiresAuth: true, requiresAdmin: true }
+    meta: { title: '账号识别码管理', group: 'channel', icon: 'Key', requiresAuth: true, requiresAdmin: true }
   }
 ]

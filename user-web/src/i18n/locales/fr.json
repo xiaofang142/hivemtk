@@ -165,25 +165,6 @@
     "configureMerchantBundle": "Configurer le pack de scripts marchand",
     "roleGroupingHint": "Cette arborescence suit le catalogue des autorisations. Dans la navigation, l’automatisation du navigateur se trouve dans les paramètres système. Son emplacement n’affecte pas les autorisations."
   },
-  "pilotContract": {
-    "title": "Contrat et base pilote",
-    "boundary": "Seuls les brouillons simulés sont validés et enregistrés. La plateforme, l’autorisation du marchand et les postconditions de commande ne sont pas validées en réel ; la production reste bloquée.",
-    "identity": "Identifiant d’installation existant",
-    "tenant": "Locataire actuel",
-    "configured": "Brouillon enregistré",
-    "unconfigured": "Non configuré",
-    "empty": "Renseignez le rattachement et la référence d’autorisation de la boutique, les portées lecture/écriture, le plafond financier, l’autorisateur de test, la fenêtre d’observation, le responsable du retour arrière, une commande, ainsi que les commits de clôture et tests FA/AR/CH.",
-    "blockers": "Blocages de validation locale",
-    "draft": "Brouillon JSON PilotContract",
-    "hint": "Utilisez uniquement fake/simulated. N’entrez aucun identifiant secret ni donnée client. Séparez les minutes d’ingénierie du délai d’approbation de la plateforme.",
-    "validate": "Valider localement",
-    "save": "Enregistrer le brouillon",
-    "retry": "Relire",
-    "loadFailed": "Échec de lecture ; l’état de configuration est inconnu.",
-    "submitFailed": "Échec de l’enregistrement ou de la validation. Vérifiez le JSON, l’identité et la révision. En cas de conflit, rechargez et fusionnez le brouillon.",
-    "saved": "Brouillon enregistré ; la production reste bloquée.",
-    "validated": "Contrat local validé sans enregistrement ; la production reste bloquée."
-  },
   "bulkLeadHandoff": {
     "template": "Modèle de message",
     "account": "Compte d’envoi",
@@ -473,7 +454,7 @@
     "systemUser": "Personnel",
     "roleManage": "Roles",
     "permissionManage": "Permissions",
-    "channelIdentifyCode": "Codes d'identification de canal",
+    "channelIdentifyCode": "Codes d'identification de compte",
     "permissionGroup": "Access Control",
     "assetBundle": "Asset Bundles",
     "assetBundleList": "Bundle Management",
@@ -2011,16 +1992,6 @@
           "actions": "Renouveler et révoquer localement",
           "actionsSummary": "Le renouvellement utilise la version actuelle et relit le statut en cas d’échec. La révocation locale ne confirme pas celle du fournisseur et préserve votre session."
         },
-        "pilotContract": {
-          "title": "Contrat pilote",
-          "summary": "Vérifiez l’installation et le locataire, modifiez un brouillon simulé et consultez les blocages. Enregistrer n’autorise aucune exécution en production.",
-          "identity": "Correspondance d’identité",
-          "identitySummary": "L’identité d’installation est en lecture seule et vérifiée avec le locataire actuel.",
-          "blockers": "Blocages",
-          "blockersSummary": "Consultez les conditions manquantes avant la validation simulée.",
-          "draft": "Brouillon du contrat",
-          "draftSummary": "Utilisez uniquement des données simulées, sans identifiants ni données client."
-        },
         "common": {
           "overview": "À quoi sert cette page",
           "action": "Où sont les actions clés"
@@ -2960,8 +2931,7 @@
     "merchantEditorCloseNoGate": "Désactivé (pas de seuil d'urgence)",
     "merchantEditorFriendlyLegacy": "Chaleureux (compatible avec l'ancienne configuration)"
   },
-  "dashboardScreenPage": {
-  },
+  "dashboardScreenPage": {},
   "assetMarketPage": {
     "notFound": "Actif introuvable, ou ce déploiement n'est pas connecté au marché des actifs"
   },

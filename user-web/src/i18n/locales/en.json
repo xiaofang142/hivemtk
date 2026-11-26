@@ -158,25 +158,6 @@
     "noAccount": "No account or connector configured",
     "shopMappingMissing": "Trusted shop authorization mapping is missing"
   },
-  "pilotContract": {
-    "title": "Pilot baseline and contract",
-    "boundary": "Validate and save simulated drafts only. Platform, merchant authorization and order postconditions await live validation. Production remains blocked.",
-    "identity": "Existing installation",
-    "tenant": "Current tenant",
-    "configured": "Draft saved",
-    "unconfigured": "Not configured",
-    "empty": "Configure shop ownership and authorization references, scopes, funds cap, authorizer, observation window, rollback owner, one order, and FA/AR/CH closure commits and tests.",
-    "blockers": "Local validation blockers",
-    "draft": "PilotContract JSON draft",
-    "hint": "Use fake/simulated only. Exclude credentials and customer data. Record engineering minutes separately from platform approval waiting.",
-    "validate": "Validate locally",
-    "save": "Save draft",
-    "retry": "Read again",
-    "loadFailed": "Read failed; configuration state is unknown.",
-    "submitFailed": "Save or validation failed. Check JSON, identity and revision. Reload and merge your draft after a revision conflict.",
-    "saved": "Draft saved; production remains blocked.",
-    "validated": "Local contract checked without saving; production remains blocked."
-  },
   "navigation": {
     "breadcrumb": "Breadcrumb",
     "editAgent": "Edit AI Agent",
@@ -473,7 +454,7 @@
     "systemUser": "Personnel",
     "roleManage": "Roles",
     "permissionManage": "Permissions",
-    "channelIdentifyCode": "Channel Identify Codes",
+    "channelIdentifyCode": "Account Identify Codes",
     "permissionGroup": "Channels & Integrations",
     "assetBundle": "Asset Bundles",
     "assetBundleList": "Bundle Management",
@@ -2011,16 +1992,6 @@
           "actions": "Refresh and local revoke",
           "actionsSummary": "Refresh uses the current credential version and reloads status on failure. Local revoke cannot confirm remote revocation and preserves your login session."
         },
-        "pilotContract": {
-          "title": "Pilot contract",
-          "summary": "Check installation and tenant identity, edit a simulated draft and review blockers. Saving never enables production execution.",
-          "identity": "Identity mapping",
-          "identitySummary": "The installation identity is read-only and checked with the current tenant.",
-          "blockers": "Blockers",
-          "blockersSummary": "Review conditions missing before simulated validation.",
-          "draft": "Contract draft",
-          "draftSummary": "Use simulated data only; exclude credentials and customer data."
-        },
         "common": {
           "overview": "What this page is for",
           "action": "Where the key actions are"
@@ -2960,8 +2931,7 @@
     "merchantEditorCloseNoGate": "Off (no urgency gate)",
     "merchantEditorFriendlyLegacy": "Friendly (legacy config compatible)"
   },
-  "dashboardScreenPage": {
-  },
+  "dashboardScreenPage": {},
   "assetMarketPage": {
     "notFound": "Asset not found, or this deployment is not connected to the asset market"
   },

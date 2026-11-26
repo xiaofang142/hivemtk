@@ -21,8 +21,8 @@ const (
 	identifyCodeQuery  = "identify_code"
 )
 
-// channelIdentifyCodeCandidates 从渠道识别码表取当前有效凭证集合（权威源）。
-// 凭证闸门运行在租户解析之前，因此仓储显式切系统作用域（ValidCodes 内部处理）。
+// channelIdentifyCodeCandidates 取当前有效账号识别码集合（权威源 = channel_accounts），
+// 并兼容存量渠道级码（VALID 并集）。凭证闸门运行在租户解析之前，仓储显式切系统作用域。
 func channelIdentifyCodeCandidates() []string {
 	repo := repository.NewChannelIdentifyCodeRepository()
 	codes, err := repo.ValidCodes(context.Background())
@@ -60,7 +60,7 @@ func bridgeIngressGuard(candidatesForRequest func() []string) gin.HandlerFunc {
 			// fail-closed：识别码未生成时默认拒绝。历史部署可显式 BRIDGE_INGEST_AUTH=off
 			// 恢复旧的"无鉴权放行"行为（仅限可信内网）。
 			if !strings.EqualFold(os.Getenv("BRIDGE_INGEST_AUTH"), "off") {
-				response.Error(c, 503, "桥接通道未配置渠道识别码（请先生成识别码，或显式 BRIDGE_INGEST_AUTH=off 以接受无鉴权模式）")
+				response.Error(c, 503, "桥接通道未配置账号识别码（请在账号识别码页重置，或显式 BRIDGE_INGEST_AUTH=off 以接受无鉴权模式）")
 				c.Abort()
 				return
 			}
@@ -83,7 +83,7 @@ func bridgeIngressGuard(candidatesForRequest func() []string) gin.HandlerFunc {
 			}
 		}
 		if !ok {
-			response.Error(c, 401, "渠道识别码无效")
+			response.Error(c, 401, "账号识别码无效")
 			c.Abort()
 			return
 		}

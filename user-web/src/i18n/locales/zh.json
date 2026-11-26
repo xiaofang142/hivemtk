@@ -158,25 +158,6 @@
     "noAccount": "未配置账号或连接器",
     "shopMappingMissing": "缺少可信的店铺授权映射"
   },
-  "pilotContract": {
-    "title": "试点启动基线与契约",
-    "boundary": "仅校验和保存模拟试点草稿。真实平台、商户授权、订单后置条件尚未验证，生产执行仍阻塞。",
-    "identity": "现有安装身份",
-    "tenant": "当前租户",
-    "configured": "已保存草稿",
-    "unconfigured": "未配置",
-    "empty": "未配置：填写店铺归属与授权引用、读写范围、资金上限、授权人、观察窗、回退人、单笔订单及 FA/AR/CH 关闭提交和测试证据。",
-    "blockers": "本地校验阻塞原因",
-    "draft": "PilotContract JSON 草稿",
-    "hint": "只填 fake/simulated；不要填写凭证、客户地址或隐私。工程分钟与平台审批等待分别记录。",
-    "validate": "本地校验",
-    "save": "保存草稿",
-    "retry": "重新读取",
-    "loadFailed": "读取失败，无法判定配置状态。",
-    "submitFailed": "保存或校验失败，请检查 JSON、身份与修订；修订冲突时重读后合并草稿。",
-    "saved": "草稿已保存；生产仍阻塞。",
-    "validated": "仅完成本地契约校验，未保存；生产仍阻塞。"
-  },
   "navigation": {
     "breadcrumb": "当前位置",
     "editAgent": "编辑智能体",
@@ -482,7 +463,7 @@
     "systemUser": "人员管理",
     "roleManage": "角色管理",
     "permissionManage": "授权管理",
-    "channelIdentifyCode": "渠道识别码",
+    "channelIdentifyCode": "账号识别码",
     "permissionGroup": "渠道与集成",
     "assetBundle": "资产包",
     "assetBundleList": "资产包管理",
@@ -2011,16 +1992,6 @@
           "actions": "刷新与本地撤销",
           "actionsSummary": "刷新只使用当前凭证代次，失败后重读状态。本地撤销不确认远端撤销，且保留登录会话。"
         },
-        "pilotContract": {
-          "title": "试点契约",
-          "summary": "核对现有安装与租户身份，填写模拟试点草稿并查看阻塞原因；保存不会开放生产执行权限。",
-          "identity": "身份映射",
-          "identitySummary": "安装身份只读展示，并与当前租户共同核验。",
-          "blockers": "阻塞原因",
-          "blockersSummary": "查看试点进入模拟验证前缺少的条件。",
-          "draft": "契约草稿",
-          "draftSummary": "仅填写模拟数据，不包含凭证或客户隐私。"
-        },
         "common": {
           "overview": "这一页是做什么的",
           "action": "关键操作在哪"
@@ -2960,8 +2931,7 @@
     "merchantEditorCloseNoGate": "关闭（不触发危机感门禁）",
     "merchantEditorFriendlyLegacy": "友好亲切（兼容旧版配置）"
   },
-  "dashboardScreenPage": {
-  },
+  "dashboardScreenPage": {},
   "assetMarketPage": {
     "notFound": "资产不存在，或当前部署未接入资产市场"
   },

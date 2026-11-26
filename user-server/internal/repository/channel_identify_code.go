@@ -17,7 +17,7 @@ import (
 // ErrIdentifyVersionConflict 识别码版本冲突（并发重置时 CAS 失败，调用方须重试/拒绝）。
 var ErrIdentifyVersionConflict = errors.New("识别码版本冲突")
 
-// ChannelIdentifyCodeRepository 渠道识别码仓储（权威记录）。
+// ChannelIdentifyCodeRepository 存量渠道级识别码仓储（历史兼容；账号级权威在 ChannelAccountRepository）。
 type ChannelIdentifyCodeRepository interface {
 	Available() bool
 	GetByChannel(ctx context.Context, tenantID, channelID uint) (*model.ChannelIdentifyCode, error)
@@ -127,32 +127,50 @@ func (r *channelIdentifyCodeRepo) ListByTenant(ctx context.Context, tenantID uin
 	return rows, nil
 }
 
-// ValidCodes 收集凭证闸门可接受的识别码集合：当前码无条件有效；旧码仅在
-// PrevValidUntil 落在未来时有效（在途消息窗口），窗口结束立即失效。
+// ValidCodes 收集凭证闸门可接受的识别码集合。权威来源是**账号级**识别码
+// （channel_accounts.identify_code），每个账号一枚；重置在途旧码仅在
+// PrevValidUntil 落在未来时有效。历史渠道级码（channel_identify_codes）继续
+// 作为兼容候选，保证老扩展/上报端不因账号级语义调整而 401。两者窗口过后
+// 的旧码一律失效（fail-closed）。仓储运行在租户解析之前，显式系统作用域。
 func (r *channelIdentifyCodeRepo) ValidCodes(ctx context.Context) ([]string, error) {
 	if !r.Available() {
 		return nil, ErrChannelStoreUnavailable
 	}
-	var rows []model.ChannelIdentifyCode
-	if err := dbFromCtx(tenant.WithSystemScope(ctx)).
-		Where("code <> ''").Find(&rows).Error; err != nil {
+	sysCtx := tenant.WithSystemScope(ctx)
+	now := time.Now()
+	seen := make(map[string]bool)
+	out := make([]string, 0)
+	add := func(code string) {
+		code = strings.TrimSpace(code)
+		if code != "" && !seen[code] {
+			seen[code] = true
+			out = append(out, code)
+		}
+	}
+
+	// ① 权威：账号当前码 + 账号重置在途旧码
+	var accounts []model.ChannelAccount
+	if err := dbFromCtx(sysCtx).Model(&model.ChannelAccount{}).
+		Where("identify_code <> '' OR (prev_code <> '' AND prev_valid_until > ?)", now).
+		Find(&accounts).Error; err != nil {
 		return nil, err
 	}
-	seen := make(map[string]bool, len(rows)*2)
-	out := make([]string, 0, len(rows))
-	now := time.Now()
+	for i := range accounts {
+		add(accounts[i].IdentifyCode)
+		if accounts[i].PrevValidUntil != nil && now.Before(*accounts[i].PrevValidUntil) {
+			add(accounts[i].PrevCode)
+		}
+	}
+
+	// ② 历史兼容：存量渠道级当前码 + 在途旧码（无新写入，仅供老码解析）
+	var rows []model.ChannelIdentifyCode
+	if err := dbFromCtx(sysCtx).Where("code <> ''").Find(&rows).Error; err != nil {
+		return nil, err
+	}
 	for i := range rows {
-		if c := strings.TrimSpace(rows[i].Code); c != "" && !seen[c] {
-			seen[c] = true
-			out = append(out, c)
-		}
-		old := strings.TrimSpace(rows[i].PrevCode)
-		if old == "" || seen[old] || rows[i].PrevValidUntil == nil {
-			continue
-		}
-		if now.Before(*rows[i].PrevValidUntil) {
-			seen[old] = true
-			out = append(out, old)
+		add(rows[i].Code)
+		if rows[i].PrevValidUntil != nil && now.Before(*rows[i].PrevValidUntil) {
+			add(rows[i].PrevCode)
 		}
 	}
 	return out, nil
