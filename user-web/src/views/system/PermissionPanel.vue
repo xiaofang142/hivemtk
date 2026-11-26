@@ -32,12 +32,12 @@
           :label="t('permission.targetUserId')"
           prop="userId"
         >
-          <el-input
-            v-model.number="form.userId"
-            type="number"
+          <EntitySelect
+            v-model="form.userId"
+            entity="user"
+            admin
             :placeholder="t('permission.targetUserId')"
             style="width: 240px"
-            clearable
           />
         </el-form-item>
         <el-form-item :label="t('permission.enableAccount')">
@@ -141,9 +141,16 @@
       >
         <el-table-column
           :label="t('permission.actor')"
-          prop="user_id"
-          width="100"
-        />
+          width="150"
+        >
+          <template #default="{ row }">
+            <EntityLabel
+              entity="user"
+              admin
+              :value="row.user_id"
+            />
+          </template>
+        </el-table-column>
         <el-table-column
           :label="t('common.username')"
           prop="username"
@@ -210,6 +217,8 @@ import {
   Key as _Key
 } from '@element-plus/icons-vue'
 import { setUserEnabled, resetUserPassword, listAuditLogs } from '@/api/permission'
+import EntitySelect from '@/components/EntitySelect.vue'
+import EntityLabel from '@/components/EntityLabel.vue'
 
 const { t } = useI18n()
 

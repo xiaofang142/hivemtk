@@ -23,10 +23,12 @@
             placeholder="待归档线索ID"
           />
         </el-form-item>
-        <el-form-item label="客户ID">
-          <el-input
+        <el-form-item label="客户">
+          <EntitySelect
             v-model="form.customer_id"
-            placeholder="已有客户时填写；否则用身份标识识别"
+            entity="customer"
+            placeholder="已有客户时选择；否则用身份标识识别"
+            style="width: 260px"
           />
         </el-form-item>
         <el-form-item label="身份标识">
@@ -110,7 +112,12 @@
         show-icon
       >
         <template #default>
-          <span>客户ID：{{ result.customer_id }} ｜ 已关联：{{ result.linked ? '是' : '否' }} ｜ 已通知：{{ result.notified ? '是' : '否' }}</span>
+          <span>
+            客户：<EntityLabel
+              entity="customer"
+              :value="result.customer_id"
+            /> ｜ 已关联：{{ result.linked ? '是' : '否' }} ｜ 已通知：{{ result.notified ? '是' : '否' }}
+          </span>
         </template>
       </el-alert>
     </el-card>
@@ -123,6 +130,8 @@ import { ElMessage } from 'element-plus'
 import { leadsApi } from '@/api/leads'
 import ChannelSelect from '@/components/ChannelSelect.vue'
 import ChannelAccountSelect from '@/components/ChannelAccountSelect.vue'
+import EntitySelect from '@/components/EntitySelect.vue'
+import EntityLabel from '@/components/EntityLabel.vue'
 import { useChannelCatalogStore } from '@/stores/channelCatalog'
 
 const catalog = useChannelCatalogStore()
@@ -159,7 +168,7 @@ async function submit() {
   try {
     const res = await leadsApi.archiveClue({
       clue_id: form.clue_id.trim(),
-      customer_id: form.customer_id.trim(),
+      customer_id: String(form.customer_id || '').trim(),
       identifiers: parseJson(form.identifiers, {}),
       user_info: parseJson(form.user_info, {}),
       source_channel: form.source_channel,

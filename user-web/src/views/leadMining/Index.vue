@@ -152,11 +152,14 @@
               </template>
             </el-table-column>
             <el-table-column
-              prop="account_id"
               label="账号"
-              min-width="120"
+              min-width="140"
               show-overflow-tooltip
-            />
+            >
+              <template #default="{ row }">
+                {{ catalog.accountLabel(row.account_id) || '-' }}
+              </template>
+            </el-table-column>
             <el-table-column
               label="会话"
               width="90"

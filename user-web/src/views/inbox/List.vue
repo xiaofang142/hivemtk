@@ -761,16 +761,25 @@
           min-width="110"
         >
           <template #default="{ row }">
-            {{ row.to_user_id || (row.to_sop_id ? `SOP#${row.to_sop_id}` : '-') }}
+            <EntityLabel
+              v-if="row.to_user_id"
+              entity="user"
+              :value="row.to_user_id"
+            />
+            <span v-else-if="row.to_sop_id">SOP#{{ row.to_sop_id }}</span>
+            <span v-else>-</span>
           </template>
         </el-table-column>
         <el-table-column
           prop="operator_id"
           :label="$t('操作人')"
-          min-width="100"
+          min-width="130"
         >
           <template #default="{ row }">
-            {{ row.operator_id || '-' }}
+            <EntityLabel
+              entity="user"
+              :value="row.operator_id"
+            />
           </template>
         </el-table-column>
         <el-table-column
@@ -799,6 +808,7 @@ import { http } from '@/utils/request'
 import { useUserStore } from '@/stores/user'
 import { getChannelTagType } from '@/constants/channel'
 import ChannelSelect from '@/components/ChannelSelect.vue'
+import EntityLabel from '@/components/EntityLabel.vue'
 import { useChannelCatalogStore } from '@/stores/channelCatalog'
 import i18n from '@/i18n'
 

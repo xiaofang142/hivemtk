@@ -37,10 +37,16 @@
             min-width="160"
           />
           <el-table-column
-            prop="user_id"
             label="提交人"
-            width="90"
-          />
+            min-width="140"
+          >
+            <template #default="{ row }">
+              <EntityLabel
+                entity="user"
+                :value="row.user_id"
+              />
+            </template>
+          </el-table-column>
           <el-table-column
             prop="version"
             label="版本"
@@ -275,6 +281,7 @@
 import { onMounted, ref, watch } from 'vue'
 import { isUserReportedError } from '@/utils/errorReporting'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import EntityLabel from '@/components/EntityLabel.vue'
 import {
   listEgoAdminAssets,
   listEgoAdminFlows,

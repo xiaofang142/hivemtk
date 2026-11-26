@@ -48,10 +48,16 @@
           border
         >
           <el-table-column
-            prop="user_id"
-            label="用户 ID"
-            width="120"
-          />
+            label="用户"
+            min-width="140"
+          >
+            <template #default="{ row }">
+              <EntityLabel
+                entity="user"
+                :value="row.user_id"
+              />
+            </template>
+          </el-table-column>
           <el-table-column
             prop="version"
             label="Host 版本"
@@ -123,6 +129,7 @@ import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getBrowserHostStatus, resetBrowserHostToken } from '@/api/browserAutomation'
 import HostInstallGuide from './HostInstallGuide.vue'
+import EntityLabel from '@/components/EntityLabel.vue'
 
 const hosts = ref([])
 const loading = ref(false)

@@ -36,12 +36,12 @@
             style="width: 160px"
           />
         </el-form-item>
-        <el-form-item label="负责人ID">
-          <el-input
+        <el-form-item label="负责人">
+          <EntitySelect
             v-model="filters.owner_user_id"
-            placeholder="可选"
-            clearable
-            style="width: 140px"
+            entity="user"
+            placeholder="全部负责人"
+            style="width: 180px"
           />
         </el-form-item>
         <el-form-item>
@@ -89,11 +89,14 @@
           min-width="110"
         />
         <el-table-column
-          prop="source_account_id"
           label="来源账号"
           min-width="140"
           show-overflow-tooltip
-        />
+        >
+          <template #default="{ row }">
+            {{ catalog.accountLabel(row.source_account_id) || '-' }}
+          </template>
+        </el-table-column>
         <el-table-column
           label="来源渠道"
           min-width="120"
@@ -103,10 +106,16 @@
           </template>
         </el-table-column>
         <el-table-column
-          prop="owner_user_id"
           label="负责人"
-          min-width="90"
-        />
+          min-width="120"
+        >
+          <template #default="{ row }">
+            <EntityLabel
+              entity="user"
+              :value="row.owner_user_id"
+            />
+          </template>
+        </el-table-column>
         <el-table-column
           prop="merged_into_id"
           label="合并指向"
@@ -185,10 +194,11 @@
             :channel="form.source_channel"
           />
         </el-form-item>
-        <el-form-item label="负责人ID">
-          <el-input-number
+        <el-form-item label="负责人">
+          <EntitySelect
             v-model="form.owner_user_id"
-            :min="0"
+            entity="user"
+            placeholder="请选择负责人"
           />
         </el-form-item>
         <el-form-item label="标签">
@@ -222,6 +232,8 @@ import { crmApi } from '@/api/crm'
 import WorkflowNavigation from '@/components/WorkflowNavigation.vue'
 import ChannelSelect from '@/components/ChannelSelect.vue'
 import ChannelAccountSelect from '@/components/ChannelAccountSelect.vue'
+import EntitySelect from '@/components/EntitySelect.vue'
+import EntityLabel from '@/components/EntityLabel.vue'
 import { useChannelCatalogStore } from '@/stores/channelCatalog'
 
 const catalog = useChannelCatalogStore()

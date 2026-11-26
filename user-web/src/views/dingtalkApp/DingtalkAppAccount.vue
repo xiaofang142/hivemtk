@@ -62,10 +62,21 @@
         >
           <template #default="{ row }">
             <el-tag
-              :type="row.ai_agent_id ? 'success' : 'info'"
+              v-if="row.ai_agent_id"
+              type="success"
               size="small"
             >
-              {{ row.ai_agent_id || '未绑定' }}
+              <EntityLabel
+                entity="agent"
+                :value="row.ai_agent_id"
+              />
+            </el-tag>
+            <el-tag
+              v-else
+              type="info"
+              size="small"
+            >
+              未绑定
             </el-tag>
           </template>
         </el-table-column>
@@ -222,9 +233,11 @@
           <span class="form-hint-inline">开启后接收客户发给应用的消息</span>
         </el-form-item>
         <el-form-item label="绑定 AI 智能体">
-          <el-input
+          <EntitySelect
             v-model="form.ai_agent_id"
-            placeholder="智能体 ID（可选；留空降级默认引擎）"
+            entity="agent"
+            placeholder="请选择智能体（可选；留空降级默认引擎）"
+            style="width: 100%"
           />
           <div class="form-hint">
             也可在列表点击「绑定AI」通过对话框选择。
@@ -261,6 +274,8 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import AgentBindingDialog from '@/components/AgentBindingDialog.vue'
+import EntitySelect from '@/components/EntitySelect.vue'
+import EntityLabel from '@/components/EntityLabel.vue'
 import { copyToClipboard } from '@/utils/clipboard.js'
 import { isUserReportedError } from '@/utils/errorReporting'
 import {

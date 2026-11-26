@@ -80,11 +80,12 @@
       >
         <el-row :gutter="16">
           <el-col :span="12">
-            <el-form-item label="客户 ID">
-              <el-input
+            <el-form-item label="客户">
+              <EntitySelect
                 v-model="testForm.customer_id"
+                entity="customer"
                 placeholder="可选，用于客户画像归档"
-                clearable
+                style="width: 100%"
               />
             </el-form-item>
           </el-col>
@@ -566,11 +567,11 @@
             style="width: 460px"
           />
         </el-form-item>
-        <el-form-item label="客户 ID">
-          <el-input
+        <el-form-item label="客户">
+          <EntitySelect
             v-model="fineForm.customer_id"
+            entity="customer"
             placeholder="可选"
-            clearable
             style="width: 180px"
           />
         </el-form-item>
@@ -1004,6 +1005,7 @@ import { ElMessage } from 'element-plus'
 import { Aim, MagicStick, Refresh, Loading, EditPen } from '@element-plus/icons-vue'
 import { intentApi } from '@/api/intentRecognition.js'
 import ChannelSelect from '@/components/ChannelSelect.vue'
+import EntitySelect from '@/components/EntitySelect.vue'
 import { useChannelCatalogStore } from '@/stores/channelCatalog'
 
 const catalog = useChannelCatalogStore()

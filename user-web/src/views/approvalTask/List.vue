@@ -158,10 +158,13 @@
         </el-table-column>
         <el-table-column
           label="认领人"
-          width="100"
+          min-width="130"
         >
           <template #default="{ row }">
-            {{ row.assignee_user_id || '—' }}
+            <EntityLabel
+              entity="user"
+              :value="row.assignee_user_id"
+            />
           </template>
         </el-table-column>
         <el-table-column
@@ -325,6 +328,7 @@ import { humanTaskApi } from '@/api/humanTask'
 import { approvalApi } from '@/api/approval'
 import { toList } from '@/utils/list'
 import { useUserStore } from '@/stores/user'
+import EntityLabel from '@/components/EntityLabel.vue'
 import {
   KIND_APPROVAL,
   KIND_COLLECTION,

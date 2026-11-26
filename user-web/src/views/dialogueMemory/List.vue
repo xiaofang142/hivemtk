@@ -246,8 +246,11 @@
           border
           size="small"
         >
-          <el-descriptions-item label="客户 ID">
-            {{ currentMemory.customer_id || '-' }}
+          <el-descriptions-item label="客户">
+            <EntityLabel
+              entity="customer"
+              :value="currentMemory.customer_id"
+            />
           </el-descriptions-item>
           <el-descriptions-item label="客户姓名">
             {{ currentMemory.customer_name || '-' }}
@@ -537,6 +540,7 @@ import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, Connection } from '@element-plus/icons-vue'
 import { memoryApi } from '@/api/dialogueMemory.js'
+import EntityLabel from '@/components/EntityLabel.vue'
 
 const loading = ref(false)
 const listLoading = ref(false)

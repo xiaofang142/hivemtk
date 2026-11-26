@@ -209,7 +209,12 @@
                 <span
                   v-if="item.turn.agent_id"
                   class="span-node"
-                >{{ item.turn.agent_id }}</span>
+                >
+                  <EntityLabel
+                    entity="agent"
+                    :value="item.turn.agent_id"
+                  />
+                </span>
                 <el-tag
                   size="small"
                   :type="statusType(item.turn)"
@@ -1003,6 +1008,7 @@ import { MonitorApi as monitorApi } from '@/api/monitor'
 import { fmtTime } from '@/utils/time'
 import { durationText, spanDurationText, operationTime, flattenTraceSpans, buildTraceQuery } from '@/utils/traceTiming'
 import ChannelSelect from '@/components/ChannelSelect.vue'
+import EntityLabel from '@/components/EntityLabel.vue'
 import { useChannelCatalogStore } from '@/stores/channelCatalog'
 
 const { t } = useI18n()

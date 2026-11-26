@@ -40,10 +40,16 @@
           border
         >
           <el-table-column
-            prop="user_id"
-            label="用户 ID"
-            width="100"
-          />
+            label="用户"
+            min-width="140"
+          >
+            <template #default="{ row }">
+              <EntityLabel
+                entity="user"
+                :value="row.user_id"
+              />
+            </template>
+          </el-table-column>
           <el-table-column
             prop="device_id"
             label="设备"
@@ -197,6 +203,7 @@ import {
   revokeEgoRunnerToken
 } from '@/api/egolite'
 import { fmtTime } from '@/utils/time'
+import EntityLabel from '@/components/EntityLabel.vue'
 
 const loading = ref(false)
 const runners = ref([])

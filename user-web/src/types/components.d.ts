@@ -104,6 +104,8 @@ declare module 'vue' {
     ElTree: typeof import('element-plus/es')['ElTree']
     ElTreeSelect: typeof import('element-plus/es')['ElTreeSelect']
     ElUpload: typeof import('element-plus/es')['ElUpload']
+    EntityLabel: typeof import('./../components/EntityLabel.vue')['default']
+    EntitySelect: typeof import('./../components/EntitySelect.vue')['default']
     Files: typeof import('@element-plus/icons-vue')['Files']
     KuaishouCardPreview: typeof import('./../components/KuaishouCardPreview.vue')['default']
     LanguageSwitcher: typeof import('./../components/LanguageSwitcher.vue')['default']

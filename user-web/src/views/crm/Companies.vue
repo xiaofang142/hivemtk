@@ -164,10 +164,16 @@
         empty-text="暂无关联"
       >
         <el-table-column
-          prop="customer_id"
-          label="客户ID"
+          label="客户"
           min-width="200"
-        />
+        >
+          <template #default="{ row }">
+            <EntityLabel
+              entity="customer"
+              :value="row.customer_id"
+            />
+          </template>
+        </el-table-column>
         <el-table-column
           prop="relation_type"
           label="关系类型"
@@ -196,6 +202,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { companyApi } from '@/api/company'
 import { useI18n } from 'vue-i18n'
+import EntityLabel from '@/components/EntityLabel.vue'
 
 const { t } = useI18n()
 

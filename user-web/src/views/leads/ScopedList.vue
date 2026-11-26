@@ -69,11 +69,14 @@
               min-width="110"
             />
             <el-table-column
-              prop="source_account_id"
               label="来源账号"
               min-width="140"
               show-overflow-tooltip
-            />
+            >
+              <template #default="{ row }">
+                {{ catalog.accountLabel(row.source_account_id) || '-' }}
+              </template>
+            </el-table-column>
           </el-table>
           <el-pagination
             v-if="customerTotal > limit"

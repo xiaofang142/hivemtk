@@ -302,7 +302,12 @@
         >
           <el-card shadow="never">
             <div class="event-item">
-              <span class="event-customer">{{ event.customer_id }}</span>
+              <span class="event-customer">
+                <EntityLabel
+                  entity="customer"
+                  :value="event.customer_id"
+                />
+              </span>
               <span class="event-arrow">
                 <el-tag size="small">{{ event.from_stage }}</el-tag>
                 <el-icon><Right /></el-icon>
@@ -336,9 +341,15 @@
         empty-text="该阶段暂无客户"
       >
         <el-table-column
-          prop="customer_id"
-          label="客户ID"
-        />
+          label="客户"
+        >
+          <template #default="{ row }">
+            <EntityLabel
+              entity="customer"
+              :value="row.customer_id"
+            />
+          </template>
+        </el-table-column>
       </el-table>
     </el-dialog>
   </div>
@@ -357,6 +368,7 @@ import {
   getJourneyOverview, listJourneyStages, listByStage
 } from '@/api/customerJourney.js'
 import { getRoleLabel, getRoleTagType } from '@/constants/role';
+import EntityLabel from '@/components/EntityLabel.vue'
 
 const loading = ref(false)
 const autoRefresh = ref(false)

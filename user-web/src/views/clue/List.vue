@@ -299,7 +299,7 @@
           <template #default="{ row }">
             <div>{{ catalog.channelLabel(row.source_channel) || row.source_channel || '-' }}</div>
             <div style="color:#909399;font-size:12px">
-              {{ row.source_account_id || '-' }}
+              {{ catalog.accountLabel(row.source_account_id) || '-' }}
             </div>
           </template>
         </el-table-column>

@@ -59,15 +59,17 @@
               />
             </el-form-item>
             <el-form-item label="来源账号">
-              <el-input
+              <ChannelAccountSelect
                 v-model="exportFilters.source_account_id"
-                style="width: 140px"
+                style="width: 180px"
               />
             </el-form-item>
-            <el-form-item label="负责人ID">
-              <el-input
-                v-model.number="exportFilters.owner_user_id"
-                style="width: 110px"
+            <el-form-item label="负责人">
+              <EntitySelect
+                v-model="exportFilters.owner_user_id"
+                entity="user"
+                placeholder="全部负责人"
+                style="width: 180px"
               />
             </el-form-item>
             <el-form-item label="实体">
@@ -154,6 +156,8 @@ import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { crmApi } from '@/api/crm'
+import ChannelAccountSelect from '@/components/ChannelAccountSelect.vue'
+import EntitySelect from '@/components/EntitySelect.vue'
 
 const router = useRouter()
 

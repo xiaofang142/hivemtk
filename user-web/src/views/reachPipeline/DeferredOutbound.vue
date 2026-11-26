@@ -80,13 +80,15 @@
           show-overflow-tooltip
         />
         <el-table-column
-          prop="customer_id"
-          label="客户 ID"
-          min-width="140"
+          label="客户"
+          min-width="160"
           show-overflow-tooltip
         >
           <template #default="{ row }">
-            {{ row.customer_id || '-' }}
+            <EntityLabel
+              entity="customer"
+              :value="row.customer_id"
+            />
           </template>
         </el-table-column>
         <el-table-column
@@ -191,6 +193,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { reachPipelineApi } from '@/api/reachPipeline.js'
 import ChannelSelect from '@/components/ChannelSelect.vue'
+import EntityLabel from '@/components/EntityLabel.vue'
 import { useChannelCatalogStore } from '@/stores/channelCatalog'
 
 const catalog = useChannelCatalogStore()

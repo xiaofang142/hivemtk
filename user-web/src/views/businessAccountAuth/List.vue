@@ -8,13 +8,12 @@
         <span class="page-sub">管理用户对业务账号的读/写/管理授权（PR-5）</span>
       </div>
       <div class="head-actions">
-        <el-input
+        <EntitySelect
           v-model="filters.userId"
-          placeholder="按用户ID筛选"
-          clearable
-          style="width: 180px"
-          @clear="load"
-          @keyup.enter="load"
+          entity="user"
+          placeholder="按用户筛选"
+          style="width: 220px"
+          @change="load"
         />
         <el-button
           :loading="loading"
@@ -43,10 +42,16 @@
           width="80"
         />
         <el-table-column
-          prop="user_id"
-          label="用户ID"
-          width="100"
-        />
+          label="用户"
+          min-width="150"
+        >
+          <template #default="{ row }">
+            <EntityLabel
+              entity="user"
+              :value="row.user_id"
+            />
+          </template>
+        </el-table-column>
         <el-table-column
           label="渠道"
           min-width="120"
@@ -56,11 +61,14 @@
           </template>
         </el-table-column>
         <el-table-column
-          prop="account_id"
-          label="账号ID"
+          label="账号"
           min-width="180"
           show-overflow-tooltip
-        />
+        >
+          <template #default="{ row }">
+            {{ catalog.accountLabel(row.account_id) || '-' }}
+          </template>
+        </el-table-column>
         <el-table-column
           prop="scope"
           label="权限"
@@ -115,10 +123,10 @@
           label="用户ID"
           prop="user_id"
         >
-          <el-input-number
+          <EntitySelect
             v-model="form.user_id"
-            :min="1"
-            :controls="false"
+            entity="user"
+            placeholder="请选择用户"
             style="width: 100%"
           />
         </el-form-item>
@@ -186,6 +194,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { businessAccountAuthApi } from '@/api/businessAccountAuth'
 import ChannelSelect from '@/components/ChannelSelect.vue'
 import ChannelAccountSelect from '@/components/ChannelAccountSelect.vue'
+import EntitySelect from '@/components/EntitySelect.vue'
+import EntityLabel from '@/components/EntityLabel.vue'
 import { useChannelCatalogStore } from '@/stores/channelCatalog'
 
 const catalog = useChannelCatalogStore()
@@ -203,7 +213,7 @@ const form = reactive({
 })
 
 const rules = {
-  user_id: [{ required: true, message: '请输入用户ID', trigger: 'blur' }],
+  user_id: [{ required: true, message: '请选择用户', trigger: 'change' }],
   channel: [{ required: true, message: '请输入渠道', trigger: 'blur' }],
   account_id: [{ required: true, message: '请输入账号ID', trigger: 'blur' }],
   scope: [{ required: true, message: '请选择权限范围', trigger: 'change' }],

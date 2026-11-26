@@ -474,7 +474,10 @@
               show-overflow-tooltip
             >
               <template #default="{ row }">
-                {{ row.customer_id }}
+                <EntityLabel
+                  entity="customer"
+                  :value="row.customer_id"
+                />
               </template>
             </el-table-column>
             <el-table-column
@@ -1091,15 +1094,18 @@
           :label="$t('reachPipeline.targetCustomerId')"
           prop="customer_id"
         >
-          <el-input
+          <EntitySelect
             v-model="jobForm.customer_id"
+            entity="customer"
             :placeholder="$t('reachPipeline.inputCustomerId')"
+            style="width: 100%"
           />
         </el-form-item>
         <el-form-item :label="$t('reachPipeline.accountId')">
-          <el-input
+          <ChannelAccountSelect
             v-model="jobForm.account_id"
             :placeholder="$t('reachPipeline.accountOptional')"
+            style="width: 100%"
           />
         </el-form-item>
         <el-form-item :label="$t('reachPipeline.maxRetry')">
@@ -1168,10 +1174,13 @@
           </el-tag>
         </el-descriptions-item>
         <el-descriptions-item :label="$t('reachPipeline.targetCustomer')">
-          {{ currentJob.customer_id }}
+          <EntityLabel
+            entity="customer"
+            :value="currentJob.customer_id"
+          />
         </el-descriptions-item>
         <el-descriptions-item :label="$t('reachPipeline.account')">
-          {{ currentJob.account_id || '-' }}
+          {{ catalog.accountLabel(currentJob.account_id) || '-' }}
         </el-descriptions-item>
         <el-descriptions-item :label="$t('reachPipeline.retry')">
           {{ currentJob.retry_count || 0 }}/{{ currentJob.max_retry || 0 }}
@@ -1287,6 +1296,9 @@ import {
 } from '@element-plus/icons-vue'
 import { reachPipelineApi } from '@/api/reachPipeline.js'
 import ChannelSelect from '@/components/ChannelSelect.vue'
+import ChannelAccountSelect from '@/components/ChannelAccountSelect.vue'
+import EntitySelect from '@/components/EntitySelect.vue'
+import EntityLabel from '@/components/EntityLabel.vue'
 import { useChannelCatalogStore } from '@/stores/channelCatalog'
 
 const catalog = useChannelCatalogStore()

@@ -660,10 +660,12 @@
             disabled
           />
         </el-form-item>
-        <el-form-item label="客户ID">
-          <el-input
+        <el-form-item label="客户">
+          <EntitySelect
             v-model="testForm.customer_id"
-            placeholder="请输入客户ID（可选）"
+            entity="customer"
+            placeholder="请选择客户（可选）"
+            style="width: 100%"
           />
         </el-form-item>
         <el-form-item
@@ -831,6 +833,7 @@ import { listLocalAssets } from '@/api/assetMarket'
 import { INTERNAL_LANGUAGE_OPTIONS, TARGET_LANGUAGE_OPTIONS } from '@/constants/languages'
 import { isUserReportedError } from '@/utils/errorReporting'
 import { useListEditor } from '@/composables/useListEditor'
+import EntitySelect from '@/components/EntitySelect.vue'
 
 const internalLanguageOptions = INTERNAL_LANGUAGE_OPTIONS
 const targetLanguageOptions = TARGET_LANGUAGE_OPTIONS

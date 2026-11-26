@@ -282,10 +282,12 @@
             disabled
           />
         </el-form-item>
-        <el-form-item label="客户ID">
-          <el-input
+        <el-form-item label="客户">
+          <EntitySelect
             v-model="testForm.customer_id"
-            placeholder="请输入客户ID（可选，留空使用默认上下文）"
+            entity="customer"
+            placeholder="请选择客户（可选，留空使用默认上下文）"
+            style="width: 100%"
           />
         </el-form-item>
         <el-form-item
@@ -441,6 +443,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Plus, Search, User, VideoPlay } from '@element-plus/icons-vue'
 import { listAgents, deleteAgent, toggleAgent, testAgent } from '@/api/aiAgent.js'
 import { getLanguageLabel } from '@/constants/languages'
+import EntitySelect from '@/components/EntitySelect.vue'
 import { usePermissionStore } from '@/stores/permission'
 
 const router = useRouter()

@@ -80,10 +80,16 @@
             {{ STATUS_LABELS[draft.status] || draft.status }}
           </el-descriptions-item>
           <el-descriptions-item label="客户">
-            <span class="mono">{{ draft.customer_id }}</span>
+            <EntityLabel
+              entity="customer"
+              :value="draft.customer_id"
+            />
           </el-descriptions-item>
           <el-descriptions-item :label="t('businessCopy.orderDraft.owner')">
-            <span class="mono">{{ draft.owner_id || '—' }}</span>
+            <EntityLabel
+              entity="user"
+              :value="draft.owner_id"
+            />
           </el-descriptions-item>
           <el-descriptions-item label="产品">
             {{ draft.product_name }}
@@ -227,6 +233,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { orderDraftApi } from '@/api/orderDraft'
+import EntityLabel from '@/components/EntityLabel.vue'
 import { useUserStore } from '@/stores/user'
 import { useI18n } from 'vue-i18n'
 

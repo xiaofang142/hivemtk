@@ -149,7 +149,10 @@
           width="140"
         >
           <template #default="{ row }">
-            <span class="mono">{{ row.customer_id }}</span>
+            <EntityLabel
+              entity="customer"
+              :value="row.customer_id"
+            />
           </template>
         </el-table-column>
         <el-table-column
@@ -258,6 +261,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { orderDraftApi } from '@/api/orderDraft'
+import EntityLabel from '@/components/EntityLabel.vue'
 import { useUserStore } from '@/stores/user'
 import { useI18n } from 'vue-i18n'
 

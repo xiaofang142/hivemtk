@@ -221,7 +221,7 @@
                 size="small"
                 class="account-tag"
               >
-                {{ account.account_id }}
+                {{ catalog.accountLabel(account.account_id) || account.account_id }}
                 <el-icon
                   v-if="account.is_primary"
                   class="primary-icon"

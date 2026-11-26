@@ -286,14 +286,13 @@
             <div class="card-header">
               <span>执行记录列表</span>
               <div class="header-controls">
-                <el-input
+                <EntitySelect
                   v-model="execFilter.customer_id"
-                  placeholder="客户 ID"
-                  clearable
+                  entity="customer"
+                  placeholder="按客户筛选"
                   size="small"
-                  style="width: 160px"
-                  @keyup.enter="onExecSearch"
-                  @clear="onExecSearch"
+                  style="width: 200px"
+                  @change="onExecSearch"
                 />
                 <el-select
                   v-model="execFilter.status"
@@ -344,7 +343,12 @@
               min-width="140"
             >
               <template #default="{ row }">
-                {{ row.customer_id || row.customer_name || '-' }}
+                <span v-if="row.customer_name">{{ row.customer_name }}</span>
+                <EntityLabel
+                  v-else
+                  entity="customer"
+                  :value="row.customer_id"
+                />
               </template>
             </el-table-column>
             <el-table-column
@@ -792,7 +796,12 @@
               {{ currentExecution.id || currentExecution.execution_id || '-' }}
             </el-descriptions-item>
             <el-descriptions-item label="客户">
-              {{ currentExecution.customer_id || currentExecution.customer_name || '-' }}
+              <span v-if="currentExecution.customer_name">{{ currentExecution.customer_name }}</span>
+              <EntityLabel
+                v-else
+                entity="customer"
+                :value="currentExecution.customer_id"
+              />
             </el-descriptions-item>
             <el-descriptions-item label="SOP 名称">
               {{ currentExecution.sop_name || currentExecution.sop_id || '-' }}
@@ -854,12 +863,14 @@
           />
         </el-form-item>
         <el-form-item
-          label="客户 ID"
+          label="客户"
           required
         >
-          <el-input
+          <EntitySelect
             v-model="executeForm.customer_id"
-            placeholder="请输入客户 ID"
+            entity="customer"
+            placeholder="请选择客户"
+            style="width: 100%"
           />
         </el-form-item>
         <el-form-item label="上下文">
@@ -894,6 +905,8 @@ import { ref, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Plus, Delete, Search } from '@element-plus/icons-vue'
 import { sopApi } from '@/api/sopAgent.js'
+import EntitySelect from '@/components/EntitySelect.vue'
+import EntityLabel from '@/components/EntityLabel.vue'
 
 const loading = ref(false)
 const activeMainTab = ref('manage')

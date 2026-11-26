@@ -52,8 +52,11 @@
         :column="3"
         border
       >
-        <el-descriptions-item label="客户ID">
-          {{ view.customer_id }}
+        <el-descriptions-item label="客户">
+          <EntityLabel
+            entity="customer"
+            :value="view.customer_id"
+          />
         </el-descriptions-item>
         <el-descriptions-item label="姓名">
           {{ view.profile?.basic_info?.user_name || '-' }}
@@ -62,7 +65,7 @@
           {{ view.profile?.basic_info?.industry || '-' }}
         </el-descriptions-item>
         <el-descriptions-item label="来源账号">
-          {{ view.profile?.basic_info?.source_account_id || '-' }}
+          {{ catalog.accountLabel(view.profile?.basic_info?.source_account_id) || '-' }}
         </el-descriptions-item>
         <el-descriptions-item label="联系人">
           {{ (view.contacts || []).length }}
@@ -206,10 +209,13 @@
           min-width="110"
         />
         <el-table-column
-          prop="source_account_id"
           label="来源账号"
           min-width="140"
-        />
+        >
+          <template #default="{ row }">
+            {{ catalog.accountLabel(row.source_account_id) || '-' }}
+          </template>
+        </el-table-column>
       </el-table>
       <div class="cross-tab">
         <el-tag
@@ -218,7 +224,7 @@
           size="small"
           style="margin: 2px"
         >
-          {{ c.industry || '未分类' }} / {{ c.source_account_id || '无账号' }}: {{ c.count }}
+          {{ c.industry || '未分类' }} / {{ catalog.accountLabel(c.source_account_id) || '无账号' }}: {{ c.count }}
         </el-tag>
       </div>
     </el-card>
@@ -231,8 +237,12 @@ import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { crmApi } from '@/api/crm'
 import { useI18n } from 'vue-i18n'
+import EntityLabel from '@/components/EntityLabel.vue'
+import { useChannelCatalogStore } from '@/stores/channelCatalog'
 
 const { t } = useI18n()
+const catalog = useChannelCatalogStore()
+catalog.ensure()
 
 const route = useRoute()
 const customerId = ref(String(route.params.id || ''))
