@@ -1117,3 +1117,17 @@ follow_user_channels 扩为八渠道（生产库实值已更新）。链 B 从�
 - `/leads/rules` global 行标「全局（历史）」且编辑按钮 disabled；新增弹窗 scope 选项仅 渠道/账号（evaluate 读 `.el-select-dropdown__item` 仅这两项）。截图 `t01-rules-after.png`。
 - API：`GET/POST /api/lead-mining/config` → 404；`POST /api/manage/leads/rules` scope=global → 400 `INVALID_PARAM_1001`；`GET` rules 200（4 条 account + 1 条存量 global 未被解析使用）。
 - 观察项：`GET /api/channels/catalog` 409 `DUPLICATE_ENTRY_3003`（存量渠道目录重复，与本任务无关，未改）。
+
+## 2026-11-26 22:1x 链 A + 链 D — 渠道账号发送者标记落地并修复 catalog 409（HEAD `c2f9de425`）
+
+**变更**：新增渠道账号的「自他判断名称（上报发送者标记）」——复用 `channel_accounts.self_identify_name`（无新增列/无 migration），catalog DTO 透出；身份判定新增 `IdentifySpeakerWithSenderName` 弱证据（仅名称精确匹配且同租户无歧义时提升 self，绝不判 customer，缺/歧义 fail-closed），`ChannelIdentity` 增 `Evidence` 字段供审计；`GetByCode` 补 `tenant.WithSystemScope` 修复 catalog 409。前端账号管理列表加「发送者标记」列（空值显示「未设置标记」）、表单字段改为发送者标记 + 必填校验；9 语言包同步且清理孤儿词条。commit `c2f9de425`，push `gitee-upstream` + `upstream`。
+
+**验证**：eslint 0 error / 5 warning（本轮文件 0 warning）；vitest 147 files / 1339 tests 全绿；i18n 覆盖门 ✅（孤儿 0）；layer-boundary 0 处；architecture 10/10 ✅；`go build ./...` + `go vet ./...` 通过；T03 定向 go test（`channel_getbycode_tenant_test.go`、`channel_identity_sender_name_test.go` 5 例）全绿。
+
+**发布门说明**：链 A 全量 `go test` 首次 BLOCK——8 个失败全部落在 lead-mining/migration（`TestFullMigrationChainUpThenRollback` v3.116.0 xhs_web enum、`TestE2EInventoryMatchesLiveRoutes` lead-mining/config 清单行、6 个 lead 用例）。隔离重跑仍失败，且在**不含 T03 变更**的上次发布基线 `71623f75e` 用同一测试密码逐字复现 ⇒ 存量问题，与 T03 无关。按部署脚本文档化 `--skip-tests` 显式跳过（不谎报测试通过），T03 本身测试证据单列如上。
+
+**发布**：
+- 链 A：`./deploy/deploy-api.sh --skip-tests` 成功。线上二进制 sha256 `08bae73ef5a71037…`，运行镜像 `8d9c8c7ca0e20fce29d`，容器启动 `2026-11-26T14:14:44Z`，回滚点镜像 `mtk-user-server:rollback-20261126-221352` / 二进制 `user-server.bak-20261126-221352`，容器内 + 公网 health 200，默认口令探针 GREEN。
+- 链 D：`user-web npm run build` buildId `c2f9de425-1795702549986`；备份 `user-web.snapshot-20261126-221602.tgz` 后 rsync dist → `/www/wwwroot/hivemtk/user-web/`（`.user.ini` 宝塔保护文件告警无害）；公网 `index-CCCR9QS4.js` 与本地 index.html 一致，asset HTTP 200，version.json buildId 一致。
+
+**线上核验（ego-browser TaskSpace `hivemtk-online`）**：见本文件末尾 T03 线上核验段（catalog 200、managed 账号带标记、表单逐元素点验）。
