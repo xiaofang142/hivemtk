@@ -47,4 +47,11 @@ describe('独立渠道模块', () => {
     expect(wrapper.find('[data-testid="accounts-content"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="codes-content"]').exists()).toBe(false)
   })
+
+  it('T08：渠道模块为左侧导航 + 右侧内容的左右分栏', async () => {
+    await openModule(['/channels/manage', '/channels/accounts', '/channels/identify-codes'], '/channels/accounts')
+    expect(wrapper.get('[data-testid="channels-tabs"]').classes()).toContain('el-tabs--left')
+    // 内容组件必须落在 el-tabs 的默认插槽里，左栏导航才与右栏表格并列。
+    expect(wrapper.get('[data-testid="channels-tabs"]').find('[data-testid="accounts-content"]').exists()).toBe(true)
+  })
 })

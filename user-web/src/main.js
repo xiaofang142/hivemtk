@@ -10,6 +10,12 @@ import { isUserReportedError } from './utils/errorReporting'
 import i18n from './i18n'
 import { applyDirection } from './i18n/locale'
 import { initWebVitals } from './utils/webVitalsMonitor'
+import { normalizeChannelHashDeepLink } from './utils/hashDeepLink'
+
+// T08：裸 /channels/... 深链在 hash 路由下会被忽略并落到默认页（实测为
+// #/messageHub/list，用户看到的是"访问报错/页面打不开"）。必须在 router 首次
+// 导航前归一化；只处理 /channels/ 前缀，保留 query，不会循环（见 util 注释）。
+normalizeChannelHashDeepLink(window.location)
 
 // Element Plus 图标改为按需自动导入：
 //   - 由 vite.config.js 中的 unplugin-vue-components + ElementPlusResolver 在编译期
