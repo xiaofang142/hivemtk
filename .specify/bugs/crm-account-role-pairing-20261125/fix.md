@@ -61,3 +61,15 @@
 - f030-navfix 全部 13 项门禁于 14:58:44 通过，14:58:46 独立核验全绿：195 个 Go 包完整覆盖，39 项必需回归及子用例全部通过，前端精确 147 文件、1,336/1,336 用例通过，零失败/待定，源码与已测快照一致。
 - 122 条可选 Go 测试跳过与 audit SKIP 仍按限制保留，不记为已验证。图谱已刷新全部跟踪源码，仅可选问题排序采用 64 点采样；两道凭证门均通过且零私有真值残留。
 - 证据为 crm24-integrated-final-gates-f030-navfix-20261126.json、crm24-integrated-verified-f030-navfix-20261126.json 等原始文件。双远端最新提交仅增加九行台账；保留 71 个归属路径和源码指纹后继续提交、双推、API 链 A（启用测试）、SPA 链 D 与线上只读验收，尚未关闭任务。
+
+## 2026-11-26 CRM24 正式发布与只读验收完成
+
+- 正式源码：`b60564342489ba89540cdac64607fa79cdfd95f2`；本地 master 已提交并同步双远端，发布与验收均对应同一源码。
+- API 链 A：默认测试开启，正式脚本退出码 0；开始 `2026-11-26T15:06:25`，完成 `2026-11-26T15:30:25`；独立产物/容器/运行进程/健康检查等 13 项全部通过。
+- API 二进制 SHA-256：`6c27c7507615694029674037c6fce31aefa57a343ad2986a986772aaaf43bfb1`；镜像 `sha256:075feead39feb41ca11ab7f562c7cf1e64a95ad1fd065e9d1978c917933c4a3f`；容器启动 `2026-11-26T07:30:14.371894627Z`。
+- API 回滚点：`mtk-user-server:rollback-20261126-150626`；二进制备份 `/www/wwwroot/hivemtk/user-server/user-server.bak-20261126-150626`；默认口令探针拒绝默认凭据。
+- SPA 链 D：构建 `b60564342-1795678239997`；主资源 `assets/index-BFR_IG4d.js`；备份 `/www/wwwroot/hivemtk/user-web.snapshot-20261126-153047.tgz`；704 个宿主产物逐个摘要一致，公网入口/版本/worker/主资源摘要一致，6 项检查全部通过。
+- 生产只读验收：`2026-11-26T07:30:52.267Z`，9/9 项 HTTP 200 且业务 code=0；覆盖当前用户、客户列表/详情/360、联系人、供应商、服务商、合并审计及跨行业列表。
+- 验证边界：生产使用现有管理员会话做只读冒烟；受限账号授权矩阵以本地 PostgreSQL 必跑回归为证。未执行会写操作审计的导出 GET、dedupe POST 或客户写接口。
+- 完整回归证据继续有效：13 道综合门、195 个 Go 包终态、39 项必跑回归及子用例、147 个前端文件/1,336 用例；122 项可选 Go SKIP 与审计 SKIP 保留未验证说明。源码图完整，问题排序的 64 节点抽样不等于完整中心性计算。
+- 原始证据：`crm24-official-api-deploy-20261126.json`、`crm24-production-deployment-verification-20261126.json`、`crm24-production-frontend-deployment-verification-20261126.json`、`crm24-production-readonly-acceptance-20261126.json`。
