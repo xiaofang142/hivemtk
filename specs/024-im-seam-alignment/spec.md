@@ -96,7 +96,7 @@ func RegisteredSenders() []channelSender      // 供文档生成与 parity 测�
 - **两张注册表（二次审核补）**：sender 依赖 `WebhookService` 的集成单例与仓储（QQ 的 `msg_seq` 计数器必须跨调用存活），
   若只在 `NewWebhookService` 里逐实例注册，`RegisteredSenders()` 会随装配顺序漂移，parity 测试与文档生成失去稳定基准。
   故：静态工厂表 `var senderFactories = map[WebhookChannel]func(*WebhookService) channelSender`（编译期可枚举）
-  + 实例注册表（`NewWebhookService` 遍历工厂表构建，供热路径 `ChannelSenderOf`），两表键集由同一测试校验相等。
+  \+ 实例注册表（`NewWebhookService` 遍历工厂表构建，供热路径 `ChannelSenderOf`），两表键集由同一测试校验相等。
 - **parity 门禁**：`webhookInboundCapable` 里的每个渠道 + `channelgw.Default` 的每个渠道，都必须能查到
   sender，否则测试红。这条门禁替代「靠人记得改 switch」。
 

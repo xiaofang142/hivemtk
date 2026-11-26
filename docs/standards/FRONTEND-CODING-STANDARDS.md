@@ -138,7 +138,7 @@ user-web/bridge/
   `serverUrl` 是运行时用户可配的（`core/config-store.js`，落 `chrome.storage`），自建部署的
   user-server 可在任意域名/端口——收敛到平台域枚举会让 background 对自定义 server 的
   `fetch` 全部 403，等于打断 BYO-server 部署。注入面已由 `SUPPORTED_HOSTS`（injector.js）
-  + manifest matches 双层限定，数据面由 http-relay 端点白名单（固定 4 个 `/api/bridge/*`、
+  \+ manifest matches 双层限定，数据面由 http-relay 端点白名单（固定 4 个 `/api/bridge/*`、
   `sender.id === chrome.runtime.id`、HTTPS、主框架）兜住；manifest 无 `externally_connectable`，
   网页不可直达。若未来确要收敛，路径是一次架构变更：`optional_host_permissions` +
   popup 填自定义 server 时 `chrome.permissions.request`（用户手势期授权）+ 中转层目标

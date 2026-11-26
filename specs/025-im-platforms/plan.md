@@ -83,7 +83,7 @@ M-2/M-3 与平台批共享 `internal/channelcaps/manifests.go` 与渲染文件�
 - M-2：`Manifest` 新增 `MaxAttachments`/`MaxAttachmentBytes`/`AttachmentEvidence` + `AttachmentLimitOf`；
   21 条 manifest 逐条登记（桥接渠道经 `bridge()` 闭包共享），`AttachmentEvidence` 全部非空；
   防漂移测试 `TestEveryManifestDeclaresAttachmentLimit`（负值/空证据红，入站媒体渠道的 0 上限必须解释）
-  + `TestAttachmentLimitOf`；能力表增「附件数/附件上限/附件取证」三列并由 `TestCapabilityDocFreshness` 钉死。
+  \+ `TestAttachmentLimitOf`；能力表增「附件数/附件上限/附件取证」三列并由 `TestCapabilityDocFreshness` 钉死。
   校验落点仍是渠道客户端（inbox_ingress / channelbot），本次只声明不拦截。
 - M-3：`RenderForChannel` 在格式转换前调 `normalizeOutboundText`：代码围栏外清硬换行行尾反斜杠
   （奇数个才清，`C:\\tmp` 这类成对反斜杠不动）、还原 `\---`/`\***`/`\___` 转义分隔线、
