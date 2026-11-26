@@ -1170,3 +1170,15 @@ follow_user_channels 扩为八渠道（生产库实值已更新）。链 B 从�
 - 平台种子：按真实部署布局手工交叉编译并替换二进制 sha256 `26f7387ac468f81809bbe5cdb108e0d083180426c1ac6916ed115f2ea53270e5`，备份 `platform-server.prev-T04-20261126-231415` / 镜像 `mtk-platform-server:rollback-t04-20261126-231415`；容器 running，公网 `/api/health` 200；未调用 seed 接口（避免覆盖运营自定义菜单绑定），新种子随二进制内嵌。
 
 **线上核验（ego-browser space 88 施工 / 89 主智能体独立复算）**：`GET /api/menus` 200 且全文无 `platformAccount`/`/platformAccount/list`、`channelAccount` 存在；`GET /api/channels/catalog` 200；五条深链显式导航实测重定向：`#/platformAccount/list`→`#/channels/accounts`、`#/telegram`→`#/telegram/account`、`#/qq`→`#/qq/account`、`#/whatsapp`→`#/whatsapp/account`、`#/feishu`→`#/feishu/account`。截图 `t04-channels-accounts.png` / `t04-verify-channels-accounts.png`。
+
+## 2026-11-27 00:1x–00:2x 链 D — T06 全站外键下拉化与关联值渲染（HEAD `fa946e7a8`）
+
+**变更**：新增复用层 `useEntityOptions.js` / `EntitySelect.vue` / `EntityLabel.vue`（用户/管理员用户/智能体/客户四类选项源，60s 缓存 + single-flight + 空数据兜底），逐页改造 29 个视图的外键表单（裸输入→下拉）与列表列（裸 id→名称（#id）），渠道/账号沿用 T03/T04 权威 catalog。`system/TraceMonitor.vue` 的 `account_id` 查询框保留裸输入（需支持历史/未知账号，单测守护），外部系统标识（MCP client_id、平台原生账号 id、会话访客 id 等）按判据不改。仅 user-web 改动，无后端/平台菜单变更。
+
+**主智能体验收修正**：线上逐元素复核发现后端 bigint 列返回字符串 `"10"`、catalog 账号 id 是数字 `10`，Element Plus 严格相等匹配失败导致编辑弹窗显示裸 `10`、未关联负责人显示裸 `0`。新增 `src/utils/selectValue.js` 按选项类型归一化展示值（0/'0' 显示占位符），同步修正 `EntitySelect` / `ChannelAccountSelect`，补 5 例单测。提交 `8c5d006d5`（主体 32 files）+ `fa946e7a8`（修正 4 files），双远端均 fa946e7a8。
+
+**验证**：user-web vitest 150 files / 1351 tests 全绿（含新增 5 例与 T04/T05 既有契约）；`npm run build` 成功（PWA 709 entries）；eslint 对改动文件 0 error/0 warning；后端未改，无链 A/B/C。grep 复核视图中已无 `el-input` 直绑外键字段，剩余 `{{ ...customer_id }}` 为「名称优先 + 辅助 ID」或外部标识例外。
+
+**发布（链 D 两次同步，最终指纹）**：首次快照 `user-web.snapshot-20261127-001836.tgz`（主体验证用），修正后快照 `user-web.snapshot-20261127-002647.tgz`；rsync `--delete` 的 `.user.ini` Operation not permitted 为宝塔保护文件告警（rc=23），无害。最终 buildId `fa946e7a8-1795710401769`、入口 `assets/index-B6kdk7Z9.js`；index.html SHA-256 `6588e33649c451897e7ea7bbc3b37ceaf19e9b0e88d29e191f951dc25265f7c0`，本地/远端/公网三处一致，入口资源与 version.json 均一致，`?t=` 穿透缓存核验。
+
+**线上核验（ego-browser space 93，逐元素显式操作）**：`#/crm/list` 列表「来源账号」显示「四川同咨微信账号」、「来源渠道」显示「微信」；首行「编辑」弹窗中来源账号显示关联名称（修正前为裸 `10`）、负责人显示「请选择负责人」（修正前为裸 `0`）、账号下拉仅一项「四川同咨微信账号」；`#/businessAccountAuth/list`「新增授权」弹窗用户下拉显示「四川同咨科技有限公司（#18）」；两次弹窗均以「取消」关闭、未写库。
