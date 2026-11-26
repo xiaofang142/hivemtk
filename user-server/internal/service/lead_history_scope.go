@@ -21,6 +21,10 @@ type leadHistoryScope struct {
 	channelID  uint
 	accountKey string
 	sourceRef  string
+	// leadMiningAgentID 是本账号绑定的线索发现智能体（FR-026）。
+	// 有效配置快照据此读取智能体的 model/persona/system_prompt，
+	// 让账号级智能体配置真正进入线索发掘判定，而不是死配置。
+	leadMiningAgentID uint
 }
 
 type leadHistoryScopeKey struct{}
@@ -77,6 +81,9 @@ func (s *Service) historyScope(ctx context.Context, hub *model.MessageHub) (*lea
 		return nil, err
 	}
 	scope.accountID, scope.channelID = acc.ID, acc.ChannelID
+	if acc.LeadMiningAgentID != nil {
+		scope.leadMiningAgentID = *acc.LeadMiningAgentID
+	}
 	id := strconv.FormatUint(uint64(acc.ID), 10)
 	scope.accountKey = "id:" + id
 	// 逐个引用重新自证；共享识别码/同名账号不进入查询集合。

@@ -35,9 +35,25 @@
 
     <el-tabs v-model="activeTab">
       <el-tab-pane
-        label="发掘设置"
+        label="账号级配置"
+        name="matrix"
+      >
+        <AccountMatrix />
+      </el-tab-pane>
+      <el-tab-pane
+        label="全局默认（兜底）"
         name="setting"
       >
+        <el-alert
+          type="warning"
+          :closable="false"
+          show-icon
+          class="mb16"
+        >
+          <template #title>
+            这里只配置全局兜底值：账号或渠道已有规则时，真实命中的关键词/启用状态取账号级规则（见「账号级配置」tab），改这里不会影响它们。
+          </template>
+        </el-alert>
         <el-card shadow="never">
           <el-form
             :model="form"
@@ -935,8 +951,9 @@ import {
   getLeadMiningNotifyRoutes, createLeadMiningNotifyRoute, deleteLeadMiningNotifyRoute
 } from '@/api/leadMining'
 import { clueApi } from '@/api/clue'
+import AccountMatrix from './AccountMatrix.vue'
 
-const activeTab = ref('setting')
+const activeTab = ref('matrix')
 const saving = ref(false)
 const keywordsText = ref('')
 const tagsText = ref('')

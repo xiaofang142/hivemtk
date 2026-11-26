@@ -185,6 +185,9 @@ type LeadJudgeContext struct {
 	ReactDegraded bool
 	// SharedBusiness LEAD-04：自动回复侧写入的标签/备注/摘要，进入判定模型请求。
 	SharedBusiness SharedBusinessInput
+	// AgentSnapshot FR-026：本次冻结的线索发现智能体配置（与 gate/判定同版本）。
+	// 智能体的 system_prompt / persona 据此进入判定提示，model 用于计量归因。
+	AgentSnapshot *LeadMiningConfigSnapshot
 }
 
 // leadReactHook 由装配点注入 ReAct 取证循环；未注入时判定走既有主链（向后兼容）。
@@ -322,6 +325,16 @@ func buildLeadJudgeSystemPrompt(jctx *LeadJudgeContext) string {
 		}
 		if len(jctx.Rule.SemanticKeywords) > 0 {
 			b.WriteString("【语义关键词】" + strings.Join([]string(jctx.Rule.SemanticKeywords), "、") + "\n")
+		}
+	}
+	// FR-026：账号级线索发现智能体的人设/系统提示必须真正进入判定模型请求。
+	// 没有绑定智能体时不输出该段，保持存量租户行为不变。
+	if jctx.AgentSnapshot != nil {
+		if strings.TrimSpace(jctx.AgentSnapshot.LeadAgentPersona) != "" {
+			b.WriteString("【线索发现智能体人设】" + strings.TrimSpace(jctx.AgentSnapshot.LeadAgentPersona) + "\n")
+		}
+		if strings.TrimSpace(jctx.AgentSnapshot.LeadAgentPrompt) != "" {
+			b.WriteString("【线索发现智能体系统提示】" + strings.TrimSpace(jctx.AgentSnapshot.LeadAgentPrompt) + "\n")
 		}
 	}
 	// P0-d / D8：历史摘要（ConversationContext.Summary）是 compaction 产物，

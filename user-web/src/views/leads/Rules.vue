@@ -36,6 +36,16 @@
       owner="/leads/rules"
       :links="workflowLinks"
     />
+    <el-alert
+      type="info"
+      :closable="false"
+      show-icon
+      class="mb12"
+    >
+      <template #title>
+        命中优先级：账号（account） &gt; 渠道（channel） &gt; 全局（global），取第一条启用的规则即停止；账号级 scope_id 是渠道账号 ID，渠道级是渠道 ID。
+      </template>
+    </el-alert>
     <el-card shadow="never">
       <el-table
         v-loading="loading"
@@ -55,7 +65,10 @@
           width="100"
         >
           <template #default="{ row }">
-            <el-tag size="small">
+            <el-tag
+              size="small"
+              :type="scopeTag(row.scope)"
+            >
               {{ scopeLabel(row.scope) }}
             </el-tag>
           </template>
@@ -222,6 +235,10 @@ function scopeLabel(scope) {
   return { global: '全局', channel: '渠道', account: '账号' }[scope] || scope
 }
 
+function scopeTag(scope) {
+  return { account: 'success', channel: 'warning', global: '' }[scope] || 'info'
+}
+
 function join(list) {
   return Array.isArray(list) ? list.join('、') : ''
 }
@@ -307,4 +324,5 @@ onMounted(fetchList)
 .page-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .page-title { margin: 0; font-size: 18px; }
 .page-sub { color: #909399; font-size: 12px; }
+.mb12 { margin-bottom: 12px; }
 </style>

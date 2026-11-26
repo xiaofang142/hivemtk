@@ -71,6 +71,15 @@
           min-width="120"
         />
         <el-table-column
+          label="绑定账号"
+          min-width="180"
+          show-overflow-tooltip
+        >
+          <template #default="{ row }">
+            {{ boundAccountLabel(row.id) }}
+          </template>
+        </el-table-column>
+        <el-table-column
           prop="status"
           label="状态"
           width="100"
@@ -166,7 +175,9 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { leadMiningAgentApi } from '@/api/leadMiningAgent'
+import { channelAccountApi } from '@/api/channelAccount'
 
+const boundAccounts = ref([])
 const loading = ref(false)
 const saving = ref(false)
 const rows = ref([])
@@ -182,11 +193,28 @@ function emptyForm() {
   Object.assign(form, { name: '', description: '', agent_mode: '', persona: '', system_prompt: '', llm_model: '', status: 1 })
 }
 
+function boundAccountLabel(agentID) {
+  const names = boundAccounts.value
+    .filter((a) => Number(a.lead_mining_agent_id) === Number(agentID))
+    .map((a) => a.name)
+  return names.length ? names.join('、') : '未绑定'
+}
+
+async function loadBoundAccounts() {
+  try {
+    const res = await channelAccountApi.listAccounts()
+    boundAccounts.value = Array.isArray(res?.list) ? res.list : (Array.isArray(res) ? res : [])
+  } catch {
+    boundAccounts.value = []
+  }
+}
+
 async function fetchList() {
   loading.value = true
   try {
     const res = await leadMiningAgentApi.listAgents({ keyword: keyword.value || undefined })
     rows.value = Array.isArray(res?.list) ? res.list : (Array.isArray(res) ? res : [])
+    await loadBoundAccounts()
   } catch (e) {
     ElMessage.error(e?.message || '加载智能体失败')
   } finally {

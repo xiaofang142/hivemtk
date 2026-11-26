@@ -608,9 +608,12 @@ func (s *Service) process(ctx context.Context, hub *model.MessageHub, force ...b
 
 	// LM-07：同一分析冻结一份有效配置快照，gate/判定/持久化共用；
 	// 解析/查询故障 fail-closed，不再静默放大到全局启用或混用新旧版本。
+	// FR-026：把本账号绑定的线索发现智能体传给解析器，让智能体的
+	// model/persona/system_prompt 真正进入本次快照与判定提示。
+	var agentSnapshot *LeadMiningConfigSnapshot
 	if s.configResolver != nil {
 		target := s.processRuleTarget(ctx, hub)
-		snap, snapErr := s.configResolver.Resolve(ctx, target)
+		snap, snapErr := s.configResolver.Resolve(ctx, target, s.processLeadAgentID(ctx, hub))
 		if snapErr != nil || snap == nil {
 			logger.Warnf("[lead-mining] 有效配置解析失败，fail-closed 不发掘 account=%s: %v", hub.AccountID, snapErr)
 			return
@@ -623,6 +626,7 @@ func (s *Service) process(ctx context.Context, hub *model.MessageHub, force ...b
 		if snap.MinIntentScore > gate.minIntentScore {
 			gate.minIntentScore = snap.MinIntentScore
 		}
+		agentSnapshot = snap
 		cfg = applyLeadMiningSnapshotToConfig(cfg, snap)
 	}
 
@@ -648,6 +652,9 @@ func (s *Service) process(ctx context.Context, hub *model.MessageHub, force ...b
 	// 仍走原 Judge 路径，不改变既有测试契约。
 	judgementID := fmt.Sprintf("lmj_%d", time.Now().UnixNano())
 	jctx := s.buildLeadJudgeContext(ctx, hub, history, judgementID)
+	// FR-026：冻结的线索智能体快照与判定共用同一版本，防止配置切换时
+	// 网关走了新智能体、判定提示却还是旧智能体的 system_prompt。
+	jctx.AgentSnapshot = agentSnapshot
 	// LM-12：真实消息级快照与提示词共用同一批 hub 行；伪造/合成 ID 不在快照内。
 	jctx.Evidence = NewLeadEvidenceSnapshot(s.fetchHistoryEvidence(ctx, hub))
 	ctx = withLeadReactTask(ctx, buildLeadReactTask(ctx, hub, jctx, scope))
@@ -770,6 +777,20 @@ func (s *Service) processRuleTarget(ctx context.Context, hub *model.MessageHub) 
 		target.ChannelID = scope.channelID
 	}
 	return target
+}
+
+// processLeadAgentID 取本条消息所属渠道账号绑定的线索发现智能体 ID（FR-026）。
+// 账号解析失败/歧义时返回 0：解析器退化为仅用三粒度规则字段，不阻断发掘主链。
+// historyScope 在同一次分析内按 context 缓存，重复调用不会重复查库。
+func (s *Service) processLeadAgentID(ctx context.Context, hub *model.MessageHub) uint {
+	if s == nil || hub == nil {
+		return 0
+	}
+	scope, err := s.historyScope(ctx, hub)
+	if err != nil || scope == nil {
+		return 0
+	}
+	return scope.leadMiningAgentID
 }
 
 // buildDegradedJudgement 二次 LLM 不可用时的确定性降级判定。

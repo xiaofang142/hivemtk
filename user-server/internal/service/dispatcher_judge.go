@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"hivemtk-user/internal/aiagent/llm"
@@ -62,6 +63,11 @@ func (j *leadReactDispatcherJudge) JudgeWithContext(ctx context.Context, jctx *L
 	req := llm.DispatchRequest{
 		Scenario: llm.ScenarioLowCost, SystemPrompt: buildLeadJudgeSystemPrompt(jctx),
 		Messages: messages, MaxTokens: 1024, Temperature: 0.2, JSONMode: true,
+	}
+	// FR-026：线索发现智能体 ID 进入用量归因，平台垫资模型能看清哪个账号的
+	// 哪个线索智能体消耗了 token（自带 Key 路径不读该字段，存量零影响）。
+	if jctx.AgentSnapshot != nil && jctx.AgentSnapshot.LeadAgentID > 0 {
+		req.AgentID = strconv.FormatUint(uint64(jctx.AgentSnapshot.LeadAgentID), 10)
 	}
 	var jd LeadJudgement
 	if _, err := dispatcher.DispatchStructured(ctx, req, &jd); err != nil {

@@ -146,9 +146,10 @@ type LeadMiningConfigSnapshot struct {
 	Requirement     string
 	MinIntentScore  int
 	Model           string
-	LeadAgentID     uint
-	LeadAgentMode   string
-	LeadAgentPrompt string
+	LeadAgentID      uint
+	LeadAgentMode    string
+	LeadAgentPersona string
+	LeadAgentPrompt  string
 }
 
 // Matches 判断两份快照是否为同一冻结版本（按 Version 精确比对）。
@@ -273,6 +274,7 @@ func (r *LeadMiningConfigResolver) Resolve(ctx context.Context, target LeadRuleT
 		} else {
 			snap.LeadAgentID = a.ID
 			snap.LeadAgentMode = a.AgentMode
+			snap.LeadAgentPersona = a.Persona
 			snap.LeadAgentPrompt = a.SystemPrompt
 			if strings.TrimSpace(a.LLMModel) != "" {
 				snap.Model = a.LLMModel
@@ -330,7 +332,7 @@ func fingerprintLeadMiningSnapshot(s *LeadMiningConfigSnapshot) string {
 		strconv.FormatBool(s.Enabled), s.RuleScope, strconv.FormatInt(s.RuleID, 10), s.RuleDescription,
 		strings.Join(s.Keywords, ","), strings.Join(s.SemanticWords, ","), s.Requirement,
 		strconv.Itoa(s.MinIntentScore), s.Model, strconv.FormatUint(uint64(s.LeadAgentID), 10),
-		s.LeadAgentMode, s.LeadAgentPrompt,
+		s.LeadAgentMode, s.LeadAgentPersona, s.LeadAgentPrompt,
 	}
 	sort.Strings(parts)
 	h := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
