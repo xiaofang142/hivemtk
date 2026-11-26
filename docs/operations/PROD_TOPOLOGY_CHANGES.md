@@ -1020,3 +1020,18 @@ follow_user_channels 扩为八渠道（生产库实值已更新）。链 B 从�
 **发布**：commit `b721176b6`，push `gitee-upstream`+`upstream`。链 A 线上二进制 sha256 `228de44643081eb0…`，运行镜像 `98f4bedf9fc416a32b4`，容器启动 `2026-11-26T09:44:55.28306318Z`，回滚点镜像 `mtk-user-server:rollback-20261126-174348` / 二进制 `user-server.bak-20261126-174348`，容器内+公网 health 200，默认口令探针 GREEN。链 D 用户前端 `user-web` 构建 `index-Co6Edc2c.js`（buildId `b721176b6-1795686318571`），备份 `user-web.snapshot-20261126-174534.tgz` 后 rsync 到 `/www/wwwroot/hivemtk/user-web/`，公网 `https://work.xapptool.cn/` 回读指纹一致。
 
 **注**：发布前 `git stash push -m "TEMP-parallel-portability-stash-20261126b-do-not-drop" -- <3 并行文件>` 临时藏起 user-server/ 在途改动以过 preflight，发布后已 `git stash pop` 恢复（stash 已 drop），并行文件未丢失。
+
+## 2026-11-26 18:1x 平台端 — 线索发现菜单鉴权联动（HEAD `4e629e1`）
+
+**背景**：线索发现升级为独立顶级菜单后，全链路检查前后端 RBAC 与平台授权。用户侧 `menu.go`/`module_bindings.go` 已更新，但平台 module catalog seed 是单向生成物、未同步 ⇒ 静默漂移。首次平台发布又因并行会话把 v1 指纹唯一索引检查写回启动逻辑，与迁移 042（v2 一真机多实例合法）冲突，容器 crash-loop。
+
+**修复（权威源）**：
+- 用 `gen-module-bindings` 重生成平台 seed 两份拷贝（`config/module_catalog_seed.json` 与 `internal/service/module_catalog_seed.json`，后者 `//go:embed` 运行时使用），`menu_key_total` 250→257（新增 `channels` + 6 个线索 key）；commit `6668e33`，push origin master。
+- `platform-server/internal/utils/db/db.go` 的 `EnsureSageXActivationSchema`：库中存在 v2 激活行（`binding_version>=2 OR instance_public_key_digest<>''`）时退役 `idx_sagex_active_fingerprint`、只走 v2 schema 检查；纯 v1 库保留旧重复检测以兼容。同步修正 `internal/model/sagex_license.go` 注释。commit `4e629e1`，push origin master。
+
+**验证与生效**：
+- `GO` 测试 `TestSeedFileCoversAllMenuKeys`/`TestSeedMenuKeyCoverageCurrentSeeds` PASS（disk/embedded 257/257/0）；`go build ./...` PASS。
+- `SOURCE_PLATFORM_REPO=... ./deploy/deploy.sh platform-server` 重发成功：镜像 `sha256:eb490f25dcc845fb469456fca42fc96b…`，本机 `/health`+`/api/health` 与公网 `https://manageapi.xapptool.cn/health` 全 200，迁移 042 等 11 个均跳过（已应用）。
+- `GET /platform/module-catalog/seed/coverage` 200 `{covered:257,duplicated:0,menu_key_total:257,ok:true}`；`POST /platform/module-catalog/seed` 200「目录已同步」`modules=24`。
+- platform_db `module_menu_bindings` 250→257；新 key `channels`→core，`leadArchive/leadDiscovery/leadEvidence/leadMiningAgents/leadNotifyRoutes/leadScopedList`→customer。user_db tenant18 `tenant_modules.customer.menu_keys` 已含 6 个新 key、`core` 含 `channels`（activated_at 18:05:02）⇒ 模块闸下发正常。
+- 用户侧 RBAC：`FilterMenuTree` 按「自身 key 或任一后代命中即保留」⇒ 移动父分组不破坏 viewer/staff 可见性（两档均已授予 clueList/clueStatistics/leadMining）；新增 5 叶子 admin-only 无需 DB 行；`menu_capability_routes.go` 无 lead/clue 规则无需补；前端 `routeOwners` 仅面包屑展示非授权规则。`/api/menus` 实测含 `leadDiscovery` 及 9 子项，面包屑「线索发现 / 线索通知路由」正确。
