@@ -115,11 +115,16 @@ export function getNavigationPath(route) {
   return ((matched && !matched.includes(':') ? matched : route.path).replace(/\/+$/, '') || '/')
 }
 
-function findChannelsNode(nodes, path) {
+// 渠道三页被 projectNavigation 收敛成一个菜单叶子（path = 首个已授权页），
+// 因此 /channels/accounts、/channels/identify-codes 只能靠 channelPaths 反查。
+// 必须返回**完整归属链**（含 system 父节点），只返回叶子会让 Layout 的
+// currentTopMenu 变成无 children 的渠道叶子 → 左侧菜单整块消失。
+function findChannelsTrail(nodes, path, parents = []) {
   for (const node of nodes) {
-    if (node.key === 'channels' && node.channelPaths?.includes(path)) return node
+    const trail = [...parents, node]
+    if (node.key === 'channels' && node.channelPaths?.includes(path)) return trail
     if (node.children?.length) {
-      const found = findChannelsNode(node.children, path)
+      const found = findChannelsTrail(node.children, path, trail)
       if (found) return found
     }
   }
@@ -131,8 +136,8 @@ export function findNavigationTrail(menus, route) {
   const trails = new Map(Array.from(menuTrails(menus), trail => [trail.at(-1).path, trail]))
   if (trails.has(path)) return trails.get(path)
 
-  const channels = findChannelsNode(menus, path)
-  if (channels) return [channels]
+  const channels = findChannelsTrail(menus, path)
+  if (channels) return channels
 
   const action = listActions.get(path)
   const pattern = route.matched?.at(-1)?.path || path
