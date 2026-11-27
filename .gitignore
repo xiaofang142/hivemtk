@@ -425,3 +425,6 @@ deploy/.api-deploy-state.json
 # Mimosa 安全钩本机状态（含源码基线快照，94MB/1万+文件；本机工具产物，不入库）。
 # 不排除会让 pre-push 密钥闸把快照里的源码字面量误判成待提交的明文凭证。
 .mimosa/
+
+# README 广告位横幅（需随仓发布，否则 GitHub 首页图裂）
+!docs/ads/*.jpg
