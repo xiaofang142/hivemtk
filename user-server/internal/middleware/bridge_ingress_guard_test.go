@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+
+	"hivemtk-user/internal/pkg/tenant"
 )
 
 func TestBridgeIngressGuardPreservesVerifiedIdentity(t *testing.T) {
@@ -68,8 +70,37 @@ func TestBridgeIngressGuardPreservesVerifiedIdentity(t *testing.T) {
 	}
 }
 
+// G-07：多租户模式下 BRIDGE_INGEST_AUTH=off 必须 fail-closed，即使库里已有候选码。
+// 否则任意调用方可借 tenant_code 绕过账号识别码闸，把消息写进别的租户。
+func TestBridgeIngressGuardRejectsAuthOffInMultiTenant(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	prev := tenant.CurrentMode()
+	t.Cleanup(func() { tenant.SetMode(prev) })
+	tenant.SetMode(tenant.ModeOn)
+	t.Setenv("BRIDGE_INGEST_AUTH", "off")
+
+	for _, candidates := range [][]string{nil, {"synthetic-identify-fixture"}} {
+		calls := 0
+		r := gin.New()
+		r.Use(bridgeIngressGuard(func() []string { return candidates }))
+		r.POST("/api/bridge/gateway", func(c *gin.Context) {
+			calls++
+			c.Status(http.StatusNoContent)
+		})
+		req := httptest.NewRequest(http.MethodPost, "/api/bridge/gateway?identify_code=synthetic-identify-fixture", nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusServiceUnavailable || calls != 0 {
+			t.Errorf("candidates=%v status=%d calls=%d, want 503/0", candidates, w.Code, calls)
+		}
+	}
+}
+
 func TestBridgeIngressGuardNoCandidatesKeepsExplicitPolicy(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	prev := tenant.CurrentMode()
+	t.Cleanup(func() { tenant.SetMode(prev) })
+	tenant.SetMode(tenant.ModeOff)
 	for _, mode := range []string{"on", "off"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Setenv("BRIDGE_INGEST_AUTH", mode)

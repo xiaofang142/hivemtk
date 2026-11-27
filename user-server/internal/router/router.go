@@ -424,10 +424,16 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		logger.Errorf("[LeadMining] ReAct dispatcher 装配失败：%v", err)
 	}
 
+	// G-02：网页客服入站归一句柄延后注入——公开路由装配早于 bridge 竖的
+	// InboxIngressService 构造，这里先声明再在下方赋值，闭包在请求期才解引用。
+	var bridgeIngressSvc *service.InboxIngressService
+
 	public := r.Group("/api")
 	{
 		setupPublicRoutes(public, liveCodeController, gormDB)
-		setupChatPublicRoutes(public, gormDB, orchestrator, langResolver, miningSvc)
+		setupChatPublicRoutes(public, gormDB, orchestrator, langResolver, miningSvc, func() *service.InboxIngressService {
+			return bridgeIngressSvc
+		})
 		setupSSORoutes(public, ssoCtrl)
 		setupSelfServiceRoutes(public, gormDB)
 		setupLegacyRoutes(public) // 已下线的 /api/knowledge 顶层域名：410 + 迁移指引（见 legacy_routes.go）
@@ -725,7 +731,7 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 
 		setupFeishuRoutes(auth, gormDB)
 
-		bridgeIngressSvc := service.NewInboxIngressService()
+		bridgeIngressSvc = service.NewInboxIngressService()
 
 		setupWechatRoutes(auth, gormDB, bridgeIngressSvc)
 

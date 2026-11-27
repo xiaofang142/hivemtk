@@ -98,7 +98,8 @@ type WebhookService struct {
 
 	clueRepo repository.ClueRepository
 
-	ingressSvc *InboxIngressService
+	ingressSvc      *InboxIngressService
+	ingressPipeline IngressPipeline
 
 	// leadDiscoverySvc 线索发掘接线出口（P0-c）：渠道 handler 落 hub 成功后统一经此
 	// 触发主 Service.Enqueue，取代各渠道直接调 MineUnifiedLead 的双轨发掘。
@@ -350,22 +351,43 @@ func (s *WebhookService) SetAgentBindingService(ctx context.Context, svc *Channe
 	s.agentBindingSvc = svc
 }
 
-type webhookIngressAdapter struct{ svc *InboxIngressService }
+// IngressPipeline 是 webhook/cron/bot 与统一消息总线之间的窄接口（G-03）。
+// 任何实现（InboxIngressService、channelgw pipeline 适配器、测试替身）都能注入，
+// 避免 webhook 直接持有具体 service 类型而形成第二条入站链。
+type IngressPipeline interface {
+	HandleIngressMessage(ctx context.Context, event *model.MessageEvent) error
+}
+
+type webhookIngressAdapter struct {
+	svc      *InboxIngressService
+	pipeline IngressPipeline
+}
 
 func (a webhookIngressAdapter) HandleIngressMessage(ctx context.Context, event *model.MessageEvent) error {
-	if a.svc == nil {
+	var err error
+	if a.pipeline != nil {
+		err = a.pipeline.HandleIngressMessage(ctx, event)
+	} else if a.svc != nil {
+		_, err = a.svc.HandleIngressMessage(ctx, event)
+	} else {
 		return nil
 	}
-	_, err := a.svc.HandleIngressMessage(ctx, event)
 	if err != nil && repository.IsDuplicateKeyErr(err) {
-
 		return nil
 	}
 	return err
 }
 
+// SetIngressPipeline 注入统一入站管线；nil 时保留原 concrete 句柄（存量装配零改动）。
+func (s *WebhookService) SetIngressPipeline(p IngressPipeline) {
+	if p == nil {
+		return
+	}
+	s.ingressPipeline = p
+}
+
 func (s *WebhookService) ingressHandler(ctx context.Context) webhookIngressAdapter {
-	return webhookIngressAdapter{svc: s.ingressSvc}
+	return webhookIngressAdapter{svc: s.ingressSvc, pipeline: s.ingressPipeline}
 }
 
 func (s *WebhookService) Stop(ctx context.Context) {
@@ -434,6 +456,40 @@ type ReceiveRequest struct {
 	Query     map[string]string
 }
 
+// WebhookIngestAck 是 webhook/cron/bot 入站对平台的统一回执（G-03）。
+// 状态取值与 channelgw.IngestAck 对齐：accepted / duplicate / retry / rejected；
+// event_id 是渠道平台原始事件 ID（ParsePayload 后由官方键或哈希兜底生成）。
+// 平台渠道没有「认领下行」语义，因此这里只有入站回执，不复用 outbox ack。
+type WebhookIngestAck struct {
+	EventID string `json:"event_id"`
+	Status  string `json:"status"`
+	Reason  string `json:"reason,omitempty"`
+}
+
+const (
+	WebhookIngestAckAccepted  = "accepted"
+	WebhookIngestAckDuplicate = "duplicate"
+	WebhookIngestAckRetry     = "retry"
+	WebhookIngestAckRejected  = "rejected"
+)
+
+// fillFromResult 由 Receive 的 defer 统一生成，避免每个 return 分支各写一份 ack
+// 造成状态漂移（同一事件在 A 分支 accepted、B 分支 rejected 的旧风险）。
+func (a *WebhookIngestAck) fillFromResult(r *ReceiveResult) {
+	a.EventID = r.EventID
+	a.Reason = r.Reason
+	switch {
+	case r.Duplicate:
+		a.Status = WebhookIngestAckDuplicate
+	case r.QueueFull || r.RateLimit:
+		a.Status = WebhookIngestAckRetry
+	case r.Accepted:
+		a.Status = WebhookIngestAckAccepted
+	default:
+		a.Status = WebhookIngestAckRejected
+	}
+}
+
 type ReceiveResult struct {
 	Accepted     bool   `json:"accepted"`
 	EventID      string `json:"event_id"`
@@ -445,6 +501,8 @@ type ReceiveResult struct {
 	EventType    string `json:"event_type,omitempty"`
 	Dispatched   bool   `json:"dispatched,omitempty"`
 	HubMessageID string `json:"hub_message_id,omitempty"`
+	// Ack 是统一入站回执；HTTP 响应继续沿用 Accepted/Reason 旧字段以保证平台兼容。
+	Ack WebhookIngestAck `json:"ack"`
 }
 
 // ErrWebhookInboundNotWired 渠道在 dispatchToChannel 里没有入站分支。
@@ -557,7 +615,13 @@ func (s *WebhookService) ResolveWebhookAccountTenant(ctx context.Context, channe
 	return s.ResolveTenantByChannelAccount(ctx, WebhookChannel(strings.ToLower(strings.TrimSpace(channel))), accountID)
 }
 
-func (s *WebhookService) Receive(ctx context.Context, req *ReceiveRequest) (*ReceiveResult, error) {
+func (s *WebhookService) Receive(ctx context.Context, req *ReceiveRequest) (result *ReceiveResult, err error) {
+	// 所有 return 分支都经此收口生成统一 ack（G-03）。
+	defer func() {
+		if result != nil {
+			result.Ack.fillFromResult(result)
+		}
+	}()
 	if req == nil || len(req.Body) == 0 {
 		return &ReceiveResult{Accepted: false, Reason: "empty body"}, nil
 	}

@@ -181,7 +181,7 @@ stateDiagram-v2
 ```
 
 - HTTP v2 ack 响应逐条：`acked / duplicate / not_found / not_in_scope`；WS `ack` 帧状态归一 `""/delivered→delivered`、`failed`、`unknown`，未知值**拒翻转**并打点 `FrameAckUnknownStatusCount`。
-- `AckOutboundDetailed` 五分类回执与 `AckOutboundClaimFence`（`claimed_at/push_attempts`）**目前只在 WS 帧透出**；HTTP ack 未带栅栏（待整改项 G-06）。
+- `AckOutboundDetailed` 五分类回执与 `AckOutboundClaimFence`（`claimed_at/push_attempts`）现在 WS 帧与 HTTP ack 都透出：HTTP v3 `items[].claimed_at`（RFC3339Nano）或 v1 顶层 `fence` 映射回传认领时刻，服务端在任何写之前解析，非法值整批 400，合法值走 `AckOutboundDeliveredDetailedFenced` 条件更新（G-06 已整改）。`push_attempts` 仅用于诊断，不进谓词。
 
 ### 3.4 渠道识别与鉴权
 
@@ -190,14 +190,15 @@ stateDiagram-v2
 - Webhook：`bindCallbackTenant`（`controller/webhook.go:108-150`）读 `?identify_code=` 或头，解析租户/账号，显式 `account_id` 与解析结果冲突 ⇒ 404；无码按渠道账号表主键反查；失败 404。
 - SageX：`sagex_upload.go` 请求体 `IdentifyCode`，`SetChannelResolver` → `ResolveByIdentifyCode`。
 - web_embed：AppKey + `visitor_token` HMAC + 一次性 ws ticket，不走 identify_code。
-- **风险面**：`BRIDGE_INGEST_AUTH=off` 会整段跳过识别码闸门（仅可信内网可用）；WS 每帧不再验签，依赖握手期绑定 + `CHANNEL_WS_ALLOWED_ORIGINS`（待整改 G-07）。
-- 渠道命名四套并存：`model.Channel*` 常量、`WebhookChannel`、`channels.code`、`EXPERIMENTAL_CHANNELS`；`NormalizeBridgeChannel` 做别名归一，parity 测试只钉住部分集合（待整改 G-01）。
+- `BRIDGE_INGEST_AUTH=off` 是单机内网历史逃生阀：多租户（`TENANT_MODE=on`）下已在 `BridgeIngressGuard` 入口硬禁（503），无论候选码是否为空都不放行；单机且候选码为空仍按显式配置放行（G-07 已整改）。
+- WS 不做逐帧验签：安全边界是**连接级**——首帧 register 携带 `X-Channel-Identify-Code`/`?identify_code=`，`BridgeTenantForRequest` 在双泵启动前解析租户并绑定 ctx，之后该连接的全部帧都在这个已鉴权 ctx 中处理；配合 `CHANNEL_WS_ALLOWED_ORIGINS`。识别码轮换需重连（不热替换连接身份），这是有意设计而非漏洞。
+- 渠道名收敛到 `channelgw.Registry.Name`（与 DB `channels.code`、`model.Channel*` 一致）：`NormalizeChannel` 统一别名归一，`NormalizeBridgeChannel` 已委托它；`channelgw`/`capregistry`/`channelcaps` 三套登记表由双向 parity 测试钉死（G-01/G-08 已整改）。
 
 ### 3.5 结构化账号消息 / 门禁 / session
 
 - 入库：`InboxIngressService.HandleIngressMessage`（`inbox_ingress.go:632`）/ `HandleIngressBatch`（`:1132`）；`NormalizeEvent`（`:559`）做结构化归一。
 - 门禁：去重窗口（`inbox_ingress_ingest.go:284-340`）、`message_hub` 唯一索引、`content_hash`/`dedup_hash`、自回显判定 `isPlatformOutboundEcho`、人肉锁 `IsSessionHumanLocked/LockSessionForHuman`、无效内容/方向丢弃。
-- session：`bridgeSessionKey`（协议层）与 AI 侧 `ScopedCheckpointThreadID`（`aiagent/agent/runtime/inference_checkpoint_identity.go:19`，含 tenant/channel/account/customer/agent/config scope）是**两个不同的键**；7 天 TTL 由 `chat_history_redis` 承载。协议层需固化映射（待整改 G-05）。
+- session：`channelgw.SessionIDForInbound(m)` 固化为协议层 `session_id = channel:account:(conversation||group||sender)`；AI 侧 `ScopedCheckpointThreadID`（`aiagent/agent/runtime/inference_checkpoint_identity.go:19`，含 tenant/channel/account/customer/agent/config 指纹）是另一个键，二者通过 `MessageEvent.SessionID` 单向关联；7 天 TTL 由 `chat_history_redis` 承载（G-05 代码映射已固化，TTL 生产验证仍待运维）。
 
 ---
 
@@ -251,30 +252,30 @@ sequenceDiagram
 
 | 渠道/能力 | 上报 | 下行 | ack | 识别码 | 结论 | 代码证据 |
 |---|---|---|---|---|---|---|
-| Bridge（抖音/小红书等 15 渠道） | ✅ channelgw v1/v2 | ✅ outbox/SSE/WS | ✅ v2 逐条 + 栅栏（WS） | ✅ identify_code | ✅ | `bridge/handler_http.go:365/836/963`、`channelgw/ws.go:473`、`bridge/src/core/{uplink,downlink,http-ingest}.js` |
-| SageX（微信/QQ 监听） | ⚠️ 专用 upload → `HandleIngressMessage` | ❌ 不承担 | ⚠️ 自有 `schema_version/acks` | ✅ IdentifyCode | ⚠️ | `service/sagex_upload.go:346-443`（`:394/:405`） |
-| Webhook（企微/飞书/TG/WhatsApp/QQ 等） | ⚠️ 平台回调 → `WebhookService.Receive` → ingress | ⚠️ 平台 sender 直发，非 outbox claim | ❌ 无统一 ack 回执 | ✅ query/头识别码 + 账号表反查 | ⚠️ | `service/webhook.go:560/1166/1333`、`controller/webhook.go:108-150` |
-| Telegram polling / cron | ⚠️ 自投 `/api/webhook/telegram/:id` | ⚠️ 平台 API 直发 | ❌ | ⚠️ 原仅路径账号；**本次整改已带 identify_code** | ⚠️ | `service/telegram_polling.go`（见 §8） |
-| web_embed 网页客服 | ⚠️ `/api/chat/public/*` 写 session_messages + `syncToInbox` | ⚠️ hub → 直投访客 WS | ❌ 无 outbox/ack | ⚠️ AppKey + visitor_token | ⚠️ | `service/chat_visitor.go:490/703`、`service/message_hub_web_embed.go:34` |
+| Bridge（抖音/小红书等 15 渠道） | ✅ channelgw v1/v2 | ✅ outbox/SSE/WS | ✅ v2 逐条 + HTTP/WS 双栅栏 | ✅ identify_code | ✅ | `bridge/handler_http.go:365/836/963`、`channelgw/ws.go:473`、`bridge/src/core/{uplink,downlink,http-ingest}.js` |
+| SageX（微信/QQ 监听） | ⚠️ 专用 upload → `HandleIngressMessage`，已声明 `hivemtk.channel.v1` | ❌ 不承担 | ⚠️ acks[] 语义对齐，线路仍是 upload 专用协议 | ✅ IdentifyCode | ⚠️ | `service/sagex_upload.go`（协议常量 + `SageXUploadAckResponse`） |
+| Webhook（企微/飞书/TG/WhatsApp/QQ 等） | ⚠️ 平台回调 → `WebhookService.Receive` → ingress/pipeline | ⚠️ 平台 sender 直发，非 outbox claim | ⚠️ 已回统一 `ack{accepted/duplicate/retry/rejected}`，非 outbox 逐条栅栏 | ✅ query/头识别码 + 账号表反查 | ⚠️ | `service/webhook.go`（`WebhookIngestAck`/`IngressPipeline`）、`controller/webhook.go:108-150` |
+| Telegram polling / cron | ⚠️ 自投 `/api/webhook/telegram/:id` | ⚠️ 平台 API 直发 | ⚠️ 经 webhook ack 回执 | ✅ 任务编排带 `?identify_code=`（仅账号一致时） | ⚠️ | `service/telegram_polling.go`（见 §8） |
+| web_embed 网页客服 | ⚠️ 访客协议 + 已归 `InboxIngressService`（AI 抑制防重复） | ⚠️ hub → 直投访客 WS + delivered | ❌ 无 outbox claim/ack | ⚠️ AppKey + visitor_token | ⚠️ | `service/chat_visitor.go:reportToMessageBus`、`service/message_hub_web_embed.go:34` |
 | 统一收件箱 / 网管 API | ✅ | ✅ | — | ✅ | ✅ | `router/service_routes.go:161-228`、`controller/inbox.go` |
-| AI session 7 天缓存 | ✅ | ✅ | — | — | ⚠️ 键映射未固化 | `chat_history_redis.go`、`inference_checkpoint_identity.go:19` |
+| AI session 7 天缓存 | ✅ | ✅ | — | — | ⚠️ 键映射已固化；TTL 生产验证待运维 | `channelgw.SessionIDForInbound`、`chat_history_redis.go` |
 
-> 说明：`message_hub` 的 `web_embed` 出站直投是「直接投递渠道」模式（不是无人认领的 pending 死行），这是已经修复的真实线上问题；但它不经过 outbox claim/ack，所以不能标成完整总线协议符合。
+> 说明：`message_hub` 的 `web_embed` 出站直投是「直接投递渠道」模式（不是无人认领的 pending 死行），这是已经修复的真实线上问题；但它不经过 outbox claim/ack，所以不能标成完整总线协议符合。入站已归一到 `InboxIngressService`，但线路仍是访客专用 HTTP/WS（G-02 只完成语义归一）。
 
 ---
 
-## 6. 待整改清单（按优先级）
+## 6. 整改清单（G-01→G-08 全部已实施，残留项如实标注）
 
-| ID | 优先级 | 缺口 | 建议动作 |
-|---|---|---|---|
-| G-01 | P0 | 渠道 ID 四套命名并存（`model.Channel*` / `WebhookChannel` / `channels.code` / 扩展常量） | 以 DB `channels.code` + `channelgw.Registry.Name` 为单一协议字段，其余做兼容归一，扩充 parity 测试至全渠道 |
-| G-02 | P0 | web_embed 入站绕过 `InboxIngress`（只 `syncToInbox`），出站无 ack | 在 `VisitorChatService.SendMessage` 中用 `WithChannelOwnedAITrigger(ctx)` 调 `HandleIngressMessage` 归一入 hub，保留访客会话双写但去掉 synthetic hub 重复；出站 hub 直投后显式记 delivered |
-| G-03 | P0 | webhook/cron/bot 入站不走 `channelgw.IngressPipeline`，平台无 ack 回执 | 定义统一的 `WebhookIngestAck`（平台 event_id → accepted/duplicate/rejected），并把 `WebhookService` 入站改经 pipeline 适配器 |
-| G-04 | P1 | SageX 私有 upload ack 与 `/bridge/gateway` 两套 | 统一为 `hivemtk.channel.v1 + acks[]`，SageX 保留旧字段别名过渡 |
-| G-05 | P1 | `bridgeSessionKey` 与 `ScopedCheckpointThreadID` 键不一致 | 协议层增加 `session_id` 响应字段的明确定义与映射表，Redis TTL 生产验证 |
-| G-06 | P1 | HTTP ack 未带 `claimed_at/push_attempts` 栅栏，仅 WS 有 | v3 ack 请求体增加 fence 字段，服务端 `AckOutboundDetailed` 统一校验 |
-| G-07 | P1 | `BRIDGE_INGEST_AUTH=off` 跳过识别码闸；WS 非逐帧验签 | 生产配置巡检 + 明确告警；WS 增加重绑/帧级校验方案 |
-| G-08 | P2 | `channelcaps` / `capregistry` 与 `channelgw.Registry` 能力描述两套 | 合并能力位单源，统一 OutboundPath/MineMode 投影 |
+| ID | 优先级 | 原缺口 | 已实施动作 / 代码锚点 | 状态 |
+|---|---|---|---|---|
+| G-01 | P0 | 渠道 ID 四套命名并存 | 新增 `channelgw/normalize.go`（`NormalizeChannel` 全别名表），`bridge.NormalizeBridgeChannel` 委托它；`normalize_test.go` 钉死别名目标/模型常量/未知 fail-closed | ✅ 已整改 |
+| G-02 | P0 | web_embed 入站绕过 `InboxIngress` | `VisitorChatService.SetIngressHandler/reportToMessageBus`，`WithChannelOwnedAITrigger` 抑制中台二次 AI；router 延迟注入 ingress 句柄，移除重复 synthetic hub 发掘 | ✅ 入站已整改；线路仍专用 |
+| G-03 | P0 | webhook 无统一 ack / 不进 pipeline | `WebhookIngestAck{accepted/duplicate/retry/rejected}` + `Receive` defer 统一生成；`IngressPipeline` 接口 + `SetIngressPipeline`，`webhookIngressAdapter` 统一走同一句柄 | ✅ ack/入站已整改；出站仍平台直发 |
+| G-04 | P1 | SageX ack 与 gateway 两套 | `SageXProtocolVersion = "hivemtk.channel.v1"`，请求/响应双写 `protocol_version` + 旧 `schema_version` 别名，未知版本仍拒 | ✅ 版本标识已统一；专用 upload 线路保留 |
+| G-05 | P1 | 两个 session key 无映射 | `channelgw.SessionIDForInbound` 固化 `channel:account:(conv|group|sender)`，注释明确与 `ScopedCheckpointThreadID` 单向关联；`session_id_test.go` 钉死回退链 | ✅ 映射已固化；Redis TTL 生产验证 ❌ 待运维 |
+| G-06 | P1 | HTTP ack 无 claim 栅栏 | `BridgeOutboxAckItem.claimed_at`/`push_attempts` + 顶层 `fence`，`buildAckClaimFence` 写前解析、非法整批 400，合法走 `AckOutboundDeliveredDetailedFenced` | ✅ 已整改（HTTP 与 WS 对等） |
+| G-07 | P1 | `BRIDGE_INGEST_AUTH=off` 越权 / WS 信任面 | `BridgeIngressGuard` 多租户下硬禁 off（503）；WS 明确定为连接级鉴权（register 帧识别码 + 双泵前租户绑定），不做逐帧验签 | ✅ 已整改（连接级边界，非逐帧） |
+| G-08 | P2 | 三套能力注册表漂移 | `channelgw/capability_parity_test.go` 双向钉死 channelgw↔capregistry↔channelcaps；`Registry.OutboundChannels`/`LeadMiningChannels` 继续作为 OutboundPath/MineMode 唯一投影源 | ✅ 漂移门已落地；物理合并三包 ❌ 未做（历史分层有各自职责） |
 
 ---
 
@@ -283,21 +284,21 @@ sequenceDiagram
 | # | 需求原文要点 | 核验结论 | 证据 / 整改 |
 |---|---|---|---|
 | 1 | 统一渠道账号 | ✅ 已统一 | `channel_accounts.identify_code` 全局唯一；`ChannelResolver` 单点解析；旧渠道级码兼容 |
-| 2 | 统一消息上报 | ⚠️ 语义统一、线路不统一 | 所有入口归 `InboxIngressService`；Bridge 用 channelgw，SageX/webhook/embed 各有线路（G-02/G-03/G-04） |
-| 3 | 统一消息下行转发 | ⚠️ | Bridge 有 outbox claim/发送；webhook 走平台 sender；embed 走直投 WS；无统一发送 API（G-03） |
-| 4 | 统一 ack 确认 | ⚠️ | Bridge v2 ack 完整；平台渠道无 ack；unknown 需对账接口（G-03/G-06） |
+| 2 | 统一消息上报 | ✅ 语义统一；⚠️ 线路不统一 | Bridge/SageX/webhook/embed 全部归 `InboxIngressService`（G-02/G-03/G-04）；线路仍有 bridge ingest、sagex upload、webhook、访客协议四类 |
+| 3 | 统一消息下行转发 | ⚠️ | Bridge 有 outbox claim/发送；webhook 走平台 sender；embed 走 hub 直投 WS；无单一发送 API（G-03 只统一入站/回执） |
+| 4 | 统一 ack 确认 | ⚠️ 语义统一 | Bridge v2/v3 ack + HTTP/WS 栅栏；webhook 回统一 `WebhookIngestAck`；SageX acks[] 版本标识对齐；unknown 仍需显式对账接口（G-03/G-04/G-06） |
 | 5 | 统一网管 API / 统一收件箱 | ✅ | `/api/inbox/*`、`/api/message-hub/*`、admin 门禁 |
-| 6 | 统一渠道识别 | ⚠️ | 识别码统一但渠道枚举四套并存（G-01） |
+| 6 | 统一渠道识别 | ✅ 标识单源 | `channelgw.NormalizeChannel` + `identify_code` 单点解析；三套能力注册表 parity 门（G-01/G-08） |
 | 7 | user-server 不承担具体渠道消息处理 | ✅ | `channelgw` 只做协议/管道；渠道 DOM/SDK 在 bridge/sagex/channelbot |
 | 8 | SageX 负责上报、不负责下行 | ✅（语义） | `sagex_upload.go:394/405` 调 ingress，无 sender |
 | 9 | Bridge 上报 + 下行 + ack | ✅ | 三通道 + SSE + v2 ack，源码与客户端双向对齐 |
-| 10 | Embed 走总线机制 | ⚠️ | 独立访客协议，待 G-02 |
-| 11 | TG/飞书/企微/QQ/WhatsApp webhook/cron 整改 | ⚠️ | webhook 识别码已支持；TG polling 本次补 identify_code；ack 仍缺（G-03） |
+| 10 | Embed 走总线机制 | ⚠️ 语义归一 | 访客消息经 `reportToMessageBus` 进 hub（AI 抑制防双触发），出站仍 hub 直投 WS、无 outbox/ack（G-02） |
+| 11 | TG/飞书/企微/QQ/WhatsApp webhook/cron 整改 | ⚠️ | webhook 识别码 + 统一 ack（G-03）；TG polling 自投带 identify_code（§8）；出站仍平台直发 |
 | 12 | webhook URL 携带渠道识别信息 | ✅ | `bindCallbackTenant` 读 query `identify_code` 并交叉校验 |
-| 13 | cron 任务编排携带渠道识别信息 | ⚠️→已部分整改 | 本次 TG polling 自投携带 `?identify_code=`（见 §8） |
+| 13 | cron 任务编排携带渠道识别信息 | ✅ | TG polling 自投携带 `?identify_code=`（账号一致才带，冲突留空 fail-closed，见 §8） |
 | 14 | 中层门禁：重复/无效拦截 | ✅ | 唯一索引 + dedup hash + 自回显 + 人肉锁 + `IsDuplicateReason` |
 | 15 | 标签/历史/线索提取 | ✅ | AI 侧画像/历史读取 + `leadMiningSvc.Enqueue` |
-| 16 | session id 缓存七天 | ⚠️ | `chat_history_redis` 7d；两键映射未固化（G-05） |
+| 16 | session id 缓存七天 | ⚠️ | `chat_history_redis` 7d；`SessionIDForInbound` 映射已固化（G-05），TTL 生产验证待运维 |
 
 ---
 
@@ -325,6 +326,21 @@ sequenceDiagram
 
 见本文 §9。
 
+### 8.4 G-01→G-08 整改批次（本轮全部实施）
+
+| ID | 改动文件（新增 `+`） | 关键行为 |
+|---|---|---|
+| G-01 | `+channelgw/normalize.go`、`+normalize_test.go`、`bridge/channel.go` | `NormalizeChannel` 单一别名表；扩展 `NormalizeBridgeChannel` 委托；未知渠道仍 fail-closed |
+| G-02 | `service/chat_visitor.go`、`router/{router,chat_routes}.go`、`+chat_visitor_ingress_test.go` | 访客入站归 `InboxIngressService`，`WithChannelOwnedAITrigger` 防中台二次 AI；ingress 句柄延迟注入解装配顺序；只在无句柄时保留旧 synthetic hub |
+| G-03 | `service/webhook.go`、`+webhook_ingest_ack_test.go` | `WebhookIngestAck` 四态回执由 `Receive` defer 统一生成；`IngressPipeline` 接口注入，adapter 统一入站 |
+| G-04 | `service/sagex_upload.go`、`+sagex_upload_protocol_test.go` | `protocol_version` 与旧 `schema_version` 双写；未知版本仍 `ErrSageXUnsupportedSchema` |
+| G-05 | `channelgw/protocol.go`、`+session_id_test.go` | 导出 `SessionIDForInbound`；固化与 AI `ScopedCheckpointThreadID` 的单向映射 |
+| G-06 | `bridge/handler_http.go`、`+handler_http_ack_fence_test.go` | ack 请求体新增 `claimed_at`/`fence`；写前解析、非法整批 400；合法值进 `AckOutboundDeliveredDetailedFenced` |
+| G-07 | `middleware/bridge_ingress_guard.go`、`+bridge_ingress_guard_test.go` | 多租户 `BRIDGE_INGEST_AUTH=off` 硬禁 503；单机逃生阀保留；WS 明确为连接级鉴权 |
+| G-08 | `+channelgw/capability_parity_test.go` | 三套能力登记表双向 parity；新增渠道必须三处同时登记，否则测试红 |
+
+> 残留（非代码可闭环，已在 §6/§7 标注）：平台出站仍各走 sender、web_embed 无 outbox ack、Redis 7d TTL 需生产环境验证、三套能力包物理合并未做（职责不同，保留分层）。
+
 ---
 
 ## 9. 验证命令与证据
@@ -333,14 +349,23 @@ sequenceDiagram
 cd /Users/xiaofang/Documents/www/go/hivemtk/hivemtk-user/user-server
 go build ./...
 go vet ./...
-go test ./internal/service -run 'TestBuildTelegramPollingWebhookURL|TestTelegramPollingIdentifyCodeZeroAccount|TestTGPollingSelfPostFollowsPORT' -count=1
+# G-01/G-05/G-08 协议与渠道能力
+go test ./internal/channelgw -run 'TestChannelAliasesResolveToKnownChannels|TestCanonicalNamesMatchModelConstants|TestUnknownChannelStaysUnknown|TestExperimentalFlagsParityWithBridgeExtension|TestSessionIDForInboundMapping|TestBridgeCapabilityThreeRegistriesParity' -count=1
+# G-02/G-03/G-04 + TG polling 识别码
+go test ./internal/service -run 'TestBuildTelegramPollingWebhookURL|TestTelegramPollingIdentifyCodeZeroAccount|TestTGPollingSelfPostFollowsPORT|TestVisitorReportToMessageBus|TestWebhookIngestAckMatrix|TestWebhookIngressPipelineInjection|TestSageXUnifiedProtocolVersion' -count=1
+# G-06/G-07
+go test ./internal/bridge -run 'TestBuildAckClaimFence' -count=1
+go test ./internal/middleware -run 'TestBridgeIngressGuard' -count=1
+cd ../user-web/bridge && npx vitest run
 ```
 
-本次实测（2026-11-27）：
+本次实测（2026-11-27，逐批执行）：
 
-- `go build ./...`：通过（无输出）。
-- `go vet ./...`：通过（无输出）。
-- 上述 `go test`：`ok hivemtk-user/internal/service 0.960s`。
+- `go build ./...`、`go vet ./...`：通过（无输出，每批改动后重跑）。
+- `internal/channelgw` 定向测试：`ok`（别名归一 / 模型常量对齐 / 未知 fail-closed / 实验标志 parity / session 映射 / 三表能力 parity）。
+- `internal/service` 定向测试：`ok`（TG polling URL/零账号/自投 PORT + 访客入站归一 + webhook ack 矩阵/pipeline + SageX 版本）。
+- `internal/bridge -run TestBuildAckClaimFence`：`ok hivemtk-user/internal/bridge 0.620s`。
+- `internal/middleware -run TestBridgeIngressGuard`：`ok hivemtk-user/internal/middleware 0.973s`（含多租户 off 硬禁新用例）。
 - `cd user-web/bridge && npx vitest run`：`Test Files 108 passed (108)`、`Tests 1328 passed | 7 skipped (1335)`，耗时 18.54s。Bridge 客户端协议 parity 全绿。
 
 渠道注册与协议一致性回归（建议交付前再跑一次）：
@@ -367,4 +392,4 @@ cd ../user-web/bridge && npx vitest run
 
 统一渠道消息总线的**内核已经存在并可用**：识别码鉴权、结构化归一、收件箱门禁、AI session、message_hub 三态 ack、Bridge 三通道协议都已在源码中实现，Bridge 系列可以作为一个渠道接一个渠道地复用同一套 API。
 
-但严格按用户原始要求「不可能一个渠道使用一套 API 完成」，当前只做到**语义层统一**，SageX / webhook / cron / web_embed 仍有各自的线路协议与回执方式。本文已逐条标注真实状态，给出 8 项整改清单，并完成了其中 TG polling 识别码载荷这一项（§8）。后续按 G-01→G-07 顺序推进，每完成一项更新 §5/§7 的状态与证据。
+但严格按用户原始要求「不可能一个渠道使用一套 API 完成」，当前做到的是**语义层统一 + 标识/回执语义统一**：8 项整改（G-01→G-08）已全部落地，包括渠道名单源归一、web_embed 入站归总线、webhook 统一 ack/pipeline、SageX 协议版本对齐、session 键映射、HTTP ack claim 栅栏、多租户鉴权硬禁、能力注册表 parity。SageX / webhook / cron / web_embed 的**线路协议与出站路径仍未合并成单一 API**——这是分阶段实施的明确边界，不在本文中被写成「已全部符合」（§6/§7 逐条标注残留）。后续若继续收敛，下一阶段议题是：平台 sender 走统一 outbox、web_embed 出站引入 claim/ack、三套能力包物理合并。

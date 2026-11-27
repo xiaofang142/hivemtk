@@ -768,6 +768,11 @@ type BridgeOutboxAckItem struct {
 	ConversationID string `json:"conversation_id"`
 	Status         string `json:"status,omitempty"`
 	Error          string `json:"error,omitempty"`
+	// ClaimedAt 是 v3 乐观栅栏：必须回传 GET outbox 那一行见到的 claimed_at
+	// （RFC3339Nano）。缺省即 legacy 无栅栏语义；填了但格式非法整批 400。
+	ClaimedAt string `json:"claimed_at,omitempty"`
+	// PushAttempts 回传认领时的推送次数，仅用于诊断日志，不参与条件更新谓词。
+	PushAttempts int `json:"push_attempts,omitempty"`
 }
 
 type BridgeOutboxAckRequest struct {
@@ -775,6 +780,42 @@ type BridgeOutboxAckRequest struct {
 	MsgIDs []string              `json:"msg_ids"`
 	Status string                `json:"status"`
 	Items  []BridgeOutboxAckItem `json:"items"`
+	// Fence 供 v1 msg_ids[] 形态使用：msg_id → claimed_at（RFC3339Nano）。
+	Fence map[string]string `json:"fence,omitempty"`
+}
+
+// buildAckClaimFence 从 v3 请求构造 service 层 claim 栅栏（G-06）。
+// items[] 的逐项 claimed_at 优先；v1 请求用顶层 fence。解析失败的字段返回错误，
+// 由调用方在任何写之前整批拒绝，防止半批翻转。
+func buildAckClaimFence(req *BridgeOutboxAckRequest) (service.AckOutboundClaimFence, error) {
+	if req == nil {
+		return nil, nil
+	}
+	fence := make(service.AckOutboundClaimFence, len(req.Items)+len(req.Fence))
+	for _, it := range req.Items {
+		if it.ClaimedAt == "" {
+			continue
+		}
+		t, err := time.Parse(time.RFC3339Nano, it.ClaimedAt)
+		if err != nil {
+			return nil, fmt.Errorf("invalid claimed_at for %s: %w", it.MsgID, err)
+		}
+		fence[it.MsgID] = t.UTC()
+	}
+	for id, raw := range req.Fence {
+		if raw == "" {
+			continue
+		}
+		t, err := time.Parse(time.RFC3339Nano, raw)
+		if err != nil {
+			return nil, fmt.Errorf("invalid fence claimed_at for %s: %w", id, err)
+		}
+		fence[id] = t.UTC()
+	}
+	if len(fence) == 0 {
+		return nil, nil
+	}
+	return fence, nil
 }
 
 func writeOutboxJSON(c *gin.Context, hubs []*model.MessageHub) {
@@ -1053,6 +1094,12 @@ func (h *BridgeIngestHandler) AckBridgeOutbox(c *gin.Context) {
 		})
 		return
 	}
+	// G-06：v3 claim 栅栏在任何写之前解析；非法 claimed_at 整批 400。
+	claimFence, fenceErr := buildAckClaimFence(&req)
+	if fenceErr != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": fenceErr.Error()})
+		return
+	}
 	ctx := c.Request.Context()
 	logger.Ctx(ctx).Info().
 		Str("module", "bridge").
@@ -1110,7 +1157,13 @@ func (h *BridgeIngestHandler) AckBridgeOutbox(c *gin.Context) {
 				ids = append(ids, in.MsgID)
 				perItem[in.MsgID] = in
 			}
-			part, err := h.ingress.AckOutboundDeliveredDetailed(ctx, channel, accountID, ids, k.conv, k.status, perItem)
+			var part *service.AckOutboundResult
+			var err error
+			if len(claimFence) > 0 {
+				part, err = h.ingress.AckOutboundDeliveredDetailedFenced(ctx, channel, accountID, ids, k.conv, k.status, perItem, claimFence)
+			} else {
+				part, err = h.ingress.AckOutboundDeliveredDetailed(ctx, channel, accountID, ids, k.conv, k.status, perItem)
+			}
 			if err != nil {
 				logger.Ctx(ctx).Error().Err(err).Str("module", "bridge").Str("channel", channel).Msg("[Bridge] AckOutboundDeliveredDetailed(v2) failed")
 				c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "ack failed"})
@@ -1128,7 +1181,11 @@ func (h *BridgeIngestHandler) AckBridgeOutbox(c *gin.Context) {
 		ackResult = merged
 	} else {
 		var err error
-		ackResult, err = h.ingress.AckOutboundDeliveredDetailed(ctx, channel, accountID, req.MsgIDs, "", terminalStatus, nil)
+		if len(claimFence) > 0 {
+			ackResult, err = h.ingress.AckOutboundDeliveredDetailedFenced(ctx, channel, accountID, req.MsgIDs, "", terminalStatus, nil, claimFence)
+		} else {
+			ackResult, err = h.ingress.AckOutboundDeliveredDetailed(ctx, channel, accountID, req.MsgIDs, "", terminalStatus, nil)
+		}
 		if err != nil {
 			logger.Ctx(ctx).Error().Err(err).Str("module", "bridge").Str("channel", channel).Msg("[Bridge] AckOutboundDeliveredDetailed failed")
 			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "ack failed"})
@@ -1235,24 +1292,24 @@ type UnifiedChannelGatewayRequest struct {
 }
 
 type UnifiedGatewayMessage struct {
-	EventID        string         `json:"event_id"`
-	ConversationID string         `json:"conversation_id"`
-	SenderID       string         `json:"sender_id"`
-	SenderName     string         `json:"sender_name"`
+	EventID        string `json:"event_id"`
+	ConversationID string `json:"conversation_id"`
+	SenderID       string `json:"sender_id"`
+	SenderName     string `json:"sender_name"`
 	// SenderAvatar 发言者头像 URL（统一上报格式字段，与 channelgw.IngestMessage.SenderAvatar
 	// 同名同义）。QQ/微信等拿不到头像的渠道留空——空串是合法兜底，不编造占位值。
 	// JSON tag 带 omitempty：旧客户端缺此键时反序列化为零值，向后兼容。
-	SenderAvatar   string         `json:"sender_avatar,omitempty"`
-	SenderType     string         `json:"sender_type"`
-	ReceiverID     string         `json:"receiver_id"`
-	Content        string         `json:"content"`
-	MsgType        string         `json:"msg_type"`
-	MediaURL       string         `json:"media_url"`
-	IsGroup        bool           `json:"is_group"`
-	GroupID        string         `json:"group_id"`
-	GroupName      string         `json:"group_name"`
-	Timestamp      int64          `json:"timestamp"`
-	Extra          map[string]any `json:"extra"`
+	SenderAvatar string         `json:"sender_avatar,omitempty"`
+	SenderType   string         `json:"sender_type"`
+	ReceiverID   string         `json:"receiver_id"`
+	Content      string         `json:"content"`
+	MsgType      string         `json:"msg_type"`
+	MediaURL     string         `json:"media_url"`
+	IsGroup      bool           `json:"is_group"`
+	GroupID      string         `json:"group_id"`
+	GroupName    string         `json:"group_name"`
+	Timestamp    int64          `json:"timestamp"`
+	Extra        map[string]any `json:"extra"`
 }
 
 // HandleGateway 统一渠道入口：identify_code 鉴权（BridgeIngressGuard）+ 租户自证。
@@ -1461,7 +1518,7 @@ func gatewayMessageToEvent(channel, accountID string, tenantID uint, m UnifiedGa
 		EventID: eventID, Channel: channel, SenderID: m.SenderID, SenderName: m.SenderName,
 		// SenderAvatar 与 media_url 同列宽口径，入库前收口；QQ/微信拿不到时为空串（合法兜底）。
 		SenderAvatar: model.TruncateMediaURL(m.SenderAvatar),
-		SenderType: senderType, ReceiverID: receiver, MsgType: msgType, Content: m.Content,
+		SenderType:   senderType, ReceiverID: receiver, MsgType: msgType, Content: m.Content,
 		MediaURL: m.MediaURL, ConversationID: conv, IsGroup: m.IsGroup, GroupID: m.GroupID,
 		Extra: extra, Timestamp: time.UnixMilli(ts),
 	}

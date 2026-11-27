@@ -238,15 +238,18 @@ type IngestAck struct {
 }
 
 type IngestResponse struct {
-	OK         bool            `json:"ok"`
-	Ingested   []*IngestResult `json:"ingested"`
+	OK       bool            `json:"ok"`
+	Ingested []*IngestResult `json:"ingested"`
 	// 以下两字段为 additve 兼容：桌面桥接扩展仍读 ingested；
 	// SageX Android 客户端只认 schema_version + acks，缺一即判 ACK_INVALID 暂停上报。
 	SchemaVersion string       `json:"schema_version,omitempty"`
 	Acks          []*IngestAck `json:"acks,omitempty"`
-	SessionID     string       `json:"session_id,omitempty"`
-	Reason        string       `json:"reason,omitempty"`
-	ServerTime    int64        `json:"server_time"`
+	// SessionID 是总线会话键（SessionIDForInbound 的映射结果），供客户端缓存；
+	// 不是 AI checkpoint 线程 ID，详见 SessionIDForInbound 注释（G-05）。7 天 TTL
+	// 由 chat_history_redis 承载，客户端过期后重新上报即可重建。
+	SessionID  string `json:"session_id,omitempty"`
+	Reason     string `json:"reason,omitempty"`
+	ServerTime int64  `json:"server_time"`
 }
 
 // OutboundReply 服务器 -> 渠道 下行统一回复（WS outbound_reply 帧载荷）。
@@ -356,6 +359,25 @@ func bridgeSessionKey(channel, accountID, conversationID, groupID, senderID, sen
 		conv = firstNonEmpty(senderID, senderName)
 	}
 	return channel + ":" + accountID + ":" + conv
+}
+
+// SessionIDForInbound 返回总线在 IngestResponse.session_id 中告知客户端的会话键（G-05）。
+//
+// 映射约定（跨渠道唯一）：
+//
+//	session_id = channel : account_id : (conversation_id || group_id || sender_id)
+//	群聊优先 group_id，1v1 缺失 conversation_id 时回退 sender_id/sender_name。
+//
+// 这与 AI 侧的 ScopedCheckpointThreadID（aiagent/agent/runtime，thr_v3_<sha256>）
+// 是**两个不同用途的键**：前者是渠道会话身份（可回读、可缓存、7 天 TTL），
+// 后者是可恢复执行快照地址（含 tenant/message/agent 配置指纹，不可逆推）。
+// 两者通过 MessageEvent.SessionID 单向关联——总线不生成 checkpoint 线程 ID，
+// AI 也不得把 session_id 当作恢复地址直接使用。
+func SessionIDForInbound(m *IngestMessage) string {
+	if m == nil {
+		return ""
+	}
+	return bridgeSessionKey(m.Channel, m.AccountID, m.ConversationID, m.GroupID, m.SenderID, m.SenderName, m.IsGroup)
 }
 
 // ToEvent 将上行消息转换为消息中台的 model.MessageEvent（不含 History 拷贝）。

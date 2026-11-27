@@ -46,6 +46,9 @@ type VisitorChatService struct {
 	agentBindingSvc *ChannelAgentBindingService
 	inboxConvRepo   *repository.InboxConversationRepository
 	leadMiningSvc   *Service
+	// ingressHandler 把网页客服入站归一进统一消息总线（G-02）。由 Router 注入
+	// InboxIngressService.HandleIngressMessage；nil 时保持旧行为（无总线归一）。
+	ingressHandler func(context.Context, *model.MessageEvent) error
 }
 
 // NewVisitorChatService 构造访客会话服务
@@ -134,6 +137,42 @@ func (s *VisitorChatService) SetOrchestrator(ctx context.Context, o *SmartCSOrch
 // SetLeadMining 注入线索发掘服务（用于循环依赖解耦）
 func (s *VisitorChatService) SetLeadMining(svc *Service) {
 	s.leadMiningSvc = svc
+}
+
+// SetIngressHandler 注入统一消息总线的入站归一入口（G-02）。
+// 传入的实现必须自行保证幂等；网页客服侧用 WithChannelOwnedAITrigger 抑制
+// 中台二次 AI（访客链路本身已有 orchestrator），只借用总线的门禁/落库/发掘能力。
+func (s *VisitorChatService) SetIngressHandler(fn func(context.Context, *model.MessageEvent) error) {
+	s.ingressHandler = fn
+}
+
+// reportToMessageBus 把访客消息归一到 message_hub（统一收件箱/门禁/线索发掘）。
+// 失败只告警不阻断访客会话——网页客服的历史链路（session_messages + WS）仍然可用，
+// 总线是增强层而不是单点故障。
+func (s *VisitorChatService) reportToMessageBus(ctx context.Context, req *VisitorSendMessageRequest, session *model.CustomerSession, userMsg *model.SessionMessage, contentType model.MessageType) {
+	if s.ingressHandler == nil {
+		return
+	}
+	event := &model.MessageEvent{
+		EventID:        fmt.Sprintf("visitor:%s:%d", session.SessionID, userMsg.ID),
+		SessionID:      session.SessionID,
+		Channel:        string(model.PlatformWebEmbed),
+		SenderID:       req.VisitorID,
+		SenderName:     session.UserName,
+		ReceiverID:     session.AccountID,
+		MsgType:        string(contentType),
+		Content:        req.Content,
+		MediaURL:       req.MediaURL,
+		ConversationID: session.SessionID,
+		Timestamp:      userMsg.CreatedAt,
+	}
+	if event.Timestamp.IsZero() {
+		event.Timestamp = time.Now()
+	}
+	// 只落总线、不触发中台 AI（访客链路自己调 orchestrator）。
+	if err := s.ingressHandler(WithChannelOwnedAITrigger(ctx), event); err != nil {
+		logger.Warnf("[Visitor] 入站归一到消息总线失败 session=%s event=%s: %v", session.SessionID, event.EventID, err)
+	}
 }
 
 // VisitorOpenSessionRequest 访客打开会话请求
@@ -489,7 +528,12 @@ func (s *VisitorChatService) SendMessage(ctx context.Context, req *VisitorSendMe
 
 	s.syncToInbox(ctx, session, req.Content)
 
-	if s.leadMiningSvc != nil {
+	// G-02：统一消息总线归一。InboxIngress 内部会做门禁/去重/落 message_hub，
+	// 并按线索发掘闸门 Enqueue；下面 legacy synthetic hub 仅在无 ingress 句柄时
+	// 保留，避免同一条访客消息被发掘两次。
+	s.reportToMessageBus(ctx, req, session, userMsg, contentType)
+
+	if s.ingressHandler == nil && s.leadMiningSvc != nil {
 		func() {
 			defer func() {
 				if r := recover(); r != nil {

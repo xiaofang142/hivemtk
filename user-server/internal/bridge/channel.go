@@ -2,7 +2,6 @@ package bridge
 
 import (
 	gw "hivemtk-user/internal/channelgw"
-	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/service"
 )
 
@@ -30,47 +29,12 @@ const (
 	ChannelWalmartUSWeb    = "walmart_us"
 )
 
+// NormalizeBridgeChannel 保留为 bridge 包兼容入口；别名单源在 channelgw.NormalizeChannel
+// （G-01：协议层 canonical 名 = Registry.Name = DB channels.code = model.Channel*）。
 func NormalizeBridgeChannel(ch string) string {
-	switch ch {
-	case "xhs", "xhs_web", "xiaohongshu_web":
-		return model.ChannelXHS
-	case "douyin_web":
-		return model.ChannelDouyin
-	case "kuaishou_web", "ks":
-		return model.ChannelKuaishou
-	case "xianyu_web":
-		return model.ChannelXianyu
-	case "tiktok_web":
-		return model.ChannelTikTok
-	case "jd_web", "jingdong", "jd_chat":
-		return model.ChannelJD
-	case "bili", "bilibili_web", "b站":
-		return model.ChannelBilibili
-	case "wb", "weibo_web":
-		return model.ChannelWeibo
-	case "wx_personal", "wechat_personal", "personal_wechat":
-		return model.ChannelPersonalWX
-	// CH-16（2026-11-09）：拼多多别名归一。pinduoduo 是平台英文名的历史写法，
-	// pdd_web 是扩展侧早期占位别名；canonical=pdd。
-	case "pinduoduo", "pdd_web":
-		return model.ChannelPDD
-	// 2026-11-18 电商店铺五渠道别名归一（与前端 CHANNEL_LEGACY_WEB_TO_CANONICAL
-	// 及各渠道调研行 canonical 口径一致）。
-	case "taobao_web", "tmall", "qianniu":
-		return model.ChannelTaobao
-	case "jinritemai", "feige", "douyin_shop_web":
-		return model.ChannelDouyinShop
-	case "kwaixiaodian", "kuaishou_shop_web", "kuaishouxiao":
-		return model.ChannelKuaishouShop
-	case "shopee_web", "shopee_seller":
-		return model.ChannelShopee
-	case "walmart", "walmart_web":
-		return model.ChannelWalmartUS
-	default:
-		return ch
-	}
+	return gw.NormalizeChannel(ch)
 }
 
 func IsBridgeChannel(ch string) bool {
-	return gw.Default.IsChannel(NormalizeBridgeChannel(ch))
+	return gw.Default.IsChannel(gw.NormalizeChannel(ch))
 }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/repository"
 )
@@ -55,12 +56,27 @@ func BridgeIngressGuard() gin.HandlerFunc {
 
 func bridgeIngressGuard(candidatesForRequest func() []string) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// G-07：off 是单机内网的历史逃生阀，多租户下无论候选码是否为空都拒绝，
+		// 避免配置漂移后悄悄退化成无鉴权入口。
+		if tenant.IsMultiTenant() && strings.EqualFold(os.Getenv("BRIDGE_INGEST_AUTH"), "off") {
+			response.Error(c, 503, "多租户模式禁止 BRIDGE_INGEST_AUTH=off：请使用账号识别码鉴权")
+			c.Abort()
+			return
+		}
 		candidates := candidatesForRequest()
 		if len(candidates) == 0 {
 			// fail-closed：识别码未生成时默认拒绝。历史部署可显式 BRIDGE_INGEST_AUTH=off
-			// 恢复旧的"无鉴权放行"行为（仅限可信内网）。
-			if !strings.EqualFold(os.Getenv("BRIDGE_INGEST_AUTH"), "off") {
+			// 恢复旧的"无鉴权放行"行为（仅限可信内网单机）。
+			// G-07：多租户（TENANT_MODE=on）下这条逃生阀会让任意调用方绕过账号识别码闸，
+			// 仅凭 tenant_code 把消息写进别的租户——必须硬禁，不能靠运维自觉。
+			authOff := strings.EqualFold(os.Getenv("BRIDGE_INGEST_AUTH"), "off")
+			if !authOff {
 				response.Error(c, 503, "桥接通道未配置账号识别码（请在账号识别码页重置，或显式 BRIDGE_INGEST_AUTH=off 以接受无鉴权模式）")
+				c.Abort()
+				return
+			}
+			if tenant.IsMultiTenant() {
+				response.Error(c, 503, "多租户模式禁止 BRIDGE_INGEST_AUTH=off：请先生成账号识别码")
 				c.Abort()
 				return
 			}

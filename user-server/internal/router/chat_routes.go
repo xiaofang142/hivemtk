@@ -5,6 +5,7 @@ import (
 
 	"hivemtk-user/internal/controller"
 	"hivemtk-user/internal/middleware"
+	"hivemtk-user/internal/model"
 	dbutil "hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/service"
@@ -16,7 +17,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func setupChatPublicRoutes(public *gin.RouterGroup, db *gorm.DB, orchestrator *service.SmartCSOrchestrator, langResolver *translation.LangConfigResolver, leadMiningSvc *service.Service) {
+func setupChatPublicRoutes(public *gin.RouterGroup, db *gorm.DB, orchestrator *service.SmartCSOrchestrator, langResolver *translation.LangConfigResolver, leadMiningSvc *service.Service, ingressSvc func() *service.InboxIngressService) {
 	channelSvc := service.MustNewChatChannelService(repository.NewChatChannelRepositoryWithDB(db))
 	aiAgentRepo := repository.NewAIAgentRepositoryWithDB(db)
 	agentBindingSvc := service.NewChannelAgentBindingServiceWithRepos(
@@ -25,6 +26,18 @@ func setupChatPublicRoutes(public *gin.RouterGroup, db *gorm.DB, orchestrator *s
 		service.NewAIAgentServiceWithRepo(aiAgentRepo),
 	)
 	visitorSvc := service.NewVisitorChatService(channelSvc, orchestrator, agentBindingSvc)
+	// G-02：网页客服入站归一进统一消息总线（message_hub 门禁 + 发掘），
+	// 用 WithChannelOwnedAITrigger 抑制中台二次 AI；句柄在请求期取，解开装配顺序。
+	if ingressSvc != nil {
+		visitorSvc.SetIngressHandler(func(ctx context.Context, event *model.MessageEvent) error {
+			svc := ingressSvc()
+			if svc == nil {
+				return nil
+			}
+			_, err := svc.HandleIngressMessage(ctx, event)
+			return err
+		})
+	}
 	// 线索发掘注入（LM-06）：embed 网页客服与其他渠道共用同一发掘队列。
 	// 由 Router 传入全局唯一实例，避免重复 New 造成多组 worker 竞争。
 	if leadMiningSvc != nil {

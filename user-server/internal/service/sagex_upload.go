@@ -22,7 +22,11 @@ import (
 )
 
 const (
-	SageXSchemaVersion   = "1.0"
+	SageXSchemaVersion = "1.0"
+	// SageXProtocolVersion 是统一消息总线的线路协议标识（G-04）。
+	// 旧 schema_version=1.0 继续作为请求/响应别名字段保留，避免破坏已装 SageX 伴生；
+	// protocol_version 才是跨渠道一致的协议名，与 /bridge/gateway 的 schema_version 同值。
+	SageXProtocolVersion = "hivemtk.channel.v1"
 	SageXMaxEvents       = 50
 	SageXMaxRequestBytes = 1_048_576
 	SageXMaxAckBytes     = 262_144
@@ -48,10 +52,12 @@ var (
 const SageXMaxInstallationIDLength = 100
 
 type SageXUploadRequest struct {
-	SchemaVersion  string `json:"schema_version"`
-	BatchID        string `json:"batch_id"`
-	SentAt         string `json:"sent_at"`
-	InstallationID string `json:"installation_id"`
+	SchemaVersion string `json:"schema_version"`
+	// ProtocolVersion 是统一消息总线协议标识；与旧 SchemaVersion 二者取其一即可。
+	ProtocolVersion string `json:"protocol_version,omitempty"`
+	BatchID         string `json:"batch_id"`
+	SentAt          string `json:"sent_at"`
+	InstallationID  string `json:"installation_id"`
 	// IdentifyCode 是 SageX 上报的唯一鉴权凭证（T059 / FR-028），用于解析租户/账号。
 	// installation_id 仅用于租户内幂等/展示，不作为鉴权依据。
 	IdentifyCode string           `json:"identify_code"`
@@ -154,9 +160,11 @@ type SageXStyleMessage struct {
 }
 
 type SageXUploadAckResponse struct {
-	SchemaVersion string         `json:"schema_version"`
-	BatchID       string         `json:"batch_id"`
-	Acks          []SageXAckItem `json:"acks"`
+	// ProtocolVersion 是统一线路协议标识；schema_version 是 SageX 存量别名。
+	ProtocolVersion string         `json:"protocol_version"`
+	SchemaVersion   string         `json:"schema_version"`
+	BatchID         string         `json:"batch_id"`
+	Acks            []SageXAckItem `json:"acks"`
 }
 
 type SageXAckItem struct {
@@ -216,7 +224,13 @@ func (s *SageXUploadService) HandleUpload(ctx context.Context, identifyCode stri
 	if rawBodySize > SageXMaxRequestBytes {
 		return nil, ErrSageXInvalidEnvelope
 	}
-	if strings.TrimSpace(req.SchemaVersion) != SageXSchemaVersion {
+	// G-04：统一协议标识 protocol_version 与旧 schema_version 双入口，
+	// 两者都接受；旧客户端零改动，新客户端可迁移到 canonical 值。
+	version := strings.TrimSpace(req.ProtocolVersion)
+	if version == "" {
+		version = strings.TrimSpace(req.SchemaVersion)
+	}
+	if version != SageXSchemaVersion && version != SageXProtocolVersion {
 		return nil, ErrSageXUnsupportedSchema
 	}
 	if strings.TrimSpace(req.BatchID) == "" {
@@ -337,9 +351,10 @@ func (s *SageXUploadService) HandleUpload(ctx context.Context, identifyCode stri
 	}
 
 	return &SageXUploadAckResponse{
-		SchemaVersion: SageXSchemaVersion,
-		BatchID:       req.BatchID,
-		Acks:          acks,
+		ProtocolVersion: SageXProtocolVersion,
+		SchemaVersion:   SageXSchemaVersion,
+		BatchID:         req.BatchID,
+		Acks:            acks,
 	}, nil
 }
 
