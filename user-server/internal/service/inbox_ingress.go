@@ -845,8 +845,13 @@ func (s *InboxIngressService) recordAITriggerDecision(ctx context.Context, event
 	// 不依赖 Carrier（早退分支可能还没注入 carrier），否则决策节点会落到空 trace 上，
 	// 在 /api/monitor/trace-tree 里表现为「missing=[ai_trigger_decision]」的假缺失。
 	traceID := tracing.LinkInboundTraceID(ctx, event.ConversationID)
+	// TraceTreeRows 以最新 span 的 turn_id 锚定整轮链路；早退分支没有 carrier，
+	// 必须按与 CarrierForHub 相同的确定性公式补 turn_id，否则会把同轮 ingest/
+	// inbox_sync 从 trace-tree 里挤掉（表现为 missing=[ingest,inbox_sync]）。
+	turnID := tracing.BusinessTurnID(tenant.WriteTenantID(ctx), event.Channel, accountID, event.ConversationID, event.EventID)
 	_ = tracing.RecordNodeContext(ctx, tracing.NodeSpan{
 		TraceID:          traceID,
+		TurnID:           turnID,
 		ConversationID:   event.ConversationID,
 		AccountID:        accountID,
 		Channel:          event.Channel,
