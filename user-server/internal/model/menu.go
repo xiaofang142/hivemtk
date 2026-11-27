@@ -309,10 +309,18 @@ var SystemMenuTree = []SystemMenuNode{
 					{Key: "knowledgeStatistics", Title: "知识库统计", Icon: "DataAnalysis", Path: "/knowledge/statistics"},
 					{Key: "knowledgeRagEval", Title: "RAG 评测", Icon: "CircleCheck", Path: "/knowledge/rag-eval"},
 					{Key: "knowledgeOpenAPI", Title: "OpenAPI 集成", Icon: "Connection", Path: "/knowledge/openapi"},
-					{Key: "knowledgeConnectors", Title: "连接器配置", Icon: "Link", Path: "/knowledge/connectors"},
+					// 2026-11-27 菜单审计：knowledgeConnectors 与 kbImportConnectors 是
+					// 「外部知识源」的两段互补能力（凭据/连通测试 与 导入连接器），
+					// 此前并列成两个语义相同的菜单项，用户无法判断该进哪个。
+					//
+					// 处理方式：两个 key **必须保留**——menu_capability_routes.go 用它们
+					// 分别守着 /api/knowledge/connectors/* 与 /api/kb-connectors/* 的接口授权，
+					// 删 key 会让接口鉴权断链。因此只在前端 projectNavigation 把它们收敛成
+					// 单个入口（key=kbSources，两页作为 tab），后端注册表原样保留两行。
+					{Key: "knowledgeConnectors", Title: "外部知识源", Icon: "Link", Path: "/knowledge/connectors"},
 					{Key: "knowledgeCrawlerSources", Title: "网站爬取", Icon: "Connection", Path: "/knowledge/crawler-sources", Roles: []string{"admin"}},
 					{Key: "knowledgeQaCandidates", Title: "QA 审核队列", Icon: "CircleCheck", Path: "/knowledge/qa-candidates", Roles: []string{"admin"}},
-					{Key: "kbImportConnectors", Title: "第三方知识库导入", Icon: "Connection", Path: "/kb/connectors", Roles: []string{"admin"}},
+					{Key: "kbImportConnectors", Title: "外部知识源", Icon: "Connection", Path: "/kb/connectors", Roles: []string{"admin"}},
 				},
 			},
 			{
@@ -335,7 +343,11 @@ var SystemMenuTree = []SystemMenuNode{
 		},
 	},
 	{
-		Key: "geoTools", Title: "GEO 增长", Icon: "MagicStick", Path: "/geo-tools/keyword-mining",
+		// 2026-11-27 菜单审计：这里原本自带一个指向「关键词蒸馏」的 path，
+		// 与「生产 → 关键词蒸馏」同路径，导致侧栏同一页出现两次，且点击「GEO 增长」
+		// 顶级分组会跳过层级直达最深处子页。顶级分组回归纯目录（不再声明 path），
+		// 子页入口只保留「生产 → 关键词蒸馏」一处。
+		Key: "geoTools", Title: "GEO 增长", Icon: "MagicStick",
 		Roles: []string{"admin"},
 		Children: []SystemMenuNode{
 			{

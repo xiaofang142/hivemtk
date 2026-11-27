@@ -541,7 +541,8 @@
     "capabilityMatrix": "مصفوفة القدرات",
     "channelManage": "إدارة القنوات",
     "channelAccount": "إدارة حسابات القنوات",
-    "channels": "القنوات"
+    "channels": "القنوات",
+    "kbSources": "مصادر المعرفة الخارجية"
   },
   "保存": "حفظ",
   "提交": "إرسال",
@@ -3136,5 +3137,10 @@
       "version": "Operation version",
       "preflight_hash": "Preflight digest"
     }
+  },
+  "kbSources": {
+    "description": "اربط قواعد معرفة خارجية بـ RAG المحلي: تحقق من بيانات الاعتماد أولاً ثم استورد المستندات عبر موصل.",
+    "credentialsTab": "بيانات الاعتماد والاتصال",
+    "importTab": "موصلات الاستيراد"
   }
 }

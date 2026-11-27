@@ -583,7 +583,8 @@
     "capabilityMatrix": "Fähigkeitsmatrix",
     "channelManage": "Kanalverwaltung",
     "channelAccount": "Kanal-Kontoverwaltung",
-    "channels": "Kanäle"
+    "channels": "Kanäle",
+    "kbSources": "Externe Wissensquellen"
   },
   "保存": "Save",
   "提交": "Submit",
@@ -3136,5 +3137,10 @@
       "version": "Operation version",
       "preflight_hash": "Preflight digest"
     }
+  },
+  "kbSources": {
+    "description": "Drittanbieter-Wissensdatenbanken mit lokalem RAG verbinden: zuerst Zugangsdaten prüfen, dann Dokumente über einen Import-Connector übernehmen.",
+    "credentialsTab": "Zugangsdaten & Konnektivität",
+    "importTab": "Import-Connectoren"
   }
 }

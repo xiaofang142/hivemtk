@@ -21,10 +21,14 @@ export default [
     meta: { title: '检索 Playground', group: 'knowledge', icon: 'Aim', requiresAuth: true }
   },
   {
+    // 2026-11-27 菜单审计：本页与 /kb/connectors 是「外部知识源」的两段互补能力
+    // （凭据与连通测试 / 导入连接器），此前并列成两个语义相同的菜单项，用户无法
+    // 区分该进哪个。现由 ExternalSources.vue 收敛为一个页面 + 两个 tab，
+    // 两个 path 各自保留，深链与授权不变；菜单在 projectNavigation 里收敛为单入口。
     path: '/knowledge/connectors',
     name: 'KnowledgeConnectors',
-    component: () => import('@/views/KnowledgeWorkspace/Connectors.vue'),
-    meta: { title: '外部连接器', group: 'knowledge', icon: 'Link', requiresAuth: true }
+    component: () => import('@/views/KnowledgeWorkspace/ExternalSources.vue'),
+    meta: { title: '外部知识源', group: 'knowledge', icon: 'Link', requiresAuth: true }
   },
   {
     path: '/knowledge/crawler-sources',
