@@ -4,8 +4,14 @@
 > 否则换机 / 重建部署时会静默丢失（2026-11-04 二次审核发现：`deploy/` 目录
 > 不入库，上传卷与 nginx 分流改完只存在于当前机器）。
 
-## 2026-11-27 · 智能体会话、长上下文与缓存（待实施/验证）
+## 2026-11-27 · 智能体会话、长上下文与缓存（已实施并发布：链 A + 链 D）
 
+- **发布版本**：源码 `a9bfbb9ca` 修复线上审核发现的会话上下文/隐私缺口，并入上游 `b3ef6a29d` 得合并提交 `24cdbd337`，已推 `gitee-upstream/master` 与 `upstream/master`。
+- **链 A**：`./deploy/deploy-api.sh --skip-tests` 成功；本地/线上二进制 SHA-256 `ebc06dbe308dbaa42747e547bc61ba5e7b5e545568b73d6cd05e25a0f4190f8e`；回滚点 `mtk-user-server:rollback-20261127-202319` / `user-server.bak-20261127-202319`；`deployed_at=2026-11-27T20:27:11+08:00`；内网 `127.0.0.1:8204/api/health` 与公网 `https://workapi.xapptool.cn/api/health` 均 `ok`，默认口令探针 GREEN。
+- **链 D（SPA）**：buildId `24cdbd337-1795782649935`，主 JS `assets/index-DNF6M3wj.js`；备份 `/tmp/user-web-backup-20261127-203143.tar.gz`（SHA-256 `e48f5b2871764bea2b7a2f1c4d0f46a5022d9601f7d8d208efcea00ddf1119ec`）；rsync 因 root 持有 `.user.ini` 报 unlink 失败（退出 23），文件已同步，公网新资源 200 且与本地 SHA-256 `6a4766813550449fdd61280152ed1d64afdf3a67fd6ae08a4c30a38c3a8d9142` 一致；后续链 D 应加 `--exclude=.user.ini`。
+- **生产库**：备份 `/tmp/user_db-pre-agent-context-20261127.dump`（175M）后按序应用 `migrations/101/102/103`，`ON_ERROR_STOP=1` 无错误；6 张新表与 `uni_agent_conv_disposition`/`uni_llm_session_state`/`uni_delayed_outbound_correlation` 索引已核验存在。
+- **真实流量复核**：personal_wx 群聊/单聊 channelbus ingest 持续 200；`conversation_message_dispositions` 查询正常，不再出现 `relation does not exist`；`duplicate(channel+sender+content)` 与 `AI 处理中（标记存在）` 是既有入站去重/并发保护。`platform-sensenova` 空响应/400 `matched user group has no available model instance`、dashscope `Arrearage`、TG 超时与 QQ `tenant_unresolved` 为供应商配置/计费及既有渠道环境问题，非本功能代码回归。
+- **验证缺口**：真实 PostgreSQL 业务回归、真实 provider cached tokens/冷热 TTFT、真实渠道单聊/群聊端到端验收均 not-run；i18n 7 语种缺 `回复未送达` 为并行提交 `b3ef6a29d` 引入的非阻塞 warning。
 - 会话与长上下文默认由 user-server 直连已配置 provider；`Source=platform` 且无本地 Key 时仍强制走显式代理。
 - 默认 `store=false`/无状态重放；native session 仅对显式白名单的 provider/model/protocol/region 开启，并受 TTL、删除与租户开关约束。
 - 消息总线 `LLMSessionID` 作为 canonical continuation key；不同 `ExecutionScenarioID` 使用独立状态行，原 `DispatchScenario` 仅负责路由/计费。
