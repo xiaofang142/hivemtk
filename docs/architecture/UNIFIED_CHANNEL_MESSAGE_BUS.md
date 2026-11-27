@@ -536,3 +536,71 @@ cd ../user-web/bridge && npx vitest run
 - `retrieval_rerank` 空 `product_id` 与 LLM `empty response` 属上游模型/检索问题，未在本次四项整改范围内。
 - S5 `AppendHistory` 写侧、S4 `webhook_dedup` fail-open、bridge dist 重发仍未动，保持 §13 口径。
 
+---
+
+## 15. 线上全链路分析（2026-11-27，ego-browser + page.fetch 实证）
+
+### 15.1 数据源与采集方式
+
+- 浏览器：ego lite TaskSpace `hivemtk-online`（space 115），登录态读取生产前端 `https://work.xapptool.cn/#/system/trace`，全程逐元素操作；接口用 `page.fetch` 直接读 `https://workapi.xapptool.cn/api/monitor/*` 与 `/api/message-hub/*`（均 200）。
+- 原始响应曾落盘 `/tmp/prod-bus-snapshot.json`；本文只引用字段值，不复制凭据。
+- 发布链：链 A（API）与链 B（扩展）均已执行；链 C 未执行（本次不涉及平台上链）。
+
+### 15.2 生产基线（发布前后对照）
+
+| 指标 | 发布前 13:29 | 发布后 13:5x | 说明 |
+|---|---|---|---|
+| `inbound_rate` | 8.57/min | 11.78/min | 入站持续，非停摆 |
+| `outbound_rate` | 0 | 0 | **出站始终为 0**：AI 回复从未真正送达 |
+| `pending` / `oldest_pending_min` | 16 / 1130 | 16 / 1138 | 16 条陈旧出站长期滞留 |
+| `stuck_reachable` | 16 | 16 | 全部抖音会话 `conv:做点吃的也不是很难啊` |
+| `total_traces` / `abnormal_count` | 27330 / 3526 | 27851+ / 3526+ | 异常率约 12.7% |
+| `trace_published` / `trace_dropped` | 1367 / 0 | — | 追踪投递无丢弃 |
+| `message_hub` total/inbound/outbound/unread | 4457/4441/16/4441 | 4650/4634/16/4634 | 出站仅 16 条，与 pending 对齐 |
+| 平台分布 | personal_wx 3953、qq 444、douyin 33、xhs 27 | personal_wx 4101、qq 489、douyin 33、xhs 27 | 微信/QQ 为主；抖音 33 条中 16 条卡住 |
+| `inbox` total/unread/overdue | 266/195/235 | — | 收件箱积压严重 |
+
+### 15.3 逐层链路判定（按 S1~S11）
+
+| 层 | 线上实证 | 结论 |
+|---|---|---|
+| S1 建档/识别码 | 消息扩展 `account_id=10, bridge=true, transport=http`；canonical 路径与识别码鉴权已上线 | ✅ |
+| S2 协议归一 | 扩展已装 1.3.12，dist canonical 路径 16 处、旧路径 0 处；服务端旧端点已删除 | ✅（链 A/B 后） |
+| S3 常量单源 | `channelbus.SchemaVersion` 与 gateway/ack 状态同源 | ✅ |
+| S4 门禁/去重 | `ingest` 3ms、`inbox_sync` synced=true；webhook_dedup Redis 异常 fail-open 未改 | ⚠️ |
+| S5 session/画像 | 7d Redis 写侧 `AppendHistory` 仍零调用；`retrieval_rerank` 空 `product_id` → failed | ⚠️ |
+| S6 AI 触发 | 微信 trace 有 `agent_turn`，LLM 返回 `empty response`（sensenova/deepseek-v4-flash）；trace-eval 33 条多为 429 TPM/RPM | ⚠️ 上游模型问题 |
+| S7 出站路由 | `ai_result` = `send_failed` / `capability_submit_denied: capability_mapping_missing` | ❌ → A1 已修（配置期拒绝） |
+| S8 发送 ack | claim 栅栏已闭环；已装扩展 1.3.12 回传 claimed_at/fence | ✅ |
+| S9 统一收件箱 | `UpsertFromHubMessageTx` synced=true；`/api/message-hub/*` 正常 | ✅ |
+| S10 失败回收 | T5 已接线，每 2 分钟按租户 reclaim | ✅（待观察 pending 下降） |
+| S11 旧路径清理 | 服务端/扩展/脚本源码旧路径已删；历史数据伪影仍在 | ✅（源码层） |
+
+### 15.4 本轮追加修复（观测闭环）
+
+1. `47d5c54e1`：决策 span 显式绑定确定性 `trace_id`（此前空 TraceID 落到空 trace，造成“假缺失”）。
+2. `a8e57743f`：batch 六处早退补 `ai_trigger_decision`。
+3. `6f1f59d3f`：决策 span 补 `BusinessTurnID`，与 `CarrierForHub` 同轮关联；发布后 `tr-6ad4f19888e34b623824538916af6bfd450c78fa` 实测 `nodes=[ingest, ai_trigger_decision, inbox_sync]`、`missing=null`、`complete=true`。
+4. 旧 trace `tr-49240c2c6e3927882030be737aa9f9f2ea6d1388` 仍有 29 条空 turn_id 的历史决策 span（旧构建遗留脏数据），`trace-tree` 显示 `missing=[ingest,inbox_sync]` 属历史伪影，不代表新数据回归。
+
+### 15.5 发布状态
+
+- 链 A 当前线上代码 `6f1f59d3f`，二进制 sha256 `6500dcb87dfc4025…`，镜像 `0af9f1b1991964b65f9`，回滚点 `rollback-20261127-135923`。
+- 链 B 扩展 `1.3.12`，加载目录原地重载，快照版本回验通过。
+- `docs/operations/PROD_TOPOLOGY_CHANGES.md` 属用户未提交文件，本轮不代写台账；发布事实以本节与 `deploy/.api-deploy-state.json` 为准。
+
+### 15.6 残留与优先级
+
+| 优先级 | 残留 | 建议 |
+|---|---|---|
+| P0 | `outbound_rate=0`、16 条抖音 pending 1138min | 观察 T5 reclaim 是否回收；若不降，查 `capregistry` 抖音 account=default 的绑定行 |
+| P1 | `ai_result` 93.3% 异常 / `agent_turn` 68.5% 异常 | sensenova 429 限流与 empty response，需上游模型侧或重试/降级策略 |
+| P1 | `retrieval_rerank` 空 product_id | 补产品上下文或从画像回退，避免空检索 |
+| P2 | S5 `AppendHistory` 零调用 | 接入 7d Redis 写侧，否则 session 画像长期空读 |
+| P2 | S4 webhook_dedup fail-open | Redis 异常改 fail-closed 或降级本地去重 |
+| P3 | 旧 trace 空 turn_id 脏数据 | 一次性清理历史 span，避免监控误报 |
+
+### 15.7 结论
+
+消息总线的**入站、归一、门禁、收件箱与追踪链路**在线上已经完整可用；**出站闭环**（AI 回复 → 能力授权 → outbox → ack）因能力映射缺失与上游 LLM 故障长期为 0。本轮 A1/A4/T1/T5 与三次观测修复已经把“失败不可见”变为“失败可定位”，后续重点从代码整改转向线上数据验证与上游模型/能力配置治理。
+
