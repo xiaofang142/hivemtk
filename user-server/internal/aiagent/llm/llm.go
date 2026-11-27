@@ -491,6 +491,24 @@ func shouldUsePlatformProxy(config *LLMConfig) bool {
 	return config != nil && (config.Source == LLMProviderSourcePlatform || strings.TrimSpace(config.RouteMode) == RouteModeProxy)
 }
 
+// chatCompletionsEndpoint 按 provider 协议与 base_url 形态解析聊天补全端点。
+// OpenAI 兼容 base_url 可能已带 /v1 或 /v1beta/openai，不能重复拼 /v1。
+func chatCompletionsEndpoint(baseURL, apiType, model string) string {
+	base := strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if apiType == "azure" {
+		base = strings.TrimSuffix(base, "/v1")
+		return fmt.Sprintf("%s/openai/deployments/%s/chat/completions?api-version=2024-02-01", base, model)
+	}
+	if apiType == "anthropic" {
+		base = strings.TrimSuffix(base, "/v1")
+		return base + "/v1/messages"
+	}
+	if strings.HasSuffix(base, "/v1") || strings.HasSuffix(base, "/v1beta/openai") {
+		return base + "/chat/completions"
+	}
+	return base + "/v1/chat/completions"
+}
+
 func (s *LLMService) callProvider(ctx context.Context, config *LLMConfig, body []byte) (*chatResponse, error) {
 	// 平台垫资 provider：不直连厂商，改走平台代理（Key 只在平台侧，扣费在平台侧）。
 	// 这一层是整条链路的唯一分叉点，见 llm_platform_proxy.go 的文件头。
@@ -509,15 +527,7 @@ func (s *LLMService) callProvider(ctx context.Context, config *LLMConfig, body [
 			baseURL = "https://api.openai.com"
 		}
 	}
-	baseURL = strings.TrimRight(baseURL, "/")
-	baseURL = strings.TrimSuffix(baseURL, "/v1")
-
-	endpoint := baseURL + "/v1/chat/completions"
-	if config.APIType == "azure" {
-		endpoint = fmt.Sprintf("%s/openai/deployments/%s/chat/completions?api-version=2024-02-01", baseURL, config.Model)
-	} else if config.APIType == "anthropic" {
-		endpoint = baseURL + "/v1/messages"
-	}
+	endpoint := chatCompletionsEndpoint(baseURL, config.APIType, config.Model)
 
 	maxRetries := config.MaxRetries
 	if maxRetries <= 0 {

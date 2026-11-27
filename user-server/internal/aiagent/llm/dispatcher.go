@@ -158,6 +158,34 @@ func (d *Dispatcher) SetRoute(r ScenarioRoute) ScenarioRoute {
 	return cp
 }
 
+// providerWithGlobalOverride 返回本次调用实际使用的 provider 副本。
+// 参数中心的管理端全局覆盖是热更新配置，不能写回注册表（会影响熔断/限流计数
+// 与下一次没有覆盖时的恢复），因此每个候选在这里做一次不可变投影。
+func providerWithGlobalOverride(registered *ProviderConfig) *ProviderConfig {
+	if registered == nil {
+		return nil
+	}
+	effective := *registered
+	o := GetGlobalLLMOverride()
+	if o == nil || !o.Enabled || strings.TrimSpace(o.BaseURL) == "" {
+		return &effective
+	}
+	effective.BaseURL = strings.TrimSpace(o.BaseURL)
+	effective.Model = strings.TrimSpace(o.Model)
+	effective.APIKey = o.APIKey
+	if p := strings.ToLower(strings.TrimSpace(o.APIType)); p != "" {
+		effective.APIType = p
+	} else {
+		effective.APIType = "openai"
+	}
+	// 全局覆盖自带 key 且直连，避免被路由候选的 platform 来源强制送进代理。
+	effective.Source = "self"
+	effective.RouteMode = RouteModeDirect
+	effective.KeyInvalid = false
+	effective.Enabled = true
+	return &effective
+}
+
 func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*DispatchResult, error) {
 	// 空接收者保护：本类型指针常被塞进接口（例如 trace_learning.InsightLLM），
 	// Go 里「值为 nil 的具名指针」装进接口后接口本身**非 nil**（typed-nil 陷阱），
@@ -249,12 +277,13 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*Dispat
 	attempted := 0
 	for _, providerName := range candidates {
 		d.mu.RLock()
-		provider, exists := d.providers[providerName]
+		registered, exists := d.providers[providerName]
 		d.mu.RUnlock()
 		if !exists {
 			logger.Infof("[LLM] candidate skip scenario=%s provider=%q reason=not_in_registry", req.Scenario, providerName)
 			continue
 		}
+		provider := providerWithGlobalOverride(registered)
 		if !provider.Enabled {
 			logger.Infof("[LLM] candidate skip scenario=%s provider=%q reason=disabled", req.Scenario, providerName)
 			continue
@@ -363,9 +392,10 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*Dispat
 	if attempted == 0 {
 		if fb := d.pickEnabledFallback(activeRoute); fb != "" {
 			d.mu.RLock()
-			provider, exists := d.providers[fb]
+			registeredFallback, exists := d.providers[fb]
 			d.mu.RUnlock()
 			if exists {
+				provider := providerWithGlobalOverride(registeredFallback)
 				logger.Infof("[LLM] scenario=%s 路由候选全部不可用，兜底启用 provider=%s trace_id=%s", req.Scenario, fb, traceID)
 				result, err := d.callProvider(ctx, provider, req, activeRoute)
 				lastErr = err
