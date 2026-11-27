@@ -11,6 +11,7 @@ import (
 	"hivemtk-user/internal/channelbot/core"
 	"hivemtk-user/internal/channelbot/wecomcs"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
@@ -98,7 +99,7 @@ func (s *WebhookService) dispatchWeComCS(ctx context.Context, accountID string, 
 		return nil, nil
 	}
 	w := s.ensureWeComCS()
-	w.trigger(accountID)
+	w.trigger(ctx, accountID)
 	return nil, nil
 }
 
@@ -110,12 +111,15 @@ func (s *WebhookService) SetWeComCSClientFactoryForTest(fn func() *wecomcs.Clien
 	s.ensureWeComCS().newClient = fn
 }
 
-func (w *wecomCSService) trigger(accountID string) {
+func (w *wecomCSService) trigger(ctx context.Context, accountID string) {
 	id, err := strconv.ParseUint(accountID, 10, 64)
 	if err != nil || id == 0 {
 		return
 	}
-	utils.SafeGo(context.Background(), "wecomcs.pull", func(ctx context.Context) {
+	// BackgroundWithTenant：回调请求 ctx 随响应返回被取消，异步拉取不能跟着断；
+	// 但 bindCallbackTenant 绑定的租户归属必须一并带走——多租户模式下隔离
+	// callback 对无租户上下文的读写 fail-closed，直接丢 ctx 会让拉取整轮被拒。
+	utils.SafeGo(tenant.BackgroundWithTenant(ctx), "wecomcs.pull", func(ctx context.Context) {
 		if err := w.pullOnce(ctx, uint(id)); err != nil {
 			logger.Warnf("[WeComCS] pull account=%d failed: %v", id, err)
 		}
@@ -224,18 +228,27 @@ func (s *WebhookService) startWeComCSSweeper(ctx context.Context) {
 				if s.wecomCSRepo == nil {
 					continue
 				}
-				accs, err := s.wecomCSRepo.ListActive(ctx)
-				if err != nil {
-					logger.Warnf("[WeComCS] list active accounts failed: %v", err)
+				// 租户扇出：ListActive/pullOnce 全部要过隔离 callback，多租户模式下
+				// 裸 ctx 会被 fail-closed 拒掉，必须逐租户绑定上下文再扫
+				// （off 模式 Fanout 退化为单次默认租户，行为与旧版等价）。
+				_, fanErr := tenant.Fanout(ctx, nil, func(tenantCtx context.Context, _ uint) (int64, error) {
+					accs, err := s.wecomCSRepo.ListActive(tenantCtx)
+					if err != nil {
+						return 0, err
+					}
+					for _, acc := range accs {
+						if acc == nil {
+							continue
+						}
+						if err := w.pullOnce(tenantCtx, acc.ID); err != nil {
+							logger.Warnf("[WeComCS] sweep account=%d failed: %v", acc.ID, err)
+						}
+					}
+					return int64(len(accs)), nil
+				})
+				if fanErr != nil {
+					logger.Warnf("[WeComCS] list active accounts failed: %v", fanErr)
 					continue
-				}
-				for _, acc := range accs {
-					if acc == nil {
-						continue
-					}
-					if err := w.pullOnce(ctx, acc.ID); err != nil {
-						logger.Warnf("[WeComCS] sweep account=%d failed: %v", acc.ID, err)
-					}
 				}
 			}
 		}
