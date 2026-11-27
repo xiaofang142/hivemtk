@@ -44,6 +44,8 @@ func resetGlobalOverrideProviders(t *testing.T) {
 		llmpkg.SetLLMOverrideWriter(nil)
 		llmpkg.SetEmbeddingOverrideProvider(nil)
 		llmpkg.SetEmbeddingOverrideWriter(nil)
+		llmpkg.SetRerankOverrideProvider(nil)
+		llmpkg.SetRerankOverrideWriter(nil)
 	})
 }
 
@@ -114,6 +116,43 @@ func TestWireEmbeddingConfigParamsWritesPlatformDefault(t *testing.T) {
 	}
 	if !strings.Contains(got.newValue, "gemini-embedding-2") {
 		t.Errorf("写入值不含目标模型：%q", got.newValue)
+	}
+}
+
+func TestWireRerankConfigParamsWritesPlatformDefault(t *testing.T) {
+	resetGlobalOverrideProviders(t)
+	fake := &fakeConfigParamPlatform{
+		getValue: `{"enabled":false,"api_key":"","base_url":"","model":""}`,
+	}
+
+	wireRerankConfigParamsWith(fake)
+
+	const actorID = uint(4244)
+	if err := llmpkg.SetGlobalRerankOverride(&llmpkg.GlobalRerankOverride{
+		Enabled:  true,
+		BaseURL:  "https://openrouter.ai/api",
+		Model:    "nvidia/nemotron-3.5-rerank-8b:free",
+		Protocol: "openai",
+	}, actorID); err != nil {
+		t.Fatalf("SetGlobalRerankOverride 失败：%v", err)
+	}
+
+	if len(fake.updates) != 1 {
+		t.Fatalf("平台默认写次数 = %d，期望 1", len(fake.updates))
+	}
+	got := fake.updates[0]
+	if got.group != "rerank" || got.key != "global_override" {
+		t.Fatalf("写入坐标 = %s.%s，期望 rerank.global_override", got.group, got.key)
+	}
+	if got.actorID != actorID {
+		t.Errorf("审计操作者 = %d，期望 %d", got.actorID, actorID)
+	}
+	if !strings.Contains(got.newValue, "nvidia/nemotron-3.5-rerank-8b:free") {
+		t.Errorf("写入值不含目标模型：%q", got.newValue)
+	}
+	readBack := llmpkg.GetGlobalRerankOverride()
+	if readBack == nil || readBack.Model != "nvidia/nemotron-3.5-rerank-8b:free" {
+		t.Fatalf("写完立即读回失败：got %+v", readBack)
 	}
 }
 

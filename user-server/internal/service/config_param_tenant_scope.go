@@ -80,6 +80,7 @@ var platformScopedParams = map[string]string{
 	"knowledge.ssrf_check_timeout":             "SSRF 校验超时（安全闸门）",
 	"llm.global_override":                      "全局 LLM 覆盖（平台级，管理端写平台默认行）",
 	"embedding.global_override":                "全局向量覆盖（平台级，管理端写平台默认行）",
+	"rerank.global_override":                   "全局重排覆盖（平台级，管理端写平台默认行）",
 	"misc.deepl_timeout":                       "DeepL 请求超时",
 	"misc.sms_max_retry":                       "短信通道重试次数（上游配额行为）",
 
