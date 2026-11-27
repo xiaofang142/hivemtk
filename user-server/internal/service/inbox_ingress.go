@@ -841,7 +841,12 @@ func (s *InboxIngressService) recordAITriggerDecision(ctx context.Context, event
 	if outcome == "skipped" {
 		status = tracing.StatusSkipped
 	}
+	// 与 ingest Span 走同一个确定性 trace_id：LineInboundTraceID 按会话派生，
+	// 不依赖 Carrier（早退分支可能还没注入 carrier），否则决策节点会落到空 trace 上，
+	// 在 /api/monitor/trace-tree 里表现为「missing=[ai_trigger_decision]」的假缺失。
+	traceID := tracing.LinkInboundTraceID(ctx, event.ConversationID)
 	_ = tracing.RecordNodeContext(ctx, tracing.NodeSpan{
+		TraceID:          traceID,
 		ConversationID:   event.ConversationID,
 		AccountID:        accountID,
 		Channel:          event.Channel,
