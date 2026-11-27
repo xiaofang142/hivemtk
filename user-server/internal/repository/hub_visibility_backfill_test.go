@@ -7,6 +7,25 @@ import (
 	"testing"
 )
 
+func TestPendingDispositionReconcileMigrationContract(t *testing.T) {
+	path := filepath.Join("..", "..", "..", "migrations", "105_reconcile_pending_dispositions.sql")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("读取待处置回填迁移失败: %v", err)
+	}
+	sql := string(data)
+	for _, want := range []string{
+		"UPDATE conversation_message_dispositions",
+		"'skipped'",
+		"'stale_pending_reconciled'",
+		"version = version + 1",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Fatalf("迁移缺少关键片段 %q", want)
+		}
+	}
+}
+
 func TestHubVisibilityBackfillMigrationContract(t *testing.T) {
 	path := filepath.Join("..", "..", "..", "migrations", "104_backfill_message_hub_visibility.sql")
 	data, err := os.ReadFile(path)
