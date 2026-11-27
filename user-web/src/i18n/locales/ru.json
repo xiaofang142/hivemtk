@@ -583,7 +583,8 @@
     "capabilityMatrix": "Матрица возможностей",
     "channelManage": "Управление каналами",
     "channelAccount": "Управление аккаунтами каналов",
-    "channels": "Каналы"
+    "channels": "Каналы",
+    "kbSources": "Внешние источники знаний"
   },
   "保存": "Save",
   "提交": "Submit",
@@ -3136,5 +3137,10 @@
       "version": "Operation version",
       "preflight_hash": "Preflight digest"
     }
+  },
+  "kbSources": {
+    "description": "Подключите сторонние базы знаний к локальному RAG: сначала проверьте учётные данные, затем импортируйте документы через коннектор.",
+    "credentialsTab": "Учётные данные и связь",
+    "importTab": "Коннекторы импорта"
   }
 }

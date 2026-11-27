@@ -583,7 +583,8 @@
     "capabilityMatrix": "ケイパビリティマトリクス",
     "channelManage": "チャネル管理",
     "channelAccount": "チャネルアカウント管理",
-    "channels": "チャネル"
+    "channels": "チャネル",
+    "kbSources": "外部ナレッジソース"
   },
   "保存": "保存",
   "提交": "送信",
@@ -3136,5 +3137,10 @@
       "version": "Operation version",
       "preflight_hash": "Preflight digest"
     }
+  },
+  "kbSources": {
+    "description": "サードパーティのナレッジベースをローカル RAG に接続します。まず認証情報と接続確認を行い、次にインポートコネクタで文書を取り込みます。",
+    "credentialsTab": "認証情報と接続確認",
+    "importTab": "インポートコネクタ"
   }
 }

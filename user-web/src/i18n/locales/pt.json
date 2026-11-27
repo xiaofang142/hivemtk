@@ -583,7 +583,8 @@
     "capabilityMatrix": "Matriz de Capacidades",
     "channelManage": "Gerenciamento de Canais",
     "channelAccount": "Gerenciamento de Contas de Canal",
-    "channels": "Canais"
+    "channels": "Canais",
+    "kbSources": "Fontes de conhecimento externas"
   },
   "保存": "Save",
   "提交": "Submit",
@@ -3136,5 +3137,10 @@
       "version": "Operation version",
       "preflight_hash": "Preflight digest"
     }
+  },
+  "kbSources": {
+    "description": "Conecte bases de conhecimento de terceiros ao RAG local: valide as credenciais e depois importe documentos por um conector.",
+    "credentialsTab": "Credenciais e conectividade",
+    "importTab": "Conectores de importação"
   }
 }

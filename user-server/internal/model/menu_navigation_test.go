@@ -31,15 +31,17 @@ func TestMenuNavigation_AllLeafKeysAndPathsPreserved(t *testing.T) {
 	// 2026-11-26：线索发现独立顶级模块新增 5 个深链叶子 + 1 个带页容器（原 206/212 → 211/217）；
 	// T04 菜单去重把重复半成品「平台账号」(/platformAccount/list) 收口到渠道账号，
 	// 唯一删除的叶子/深链就是它，故 211/217 → 210/216，其余 key/Path 全部保留。
+	// 2026-11-27 菜单审计：geoTools 顶级节点去掉自带 Path（与「生产 → 关键词蒸馏」重复），
+	// 216 → 215；**叶子数 210 不变**——删的只是分组默认页，业务页一个没少。
 	const want = "87964826c01f51ec1cbb43c2623dad8aad0bb2fd06ed687b3dfbd0f3aa993b2c"
 	if len(leaves) != 210 || got != want {
 		t.Fatalf("210 个业务叶子的 key/Path 必须完整保留（T04 仅移除 platformAccount），实际 %d 个 / %s；清单:\n%s", len(leaves), got, strings.Join(leaves, "\n"))
 	}
 	sort.Strings(paths)
 	got = fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(paths, "\n"))))
-	const wantPaths = "8a486db7e9f9c3a52236fb54fd7d826102f4de48756d310e89c6b29da989591f"
-	if len(paths) != 216 || got != wantPaths {
-		t.Fatalf("含带页目录的 216 个 key/Path 必须完整保留（T04 仅移除 platformAccount），实际 %d 个 / %s", len(paths), got)
+	const wantPaths = "a56171a8a682f1ffec5bc7a1943cb4279f78454be83bf1f08c2fbfedcd69e7d8"
+	if len(paths) != 215 || got != wantPaths {
+		t.Fatalf("含带页目录的 215 个 key/Path 必须完整保留（2026-11-27 起 geoTools 不再自带 Path），实际 %d 个 / %s", len(paths), got)
 	}
 }
 
@@ -130,7 +132,9 @@ func TestMenuNavigation_AuthoritativeGroups(t *testing.T) {
 func TestMenuNavigation_BusinessLabelsAndPaths(t *testing.T) {
 	want := map[string][2]string{
 		"customer": {"客户与销售", ""}, "aiAgent": {"客服智能体", ""}, "leadDiscovery": {"线索智能体", ""}, "system": {"系统管理", ""},
-		"geoTools": {"GEO 增长", "/geo-tools/keyword-mining"}, "permissionGroup": {"渠道与集成", ""},
+		// 2026-11-27：geoTools 回归纯目录（不再自带默认页），避免与
+		// 「生产 → 关键词蒸馏」同路径导致侧栏重复项。
+		"geoTools": {"GEO 增长", ""}, "permissionGroup": {"渠道与集成", ""},
 		"geoBrandConfig":    {"AI 爬虫访问文件", "/geo-tools/brand-config"},
 		"geoConfig":         {"品牌与站点资料", "/geo-tools/config"},
 		"geoDecisionReport": {"信源补位任务", "/geo/decision-report"},
@@ -226,10 +230,16 @@ func TestMenuNavigation_ModuleGateDoesNotInheritDirectoryOwner(t *testing.T) {
 }
 
 // GEO 提升为顶级带页目录后，启用 GEO 即可进入，不再依赖原 analytics 祖先。
+//
+// 2026-11-27 菜单审计：geoTools 顶级节点不再自带 Path。
+// 原先它的 Path 与「生产 → 关键词蒸馏」同路径，导致侧栏同一页出现两次，
+// 且点顶级分组会跳过层级直达最深处子页。顶层回归纯目录后，
+// 「点顶级入口进哪一页」由前端 getMenuLanding 逐个子页探测（返回首个可落地子页），
+// 后端只保证：仅开 GEO 时顶级入口存在、且不做跨模块裁剪。
 func TestMenuNavigation_GEOOnlyDoesNotRequireAnalytics(t *testing.T) {
 	tree := FilterMenuTreeByModule(SystemMenuTree, func(key string) bool { return key == ModuleGEO })
-	if len(tree) != 1 || tree[0].Key != "geoTools" || tree[0].Path != "/geo-tools/keyword-mining" {
-		t.Fatalf("仅开 GEO 时应直接返回 GEO 顶级入口及其默认页，实际 %v", tree)
+	if len(tree) != 1 || tree[0].Key != "geoTools" || len(tree[0].Children) == 0 {
+		t.Fatalf("仅开 GEO 时应直接返回 GEO 顶级入口且保留子页，实际 %v", tree)
 	}
 	keys := FlattenMenuKeys(tree)
 	if len(keys) != len(ModuleMenuBindings[ModuleGEO]) {

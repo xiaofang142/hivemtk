@@ -1,8 +1,23 @@
 <template>
-  <sub-menu-item
+  <!--
+    「只有一个子页」的分组不渲染成可展开的二级菜单（展开一项毫无意义），
+    直接内联成叶子。但**标题必须沿用父节点**：父节点是注册表里声明的业务
+    分类名（QQ 机器人 / 飞书 / 诊断 / 承接），子节点往往只是该分类下的
+    具体页面名（机器人账号 / 飞书账号 / 审计中心 / 承接链接）。
+
+    2026-11-27 菜单审计修正：此前内联用的是「子节点的 menu 对象」，
+    于是侧栏只剩子页面名，父分类名整个消失——用户在菜单里找不到
+    「QQ 机器人」「飞书」「诊断」「承接」这四个入口，只能看到它们
+    下面那个更窄的页面名。改为：index/跳转用子节点 path（可点），
+    标题与图标用父节点（分类语义）。
+  -->
+  <el-menu-item
     v-if="menu.children?.length === 1"
-    :menu="menu.children[0]"
-  />
+    :index="menu.children[0].path"
+  >
+    <el-icon><component :is="resolveRouteIcon(menu.icon || menu.children[0].icon || 'Document')" /></el-icon>
+    <span>{{ t('menu.' + menu.key) }}</span>
+  </el-menu-item>
   <el-sub-menu
     v-else-if="menu.children && menu.children.length > 0"
     :index="menu.key || menu.path"

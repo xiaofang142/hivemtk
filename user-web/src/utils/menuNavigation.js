@@ -8,6 +8,14 @@ const listActions = new Map([
 
 const channelPaths = ['/channels/manage', '/channels/accounts', '/channels/identify-codes']
 
+// 外部知识源的两段能力（2026-11-27 菜单审计）：
+//   /knowledge/connectors —— Notion/飞书/钉钉/CRM 凭据与连通测试（/api/knowledge/connectors）
+//   /kb/connectors        —— IMA/HTTP 导入连接器，拉取落库（/api/kb-connectors）
+// 两者互补而非重复：前者能测连通但不落库，后者能落库但没有连通测试。
+// 后端两套都保留，前端收敛为一个入口 + 两个 tab（views/KnowledgeWorkspace/ExternalSources.vue），
+// 否则侧栏并列两个语义相同的「连接器」项，用户无法判断该进哪个。
+const connectorPaths = ['/knowledge/connectors', '/kb/connectors']
+
 // 同一工作流的非子路径；使用路由记录而非猜测 URL 字段或相邻菜单。
 const routeOwners = new Map([
   ['/aiAgent', ['/aiAgent/list']],
@@ -73,6 +81,7 @@ export function getNavigationPaths(menus) {
 export function projectNavigation(menus) {
   const visiblePaths = new Set(getNavigationPaths(menus))
   const grantedChannels = channelPaths.filter(path => visiblePaths.has(path))
+  const grantedConnectors = connectorPaths.filter(path => visiblePaths.has(path))
   function prune(nodes) {
     return nodes.flatMap(node => {
       if (node.children?.length) {
@@ -80,6 +89,7 @@ export function projectNavigation(menus) {
         return children.length ? [{ ...node, children }] : []
       }
       if (channelPaths.includes(node.path)) return []
+      if (connectorPaths.includes(node.path)) return []
       const action = listActions.get(node.path)
       return node.path && !(action && visiblePaths.has(action.owner)) ? [node] : []
     })
@@ -93,6 +103,34 @@ export function projectNavigation(menus) {
       systemNode.children = [...(systemNode.children || []), channelsNode]
     } else {
       navigation.push(channelsNode)
+    }
+  }
+  // 外部知识源收敛：插回原位置。
+  //
+  // 两个原始节点都在「知识中心 → 知识库工作台」这个子分组里
+  // （knowledgeConnectors 在 knowledgeOpenAPI 之后，kbImportConnectors 在其后），
+  // 所以合并节点必须插回 knowledgeWorkspace 的 children，而不是 knowledge 顶层——
+  // 挂错层级会让它跑到「知识库工作台」外面，与其余工作台子页分家。
+  if (grantedConnectors.length) {
+    const connectorNode = {
+      key: 'kbSources',
+      icon: 'Connection',
+      path: grantedConnectors[0],
+      connectorPaths: grantedConnectors
+    }
+    const knowledgeNode = navigation.find(node => node.key === 'knowledge')
+    const workspaceNode = knowledgeNode?.children?.find(child => child.key === 'knowledgeWorkspace')
+    if (workspaceNode) {
+      const children = workspaceNode.children || []
+      // 锚点：knowledgeOpenAPI（原 knowledgeConnectors 的前一个兄弟）。
+      const anchorIndex = children.findIndex(child => child.key === 'knowledgeOpenAPI')
+      if (anchorIndex >= 0) children.splice(anchorIndex + 1, 0, connectorNode)
+      else children.push(connectorNode)
+      workspaceNode.children = children
+    } else if (knowledgeNode) {
+      knowledgeNode.children = [...(knowledgeNode.children || []), connectorNode]
+    } else {
+      navigation.push(connectorNode)
     }
   }
   return navigation
@@ -131,6 +169,21 @@ function findChannelsTrail(nodes, path, parents = []) {
   return null
 }
 
+// 外部知识源同渠道口径：/knowledge/connectors 与 /kb/connectors 被收敛成一个
+// 叶子（key=kbSources，path=首个已授权页），另一个只能靠 connectorPaths 反查。
+// 同样必须返回完整归属链，否则 Layout 拿不到 knowledge 父节点 ⇒ 侧栏整块消失。
+function findConnectorsTrail(nodes, path, parents = []) {
+  for (const node of nodes) {
+    const trail = [...parents, node]
+    if (node.key === 'kbSources' && node.connectorPaths?.includes(path)) return trail
+    if (node.children?.length) {
+      const found = findConnectorsTrail(node.children, path, trail)
+      if (found) return found
+    }
+  }
+  return null
+}
+
 export function findNavigationTrail(menus, route) {
   const path = getNavigationPath(route)
   const trails = new Map(Array.from(menuTrails(menus), trail => [trail.at(-1).path, trail]))
@@ -138,6 +191,9 @@ export function findNavigationTrail(menus, route) {
 
   const channels = findChannelsTrail(menus, path)
   if (channels) return channels
+
+  const connectors = findConnectorsTrail(menus, path)
+  if (connectors) return connectors
 
   const action = listActions.get(path)
   const pattern = route.matched?.at(-1)?.path || path

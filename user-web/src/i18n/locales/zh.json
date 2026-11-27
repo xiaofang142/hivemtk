@@ -583,7 +583,8 @@
     "capabilityMatrix": "能力矩阵",
     "channelManage": "渠道管理",
     "channelAccount": "渠道账号管理",
-    "channels": "渠道"
+    "channels": "渠道",
+    "kbSources": "外部知识源"
   },
   "保存": "保存",
   "提交": "提交",
@@ -3114,5 +3115,10 @@
       "version": "操作版本",
       "preflight_hash": "预检摘要"
     }
+  },
+  "kbSources": {
+    "description": "把第三方知识库接入本地 RAG：先配凭据并测连通，再选导入连接器把文档拉取落库。",
+    "credentialsTab": "凭据与连通测试",
+    "importTab": "导入连接器"
   }
 }
