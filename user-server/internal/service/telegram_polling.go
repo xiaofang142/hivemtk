@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -38,6 +40,12 @@ type telegramPollingState struct {
 	cancel   context.CancelFunc
 	done     chan struct{}
 	lockHeld bool
+	// identifyCode 该 polling 任务对应的渠道账号识别码（channel_accounts.identify_code）。
+	// 统一渠道消息总线要求「任务编排携带渠道识别信息」：poller 把自身 update 回投
+	// /api/webhook/telegram/:id 时带上它，由 bindCallbackTenant 用同一套识别码链
+	// 解析租户/账号并与路径账号交叉校验（冲突 fail-closed）。解析不到时留空，
+	// 回落到既有「按渠道账号表主键自证」路径，不阻断存量部署。
+	identifyCode string
 	// tenantID 账号行归属租户（specs/001-saas-multi-tenant T027 行自证）。
 	// 锁的三条 UPDATE 打的是租户表 telegram_accounts（有 tenant_id 列），而关停
 	// 路径（stopTelegramPollingLocked / StopTelegramPolling / StopAll）手里往往
@@ -137,6 +145,9 @@ func StartTelegramPolling(acc *model.TelegramAccount) {
 	// （心跳一直失败 ⇒ 锁永不续约 ⇒ 60s 后被别的实例抢走 ⇒ 409 Conflict）。
 	ctx, cancel := context.WithCancel(tenant.WithTenantID(context.Background(), acc.TenantID))
 	state := &telegramPollingState{cancel: cancel, done: make(chan struct{}), lockHeld: true, tenantID: acc.TenantID}
+	// 任务编排携带渠道识别信息：只在 channel_accounts 里能按同一账号 ID 唯一解析出
+	// 识别码时才带；查不到（老数据/未建渠道账号行）不阻断 polling，回落路径账号自证。
+	state.identifyCode = telegramPollingIdentifyCode(ctx, acc.ID)
 	telegramPollingMu.Lock()
 	telegramPollingStates[acc.ID] = state
 	telegramPollingMu.Unlock()
@@ -379,7 +390,11 @@ func runTelegramPollingWorker(ctx context.Context, accountID uint, botToken, acc
 			utils.SafeGo(ctx, "telegram_polling.deliver", func(_ context.Context) {
 				defer wg.Done()
 				defer func() { <-sem }()
-				if err := deliverTelegramUpdate(ctx, client, accountID, webhookSecret, r); err != nil {
+				identifyCode := ""
+				if state != nil {
+					identifyCode = state.identifyCode
+				}
+				if err := deliverTelegramUpdateWithIdentity(ctx, client, accountID, webhookSecret, identifyCode, r); err != nil {
 					logger.Warnf("[TG-Polling] 账号 %d(%s) 投递 update 失败: %v", accountID, accountName, err)
 				}
 			})
@@ -433,8 +448,48 @@ func isPollingLockDBNotReadyError(err error) bool {
 	return strings.Contains(msg, "db is nil")
 }
 
+// telegramPollingIdentifyCode 为 polling 任务解析自身渠道账号识别码。
+//
+// 只认 channel_accounts 里「同一账号主键 + telegram 渠道」的唯一解析结果；
+// 解析失败/歧义/未建行一律返回空串——任务仍按既有 account_id 路径自我证明，
+// 绝不因为拿不到识别码就拒绝处理消息（fail-open 仅限识别码载荷，不放松租户闸）。
+func telegramPollingIdentifyCode(ctx context.Context, accountID uint) string {
+	if accountID == 0 {
+		return ""
+	}
+	resolver := NewChannelResolver()
+	resolved, err := resolver.ResolveByAccountRef(ctx, string(ChannelTelegram), strconv.FormatUint(uint64(accountID), 10))
+	if err != nil || resolved == nil || resolved.AccountID != accountID {
+		return ""
+	}
+	return resolved.IdentifyCode
+}
+
+// buildTelegramPollingWebhookURL 构造 polling → webhook 的自投地址。
+// identify_code 走 query（与 webhook 控制器 bindCallbackTenant 的读取口径一致），
+// 永不拼进 path；空识别码保持历史 URL 不变。
+func buildTelegramPollingWebhookURL(baseURL string, accountID uint, identifyCode string) string {
+	u := fmt.Sprintf("%s/api/webhook/telegram/%d", strings.TrimRight(baseURL, "/"), accountID)
+	if identifyCode == "" {
+		return u
+	}
+	parsed, err := url.Parse(u)
+	if err != nil {
+		return u
+	}
+	q := parsed.Query()
+	q.Set("identify_code", identifyCode)
+	parsed.RawQuery = q.Encode()
+	return parsed.String()
+}
+
 func deliverTelegramUpdate(ctx context.Context, client *http.Client, accountID uint, webhookSecret string, raw json.RawMessage) error {
-	url := fmt.Sprintf("%s/api/webhook/telegram/%d", config.UserServerSelfBaseURL(), accountID)
+	return deliverTelegramUpdateWithIdentity(ctx, client, accountID, webhookSecret, "", raw)
+}
+
+// deliverTelegramUpdateWithIdentity 与 deliverTelegramUpdate 同语义，额外携带任务侧识别码。
+func deliverTelegramUpdateWithIdentity(ctx context.Context, client *http.Client, accountID uint, webhookSecret, identifyCode string, raw json.RawMessage) error {
+	url := buildTelegramPollingWebhookURL(config.UserServerSelfBaseURL(), accountID, identifyCode)
 	var lastErr error
 	for i := 0; i < 3; i++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(raw))
