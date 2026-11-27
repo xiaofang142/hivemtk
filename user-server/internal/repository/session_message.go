@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"hivemtk-user/internal/model"
@@ -65,6 +66,46 @@ func (r *SessionMessageRepository) Create(ctx context.Context, message *model.Se
 		return errors.New("session message: nil 不是写入对象")
 	}
 	return r.db.WithContext(ctx).Create(message).Error
+}
+
+// ListByCorrelationIDs 按跨来源 correlation 查询会话消息。
+// UnifiedMessageReader 用它补全未落 MessageHub 的 AI/人工出站，并据此与 hub 行去重。
+func (r *SessionMessageRepository) ListByCorrelationIDs(ctx context.Context, tenantID uint, correlationIDs []string, limit int) ([]model.SessionMessage, error) {
+	rows := []model.SessionMessage{}
+	if tenantID == 0 {
+		return nil, errors.New("session message: 查询 correlation 必须提供租户")
+	}
+	if len(correlationIDs) == 0 {
+		return rows, nil
+	}
+	if r == nil || r.db == nil {
+		return nil, errSessionMessageUnavailable
+	}
+
+	unique := make([]string, 0, len(correlationIDs))
+	seen := make(map[string]struct{}, len(correlationIDs))
+	for _, correlationID := range correlationIDs {
+		correlationID = strings.TrimSpace(correlationID)
+		if correlationID == "" {
+			continue
+		}
+		if _, ok := seen[correlationID]; ok {
+			continue
+		}
+		seen[correlationID] = struct{}{}
+		unique = append(unique, correlationID)
+	}
+	if len(unique) == 0 {
+		return rows, nil
+	}
+
+	err := r.db.WithContext(ctx).
+		Where("tenant_id = ?", tenantID).
+		Where("correlation_id IN ?", unique).
+		Order("id ASC").
+		Limit(clampSessionMessageLimit(limit)).
+		Find(&rows).Error
+	return rows, err
 }
 
 // FindRecentDuplicate 查找最近 N 秒内同 (session, content, sender_type, sender_id) 的消息

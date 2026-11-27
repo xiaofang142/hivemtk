@@ -2,8 +2,12 @@ package cache
 
 import (
 	"context"
+	"errors"
 	"time"
 )
+
+// ErrLockRefreshUnsupported 后端不支持原子续期；调用方必须 fail-closed，不能退化为无主锁。
+var ErrLockRefreshUnsupported = errors.New("cache backend does not support lock refresh")
 
 // Cache 缓存接口
 type Cache interface {

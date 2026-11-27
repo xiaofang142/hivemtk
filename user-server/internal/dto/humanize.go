@@ -1,6 +1,10 @@
 package dto
 
-import "time"
+import (
+	"time"
+
+	agentcontext "hivemtk-user/internal/aiagent/context"
+)
 
 // HumanizeDimension 拟人度评估 5 维度
 type HumanizeDimension string
@@ -44,6 +48,9 @@ type HumanizeEvalInput struct {
 	Industry        string `json:"industry,omitempty"`
 	Platform        string `json:"platform,omitempty"`
 	Intent          string `json:"intent,omitempty"`
+	// ContextView 是统一会话上下文快照，按可见性与事实分级消费。
+	// JSON 不序列化：它是服务内部契约，不对外暴露用户/线索详情。
+	ContextView *agentcontext.AgentConversationContext `json:"-"`
 }
 
 // HumanizeDimensionScore 单维度得分

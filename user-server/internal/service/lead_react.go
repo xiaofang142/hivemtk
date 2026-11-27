@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
 	"hivemtk-user/internal/aiagent/llm"
+	"hivemtk-user/internal/model"
 )
 
 const (
@@ -245,10 +247,7 @@ func runLeadReactLoop(ctx context.Context, task LeadReactTask, tools []LeadReact
 			outcome.Reason = leadReactReasonTimeout
 			return outcome
 		}
-		result, err := dispatch(loopCtx, llm.DispatchRequest{
-			Scenario: llm.ScenarioLowCost, Messages: messages,
-			MaxTokens: 512, Temperature: 0.2,
-		})
+		result, err := dispatch(loopCtx, leadReactDispatchRequest(task, buildLeadReactSystemPrompt(task, tools), messages, strconv.Itoa(round)))
 		if err != nil {
 			if errors.Is(err, context.DeadlineExceeded) || errors.Is(loopCtx.Err(), context.DeadlineExceeded) {
 				outcome.Reason = leadReactReasonTimeout
@@ -289,8 +288,18 @@ func runLeadReactLoop(ctx context.Context, task LeadReactTask, tools []LeadReact
 			outcome.Reason = leadReactReasonUnknownTool
 			return outcome
 		}
+		entry := buildLeadReactToolInvocation(task, tool.Name, query, strconv.Itoa(round))
+		if task.Ledger != nil {
+			if err := task.Ledger.Plan(loopCtx, &entry); err != nil {
+				outcome.Reason = leadReactReasonToolFailed
+				return outcome
+			}
+		}
 		observation, err := tool.Run(loopCtx, task, query)
 		if err != nil {
+			if task.Ledger != nil {
+				_ = task.Ledger.Settle(loopCtx, &entry, model.ToolInvocationUnknown, "")
+			}
 			if errors.Is(err, errLeadReactToolUnavailable) {
 				outcome.Status = leadReactStatusUnavailable
 				outcome.Reason = leadReactReasonToolUnavailable
@@ -300,7 +309,18 @@ func runLeadReactLoop(ctx context.Context, task LeadReactTask, tools []LeadReact
 			outcome.Evidence = append(outcome.Evidence, fmt.Sprintf("[工具失败] %s", tool.Name))
 			return outcome
 		}
+		if task.Ledger != nil {
+			if err := task.Ledger.Settle(loopCtx, &entry, model.ToolInvocationConfirmed, leadReactHash(observation)); err != nil {
+				outcome.Reason = leadReactReasonToolFailed
+				return outcome
+			}
+		}
 		observation = truncateLeadReactRunes(observation, leadReactTaskMaxEvidenceRunes)
+		kept, omitted := leadReactObservationBudget([]string{observation}, leadReactTotalObservationRunes)
+		_ = omitted
+		if len(kept) > 0 {
+			observation = kept[len(kept)-1]
+		}
 		outcome.Evidence = append(outcome.Evidence, fmt.Sprintf("[%s] query=%s\n%s", tool.Name, query, observation))
 		messages = append(messages,
 			llm.ChatMessage{Role: "assistant", Content: fmt.Sprintf("Action: %s\nAction Input: %s", tool.Name, quoteLeadReactQuery(query))},

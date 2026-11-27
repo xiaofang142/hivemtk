@@ -61,11 +61,12 @@ func NewInboxReplyOutboundService() *InboxReplyOutboundService {
 
 func defaultInboxReplyLocalSend(ctx context.Context, sessionID, content, senderID, senderName string) (*model.SessionMessage, error) {
 	return NewCustomerSessionService().SendMessage(ctx, &SendMessageRequest{
-		SessionID:  sessionID,
-		Content:    content,
-		SenderType: "agent",
-		SenderID:   senderID,
-		SenderName: senderName,
+		SessionID:     sessionID,
+		CorrelationID: OutboundCorrelationFromContext(ctx),
+		Content:       content,
+		SenderType:    "agent",
+		SenderID:      senderID,
+		SenderName:    senderName,
 	})
 }
 
@@ -82,6 +83,12 @@ func defaultInboxReplyDispatch(ctx context.Context, ch WebhookChannel, accountID
 // 外部平台走注册发送器，按 sent / 回执给出平台确认或送达，失败明确返回不假装成功。
 func (s *InboxReplyOutboundService) Reply(ctx context.Context, req *InboxReplyRequest) (*InboxReplyDelivery, *model.SessionMessage, error) {
 	senderID := strconv.FormatUint(uint64(req.AgentID), 10)
+	// 唯一 EventID，避免被 AI reply 的 ClaimReply 去重误吞人工回复。
+	eventID := "human_reply:" + req.SessionID + ":" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	correlationID := newOutboundCorrelation(WebhookChannel(req.Platform), req.AccountID, req.SessionID, eventID)
+	ctx = OutboundCorrelationToContext(ctx, correlationID)
+	ctx = OutboundOriginToContext(ctx, OutboundOriginHuman)
+	ctx = OutboundSessionIDToContext(ctx, req.SessionID)
 	msg, err := s.localSend(ctx, req.SessionID, req.Content, senderID, req.SenderName)
 	if err != nil {
 		return &InboxReplyDelivery{Status: InboxReplyFailed, Error: "本地消息写入失败: " + err.Error()}, nil, nil
@@ -93,8 +100,7 @@ func (s *InboxReplyOutboundService) Reply(ctx context.Context, req *InboxReplyRe
 		}
 		return &InboxReplyDelivery{Status: InboxReplyNoRoute, Error: "平台无对应出站发送器"}, msg, nil
 	}
-	// 唯一 EventID，避免被 AI reply 的 ClaimReply 去重误吞人工回复。
-	eventID := "human_reply:" + req.SessionID + ":" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	// correlation/origin/session 已由 Reply 注入同一 ctx，本地与会话外发始终同身份。
 	sent, platformMsgID, err := s.dispatch(ctx, ch, req.AccountID, eventID, req.Content, req.Hub)
 	if err != nil {
 		return &InboxReplyDelivery{Status: InboxReplyFailed, Channel: string(ch), Error: err.Error()}, msg, nil

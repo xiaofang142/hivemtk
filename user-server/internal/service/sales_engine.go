@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	agent_runtime "hivemtk-user/internal/aiagent/agent/runtime"
+	agentcontext "hivemtk-user/internal/aiagent/context"
 	"hivemtk-user/internal/aiagent/llm"
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
@@ -370,7 +371,13 @@ func (e *SalesEngine) Handle(ctx context.Context, req *SalesRequest) (*SalesResp
 	stepStart = time.Now()
 	var intentResult *dto.RecognizeResult
 	if e.intent != nil {
-		intentResult, err = e.intent.Recognize(ctx, req.SessionID, req.CustomerID, req.UserMessage)
+		if contextual, ok := e.intent.(interface {
+			RecognizeWithContext(context.Context, string, string, string, *agentcontext.AgentConversationContext) (*dto.RecognizeResult, error)
+		}); ok && req.ContextView != nil {
+			intentResult, err = contextual.RecognizeWithContext(ctx, req.SessionID, req.CustomerID, req.UserMessage, req.ContextView)
+		} else {
+			intentResult, err = e.intent.Recognize(ctx, req.SessionID, req.CustomerID, req.UserMessage)
+		}
 		if err != nil {
 			resp.Steps = append(resp.Steps, dto.SalesStepLog{
 				Step: "3_recognize_intent", Status: "fail", Error: err.Error(),
@@ -552,6 +559,7 @@ func (e *SalesEngine) Handle(ctx context.Context, req *SalesRequest) (*SalesResp
 			Platform:     req.Platform,
 			Stage:        sopStage,
 			CustomerName: customerNameOf(customer),
+			IsGroup:      req.ContextView != nil && req.ContextView.Scope.IsGroup,
 		})
 		if err != nil {
 			resp.Steps = append(resp.Steps, dto.SalesStepLog{

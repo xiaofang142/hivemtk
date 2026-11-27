@@ -146,7 +146,7 @@ func (d *LeadSemanticDetector) Detect(in DetectionInput) DetectionHit {
 	evidence := make([]string, 0)
 	seen := make(map[string]bool)
 	for _, msg := range in.Messages {
-		lower := strings.ToLower(msg.Content)
+		lower := strings.ToLower(leadDetectionResolvedContent(in, msg))
 		for _, kw := range keywords {
 			terms := leadSemanticTerms(kw)
 			found := ""

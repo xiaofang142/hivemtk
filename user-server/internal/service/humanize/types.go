@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	agentcontext "hivemtk-user/internal/aiagent/context"
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
 )
@@ -43,6 +44,21 @@ type LowQualitySampleCollector interface {
 // LLMDispatcher LLM 调度器接口（抽象 llm.Dispatcher，便于测试）
 type LLMDispatcher interface {
 	ChatSend(ctx context.Context, prompt string) (content, model string, err error)
+}
+
+// LLMCallContext 是一次拟人 LLM 调用的隔离标识。
+// ExecutionScenarioID 区分评估与重生，Step 参与幂等键，ContextView 携带
+// 可见性与事实分级后的会话上下文。
+type LLMCallContext struct {
+	ExecutionScenarioID agentcontext.ExecutionScenarioID
+	Step                string
+	ContextView         *agentcontext.AgentConversationContext
+}
+
+// LLMContextDispatcher 是支持会话上下文与独立执行场景的可选能力。
+// 老测试/老装配只实现 LLMDispatcher 时仍走原路径。
+type LLMContextDispatcher interface {
+	ChatSendWithContext(ctx context.Context, prompt string, call LLMCallContext) (content, model string, err error)
 }
 
 // ErrInvalidInput 输入非法

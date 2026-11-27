@@ -64,6 +64,26 @@ type ProviderConfig struct {
 	Vendor        string   `json:"vendor,omitempty"`
 	Tags          []string `json:"tags,omitempty"`
 	ContextWindow int      `json:"context_window,omitempty"`
+
+	MaxInputTokens         int      `json:"max_input_tokens,omitempty"`
+	ProtocolInputLimit     int      `json:"protocol_input_limit,omitempty"`
+	MaxOutputTokens        int      `json:"max_output_tokens,omitempty"`
+	ReasoningReserveTokens int      `json:"reasoning_reserve_tokens,omitempty"`
+	OutputSemantics        string   `json:"output_semantics,omitempty"`
+	CacheMode              string   `json:"cache_mode,omitempty"`
+	CacheMinTokens         int      `json:"cache_min_tokens,omitempty"`
+	CacheTTLSeconds        int      `json:"cache_ttl_seconds,omitempty"`
+	SessionMode            string   `json:"session_mode,omitempty"`
+	NativeSessionAllowed   bool     `json:"native_session_allowed,omitempty"`
+	StoreMode              string   `json:"store_mode,omitempty"`
+	AllowedRegions         []string `json:"allowed_regions,omitempty"`
+	SupportsIdempotencyKey bool     `json:"supports_idempotency_key,omitempty"`
+	MaxRequestBytes        int64    `json:"max_request_bytes,omitempty"`
+	RequestTimeoutSeconds  int      `json:"request_timeout_seconds,omitempty"`
+	RouteMode              string   `json:"route_mode,omitempty"`
+	ReliabilityTier        string   `json:"reliability_tier,omitempty"`
+	Protocol               string   `json:"protocol,omitempty"`
+
 	// KeyInvalid 表示库里存的 API Key 用当前主密钥解不开（主密钥轮换 / 多实例
 	// 配置不一致）。此时 APIKey 已被置空——不置空的话上游只会回一个 401，
 	// 运维看到的信息量等于零。置位后调用前显式回报可执行文案，前端也会打标。
@@ -158,6 +178,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*Dispat
 	if canary := DecideCanaryRoute(route, req.CanaryKey); canary != nil {
 		activeRoute = canary
 	}
+	// 存量调用点尚未显式携带 ExecutionScenarioID 时按路由档位补一个确定值，
+	// 避免新加的执行场景校验把旧链路全部拒绝；显式值仍然严格校验。
+	fillLegacyExecutionScenario(&req)
 	cacheRequest := req
 	responseCacheKey := d.scopedResponseCacheKey(ctx, cacheRequest)
 	// 只修改这次调用的局部副本；兼容调用方原有 CacheKey 生成接口。

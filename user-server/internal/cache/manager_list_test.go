@@ -51,6 +51,51 @@ func TestMemoryCache_SetNXAndReleaseLock(t *testing.T) {
 	}
 }
 
+func TestMemoryCache_RefreshLock(t *testing.T) {
+	m := NewMemoryCacheWithLimit(100)
+	defer m.Close()
+	ctx := context.Background()
+	ok, err := m.SetNX(ctx, "lease", "token-a", time.Minute)
+	if err != nil || !ok {
+		t.Fatalf("SetNX 应成功: %v %v", ok, err)
+	}
+	item, exists := m.peekItem("lease")
+	if !exists {
+		t.Fatal("锁条目应存在")
+	}
+	before := item.expiration
+	if refreshed, err := m.RefreshLock(ctx, "lease", "wrong", time.Hour); err != nil || refreshed {
+		t.Fatalf("错误 token 不得续期: refreshed=%v err=%v", refreshed, err)
+	}
+	if !item.expiration.Equal(before) {
+		t.Fatal("错误 token 不得改变过期时间")
+	}
+	refreshed, err := m.RefreshLock(ctx, "lease", "token-a", time.Hour)
+	if err != nil || !refreshed {
+		t.Fatalf("正确 token 应续期: refreshed=%v err=%v", refreshed, err)
+	}
+	if !item.expiration.After(before) {
+		t.Fatal("续期后过期时间必须后移")
+	}
+	expireKey(t, m, "lease")
+	if refreshed, err := m.RefreshLock(ctx, "lease", "token-a", time.Hour); err != nil || refreshed {
+		t.Fatalf("过期锁不得续期: refreshed=%v err=%v", refreshed, err)
+	}
+}
+
+func TestCacheManager_RefreshLockForwardsToBackend(t *testing.T) {
+	backend := NewMemoryCacheWithLimit(10)
+	defer backend.Close()
+	manager := &CacheManager{cache: backend}
+	ctx := context.Background()
+	if ok, err := backend.SetNX(ctx, "lease", "token-a", time.Minute); err != nil || !ok {
+		t.Fatalf("SetNX 应成功: %v %v", ok, err)
+	}
+	if refreshed, err := manager.RefreshLock(ctx, "lease", "token-a", time.Hour); err != nil || !refreshed {
+		t.Fatalf("manager 应转发续期: refreshed=%v err=%v", refreshed, err)
+	}
+}
+
 func TestMemoryCache_ListOps(t *testing.T) {
 	m := NewMemoryCacheWithLimit(100)
 	defer m.Close()

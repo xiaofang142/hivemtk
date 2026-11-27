@@ -19,10 +19,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils/logger"
 
 	"gorm.io/gorm"
 )
@@ -111,6 +113,14 @@ func (s *MessageHubService) WithReachRecaller(r ReachRecaller) *MessageHubServic
 	return s
 }
 
+// WithTombstoneService 注入消息墓碑失效服务；nil = 不启用。
+func (s *MessageHubService) WithTombstoneService(svc *AgentContextTombstoneService) *MessageHubService {
+	if s != nil {
+		s.tombstoneSvc = svc
+	}
+	return s
+}
+
 // Recall 撤回一条出站消息，并把结论落到 hub 行。
 //
 // 幂等判据是**数据**不是请求：recalled_at 非空即终态，直接返回已撤回，
@@ -170,6 +180,22 @@ func (s *MessageHubService) Recall(ctx context.Context, id uint) (*RecallResult,
 		// 平台侧已经撤掉了，但本地没记上：如实报错（宁可让运营看到红灯，
 		// 也不能回一个"成功"而把终态丢了——丢了就会有人再点一次，再出网一次）。
 		return res, fmt.Errorf("%w: 平台已撤回但回写 recalled_at 失败: %v", ErrMessageHubRecallFailed, err)
+	}
+	// 墓碑先落库，再让消费端按 cursor 失效摘要/native 状态；失败不改变平台撤回结论，
+	// 但必须留日志，避免"平台已撤、本地仍把旧消息喂给模型"无人察觉。
+	if s.tombstoneSvc != nil {
+		accountID, _ := strconv.ParseUint(strings.TrimSpace(row.AccountID), 10, 64)
+		cursor := strconv.FormatUint(uint64(row.ID), 10)
+		if accountID > 0 {
+			tombstone := model.MessageTombstone{
+				TenantID: row.TenantID, Platform: row.Platform, ChannelAccountID: uint(accountID),
+				ConversationID: row.ConversationID, MessageID: cursor,
+				TombstoneType: model.MessageTombstoneRecalled, EffectiveAt: now, SourceCursor: cursor,
+			}
+			if tErr := s.tombstoneSvc.Apply(ctx, tombstone); tErr != nil {
+				logger.Warnf("[MessageHub] 撤回墓碑写入失败 id=%d err=%v", row.ID, tErr)
+			}
+		}
 	}
 	res.Recalled = true
 	res.RecalledAt = &now

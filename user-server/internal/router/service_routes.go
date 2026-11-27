@@ -171,7 +171,9 @@ func setupMessageRoutes(auth *gin.RouterGroup, db *gorm.DB, ingressSvc *service.
 	// 撤回端口（B2）按 db 装配：拿到句柄才装 —— 未装配时端点回 503，
 	// 而不是回一句"撤回失败"（见 app/message_hub_recall_wiring.go）。
 	messageHubCtrl := controller.NewMessageHubController(
-		service.NewMessageHubService().WithReachRecaller(app.NewMessageHubReachRecaller(db)))
+		service.NewMessageHubService().
+			WithReachRecaller(app.NewMessageHubReachRecaller(db)).
+			WithTombstoneService(service.NewRecallTombstoneService(repository.NewMessageTombstoneRepositoryWithDB(db))))
 	hub := auth.Group("/message-hub", middleware.RequireAdminMiddleware())
 	hub.POST("/push", messageHubCtrl.Push)
 	hub.POST("/push-batch", messageHubCtrl.PushBatch)

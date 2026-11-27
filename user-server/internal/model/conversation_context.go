@@ -103,6 +103,10 @@ type ConversationContext struct {
 	Messages               ConversationMessages `gorm:"column:messages;type:jsonb;default:'[]'" json:"messages"`
 	Tags                   JSONStrings          `gorm:"column:tags;type:jsonb;default:'[]'" json:"tags"`
 	Summary                string               `gorm:"column:summary;type:text;default:''" json:"summary"`
+	Version                int64                `gorm:"column:version;type:bigint;not null;default:1" json:"version"`
+	SourceCursor           string               `gorm:"column:source_cursor;type:varchar(191);not null;default:''" json:"source_cursor"`
+	SourceCursorHash       string               `gorm:"column:source_cursor_hash;type:char(64);not null;default:''" json:"source_cursor_hash"`
+	SummaryVersion         int64                `gorm:"column:summary_version;type:bigint;not null;default:1" json:"summary_version"`
 	CreatedAt              time.Time            `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt              time.Time            `gorm:"autoUpdateTime" json:"updated_at"`
 }

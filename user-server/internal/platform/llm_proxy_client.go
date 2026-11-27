@@ -39,13 +39,16 @@ import (
 
 // LLMProxyResponse 代理响应（含平台回传的真实用量）
 type LLMProxyResponse struct {
-	StatusCode       int
-	Body             []byte
-	ContentType      string
-	PromptTokens     int64
-	CompletionTokens int64
-	RequestID        string
-	Provider         string
+	StatusCode          int
+	Body                []byte
+	ContentType         string
+	PromptTokens        int64
+	CompletionTokens    int64
+	RequestID           string
+	Provider            string
+	CachedInputTokens   int64
+	CacheCreationTokens int64
+	OutcomeUnknown      bool
 }
 
 // ============================================================
@@ -161,6 +164,18 @@ func signLLMProxyRequest(req *http.Request, body []byte) error {
 	uri := req.URL.RequestURI()
 	req.Header.Set("X-Timestamp", ts)
 	req.Header.Set("X-Nonce", nonce)
+	if req.Header.Get(llmProxyContractHeader) != "" {
+		contextHeaders := map[string]string{}
+		for _, name := range llmProxyContextSignedHeaders {
+			if value := req.Header.Get(name); value != "" {
+				contextHeaders[name] = value
+			}
+		}
+		sum := sha256.Sum256(body)
+		req.Header.Set("X-Signature", LLMProxySignatureV2(secret, req.Method, uri,
+			[]string{ts, nonce, hex.EncodeToString(sum[:])}, contextHeaders))
+		return nil
+	}
 	req.Header.Set("X-Signature", LLMProxySignature(secret, req.Method, uri, ts, nonce, body))
 	return nil
 }
@@ -217,6 +232,9 @@ func (c *LLMProxyClient) ChatCompletions(ctx context.Context, provider string, b
 	if meta.TraceID != "" {
 		req.Header.Set("X-Trace-Id", meta.TraceID)
 	}
+	for name, value := range buildLLMProxyContextHeaders(meta) {
+		req.Header.Set(name, value)
+	}
 	if err := signLLMProxyRequest(req, body); err != nil {
 		return nil, err
 	}
@@ -244,6 +262,8 @@ func (c *LLMProxyClient) ChatCompletions(ctx context.Context, provider string, b
 	}
 	out.PromptTokens = parseIntHeader(resp.Header.Get("X-Llm-Usage-Prompt-Tokens"))
 	out.CompletionTokens = parseIntHeader(resp.Header.Get("X-Llm-Usage-Completion-Tokens"))
+	out.CachedInputTokens, out.CacheCreationTokens = parseLLMProxyCachedUsage(resp.Header)
+	out.OutcomeUnknown = isLLMProxyOutcomeUnknown(resp)
 	return out, nil
 }
 
@@ -257,6 +277,11 @@ type LLMCallMeta struct {
 	// 一行记账）。空串 = 取不到租户归属（后台任务无绑定 / off 模式无租户行），
 	// 此时 query 不上行该参数、平台按旧行为兜底 —— 取不到 code 绝不允许报错。
 	TenantCode string
+	// 以下是 llm-context-v2 的上下文头输入；canonical bus key 只用于本地派生 opaque header。
+	ContractVersion     string
+	OpaqueSessionKey    string
+	ExecutionScenarioID string
+	IdempotencyKey      string
 }
 
 func parseIntHeader(v string) int64 {

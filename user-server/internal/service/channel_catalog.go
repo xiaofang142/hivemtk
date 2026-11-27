@@ -16,9 +16,9 @@ type ChannelCatalogService interface {
 }
 
 type channelCatalogService struct {
-	channelSvc  ChannelService
-	accountSvc  ChannelAccountService
-	masterSvc   ChannelMasterService
+	channelSvc ChannelService
+	accountSvc ChannelAccountService
+	masterSvc  ChannelMasterService
 }
 
 // NewChannelCatalogService 生产装配。

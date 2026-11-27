@@ -4,6 +4,14 @@
 > 否则换机 / 重建部署时会静默丢失（2026-11-04 二次审核发现：`deploy/` 目录
 > 不入库，上传卷与 nginx 分流改完只存在于当前机器）。
 
+## 2026-11-27 · 智能体会话、长上下文与缓存（待实施/验证）
+
+- 会话与长上下文默认由 user-server 直连已配置 provider；`Source=platform` 且无本地 Key 时仍强制走显式代理。
+- 默认 `store=false`/无状态重放；native session 仅对显式白名单的 provider/model/protocol/region 开启，并受 TTL、删除与租户开关约束。
+- 消息总线 `LLMSessionID` 作为 canonical continuation key；不同 `ExecutionScenarioID` 使用独立状态行，原 `DispatchScenario` 仅负责路由/计费。
+- 供应商 prompt cache 与最终答案缓存严格分离；cached tokens 单独计量。平台代理缓存折扣默认不透传，在计价契约完成前不宣称代理路径缓存成本收益。
+- 平台代理不持久化响应正文或用户会话数据；无法由 provider 原生幂等保证的重试返回 `outcome_unknown`，由 user-server 加密 ledger 对账。
+- `AGENT_CONTEXT_STOP_LEGACY_HISTORY=false`（默认）：保留 `conversation_contexts.messages` 双写兼容旧消费者；MessageHub/UnifiedMessageReader 全量接管并验证后再置 `true` 停写原始历史。
 ## 2026-11-27 · SageX 高可用链路修复与授权加固正式发布（链 A）
 
 - **范围/源码**：本轮 HEAD `9da5bab23`（用户端仓），自上次发布基线 `ba0a99e1e` 起共 8 个 `user-server/` 提交上线，含本轮 `03d0d8a97 fix(sagex): set channel_msg_id to avoid content-window dedup loss`（SageX 上报事件写顶层 `channel_msg_id`，跳过 ingress 同发送者同内容窗口去重，仅靠带安装维度的 `msg_id` 幂等）与 `9da5bab23 chore(user-server): sanitize tenant names in fixtures and docs`（其余 6 个为并行会话已推送提交）。两端远端 `gitee-upstream/master` + `upstream/master` 均已包含 HEAD。

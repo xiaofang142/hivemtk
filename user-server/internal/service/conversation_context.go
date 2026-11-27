@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	"hivemtk-user/internal/model"
@@ -52,40 +53,48 @@ func (s *ConversationContextService) get(ctx context.Context, accountID uint, co
 	return s.repo.Get(ctx, accountID, resolvedID)
 }
 
+// agentContextLegacyMessagesDisabled 控制是否停止把原始历史写入 ConversationContext.Messages JSON。
+// 默认 false 保持存量消费者兼容；MessageHub + UnifiedMessageReader 全量接管后由部署显式开启。
+func agentContextLegacyMessagesDisabled() bool {
+	return strings.EqualFold(strings.TrimSpace(os.Getenv("AGENT_CONTEXT_STOP_LEGACY_HISTORY")), "true")
+}
+
 // AppendMessage 追加一条共享消息（两模块共同写入同一份历史，FR-020）。
 func (s *ConversationContextService) AppendMessage(ctx context.Context, accountID uint, convID string, msg model.ConversationMessage, scopes ...ConversationContextScope) error {
-	c, err := s.get(ctx, accountID, convID, scopes...)
-	if err != nil {
-		return err
-	}
-	if msg.MessageID == "" {
-		msg.MessageID = fmt.Sprintf("m_%d", len(c.Messages)+1)
-	}
-	c.Messages = append(c.Messages, msg)
-	return s.repo.Upsert(ctx, c)
+	return mutateConversationContextCAS(
+		ctx,
+		func() (*model.ConversationContext, error) { return s.get(ctx, accountID, convID, scopes...) },
+		func(c *model.ConversationContext) error { return s.repo.Upsert(ctx, c) },
+		func(c *model.ConversationContext) (bool, error) {
+			if agentContextLegacyMessagesDisabled() {
+				return false, nil
+			}
+			if msg.MessageID == "" {
+				msg.MessageID = fmt.Sprintf("m_%d", len(c.Messages)+1)
+			}
+			if c.Messages == nil {
+				c.Messages = model.ConversationMessages{}
+			}
+			c.Messages = append(c.Messages, msg)
+			return true, nil
+		},
+	)
 }
 
 // AppendMessageAtomic 按源消息 ID 幂等地原子追加（LM-12）。
 // 双模块并发追加时，重复消息不放大证据；有界保留，防止旧水位覆盖新上下文。
 func (s *ConversationContextService) AppendMessageAtomic(ctx context.Context, accountID uint, convID string, msg model.ConversationMessage, bound int, scopes ...ConversationContextScope) error {
-	c, err := s.get(ctx, accountID, convID, scopes...)
-	if err != nil {
-		return err
-	}
-	id := strings.TrimSpace(msg.MessageID)
-	if id == "" || strings.HasPrefix(id, "history_") {
-		return errors.New("共享消息缺少真实源消息 ID")
-	}
-	for _, existing := range c.Messages {
-		if existing.MessageID == id {
-			return nil
-		}
-	}
-	c.Messages = append(c.Messages, msg)
-	if bound > 0 && len(c.Messages) > bound {
-		c.Messages = c.Messages[len(c.Messages)-bound:]
-	}
-	return s.repo.Upsert(ctx, c)
+	return mutateConversationContextCAS(
+		ctx,
+		func() (*model.ConversationContext, error) { return s.get(ctx, accountID, convID, scopes...) },
+		func(c *model.ConversationContext) error { return s.repo.Upsert(ctx, c) },
+		func(c *model.ConversationContext) (bool, error) {
+			if agentContextLegacyMessagesDisabled() {
+				return false, nil
+			}
+			return appendConversationMessageAtomic(c, msg, bound)
+		},
+	)
 }
 
 // Messages 读取共享消息历史（两模块共同读取，FR-020）。
@@ -102,15 +111,21 @@ func (s *ConversationContextService) SetMemberRole(ctx context.Context, accountI
 	if strings.TrimSpace(senderID) == "" {
 		return nil
 	}
-	c, err := s.get(ctx, accountID, convID, scopes...)
-	if err != nil {
-		return err
-	}
-	if c.MemberRoles == nil {
-		c.MemberRoles = model.MemberRoles{}
-	}
-	c.MemberRoles[senderID] = role
-	return s.repo.Upsert(ctx, c)
+	return mutateConversationContextCAS(
+		ctx,
+		func() (*model.ConversationContext, error) { return s.get(ctx, accountID, convID, scopes...) },
+		func(c *model.ConversationContext) error { return s.repo.Upsert(ctx, c) },
+		func(c *model.ConversationContext) (bool, error) {
+			if c.MemberRoles == nil {
+				c.MemberRoles = model.MemberRoles{}
+			}
+			if c.MemberRoles[senderID] == role {
+				return false, nil
+			}
+			c.MemberRoles[senderID] = role
+			return true, nil
+		},
+	)
 }
 
 // AddTag 写入共享标签（两模块可交叉引用）。
@@ -119,27 +134,48 @@ func (s *ConversationContextService) AddTag(ctx context.Context, accountID uint,
 	if tag == "" {
 		return nil
 	}
-	c, err := s.get(ctx, accountID, convID, scopes...)
-	if err != nil {
-		return err
-	}
-	for _, exists := range c.Tags {
-		if exists == tag {
-			return nil
-		}
-	}
-	c.Tags = append(c.Tags, tag)
-	return s.repo.Upsert(ctx, c)
+	return mutateConversationContextCAS(
+		ctx,
+		func() (*model.ConversationContext, error) { return s.get(ctx, accountID, convID, scopes...) },
+		func(c *model.ConversationContext) error { return s.repo.Upsert(ctx, c) },
+		func(c *model.ConversationContext) (bool, error) {
+			for _, exists := range c.Tags {
+				if exists == tag {
+					return false, nil
+				}
+			}
+			c.Tags = append(c.Tags, tag)
+			return true, nil
+		},
+	)
 }
 
 // SetSummary 写入共享摘要（两模块可交叉引用）。
 func (s *ConversationContextService) SetSummary(ctx context.Context, accountID uint, convID, summary string, scopes ...ConversationContextScope) error {
-	c, err := s.get(ctx, accountID, convID, scopes...)
-	if err != nil {
-		return err
+	return s.setSummary(ctx, accountID, convID, summary, "", scopes...)
+}
+
+// SetSummaryAtCursor 写入带真实来源游标的共享摘要，供后续上下文重建与失效判断。
+func (s *ConversationContextService) SetSummaryAtCursor(ctx context.Context, accountID uint, convID, summary, cursor string, scopes ...ConversationContextScope) error {
+	if strings.TrimSpace(cursor) == "" {
+		return errors.New("共享摘要缺少真实来源游标")
 	}
-	c.Summary = summary
-	return s.repo.Upsert(ctx, c)
+	return s.setSummary(ctx, accountID, convID, summary, cursor, scopes...)
+}
+
+func (s *ConversationContextService) setSummary(ctx context.Context, accountID uint, convID, summary, cursor string, scopes ...ConversationContextScope) error {
+	return mutateConversationContextCAS(
+		ctx,
+		func() (*model.ConversationContext, error) { return s.get(ctx, accountID, convID, scopes...) },
+		func(c *model.ConversationContext) error { return s.repo.Upsert(ctx, c) },
+		func(c *model.ConversationContext) (bool, error) {
+			summaryCursor := cursor
+			if summaryCursor == "" {
+				summaryCursor = c.SourceCursor
+			}
+			return setConversationSummary(c, summary, summaryCursor)
+		},
+	)
 }
 
 // AddNote 写入带命名空间的交叉引用备注（T051）。

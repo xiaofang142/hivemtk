@@ -2,6 +2,8 @@ package dto
 
 import (
 	"time"
+
+	agentcontext "hivemtk-user/internal/aiagent/context"
 )
 
 // LLMProviderConfig LLM 提供商配置（镜像 model.LLMProviderConfig，去 gorm 标签）
@@ -282,6 +284,26 @@ type SalesRequest struct {
 	UserMessage string             `json:"user_message"`
 	Platform    string             `json:"platform"`
 	Config      *SalesEngineConfig `json:"config,omitempty"`
+
+	// 来源与发送者元数据：从消息总线入站一路保留到回复链，供意图/生成/拟人等
+	// 执行场景按单聊或群聊、按当前发言者组织上下文。消息正文不能覆盖这些字段。
+	ConversationID  string    `json:"conversation_id,omitempty"`
+	MessageID       string    `json:"message_id,omitempty"`
+	SenderID        string    `json:"sender_id,omitempty"`
+	SenderName      string    `json:"sender_name,omitempty"`
+	BusSessionID    string    `json:"bus_session_id,omitempty"`
+	BusLLMSessionID string    `json:"bus_llm_session_id,omitempty"`
+	Direction       string    `json:"direction,omitempty"`
+	OriginalSentAt  time.Time `json:"original_sent_at,omitempty"`
+	PlatformMsgID   string    `json:"platform_msg_id,omitempty"`
+	CorrelationID   string    `json:"correlation_id,omitempty"`
+	IsGroup         bool      `json:"is_group,omitempty"`
+	GroupID         string    `json:"group_id,omitempty"`
+	GroupName       string    `json:"group_name,omitempty"`
+
+	// ContextView 是本轮入站的不可变上下文快照；由编排器/上游构建后原样透传，
+	// 各执行场景只读取最小必要视图，不得在消息正文里拼接业务备注。
+	ContextView *agentcontext.AgentConversationContext `json:"context_view,omitempty"`
 
 	AgentContext *AgentContext `json:"agent_context,omitempty"`
 

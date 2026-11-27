@@ -100,7 +100,10 @@ var coreOwnedTables = []string{
 	"sagex_installations", "sagex_event_receipts",
 	// 共享多轮对话上下文：auto_reply（inbox）与线索发掘共同读写，由 inbox_ingress 写入，
 	// 与 message_hub / session_messages 同属消息基座，不随某个可售模块停写。
-	"conversation_contexts",
+	// 028 的成员可见区间、逐消息处置、失效标记与 LLM 续接账本同样跨 inbox/lead/sales，
+	// 必须随消息基座常在，不能因关闭单个智能体模块而继续产生孤儿写入。
+	"conversation_contexts", "conversation_memberships", "conversation_message_dispositions",
+	"message_tombstones", "llm_session_states", "scenario_transcripts", "tool_invocations",
 }
 
 // customer 模块独占

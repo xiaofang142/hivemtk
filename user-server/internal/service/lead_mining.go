@@ -597,11 +597,12 @@ func (s *Service) process(ctx context.Context, hub *model.MessageHub, force ...b
 	if len(history) == 0 {
 		return
 	}
+	historyDetection := s.fetchHistoryDetectionMessages(ctx, hub)
 
 	// T039：组装多轮/历史 + 三路证据富上下文；fake judge（未实现可选方法）
 	// 仍走原 Judge 路径，不改变既有测试契约。
 	judgementID := fmt.Sprintf("lmj_%d", time.Now().UnixNano())
-	jctx := s.buildLeadJudgeContext(ctx, hub, history, judgementID)
+	jctx := s.buildLeadJudgeContext(ctx, hub, historyDetection, judgementID)
 	// FR-026：冻结的线索智能体快照与判定共用同一版本，防止配置切换时
 	// 网关走了新智能体、判定提示却还是旧智能体的 system_prompt。
 	jctx.AgentSnapshot = agentSnapshot

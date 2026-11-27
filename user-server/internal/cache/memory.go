@@ -271,6 +271,31 @@ func (m *MemoryCache) ReleaseLock(ctx context.Context, key, token string) (bool,
 }
 
 // LPush 向列表头部推入
+// RefreshLock 仅在锁未过期且 token 匹配时延长 TTL。
+func (m *MemoryCache) RefreshLock(ctx context.Context, key, token string, ttl time.Duration) (bool, error) {
+	if ttl <= 0 {
+		return false, errors.New("锁续期 TTL 必须大于 0")
+	}
+	key = tenant.RedisKey(ctx, key)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	ele, ok := m.data[key]
+	if !ok {
+		return false, nil
+	}
+	item := ele.Value.(*cacheItem)
+	now := time.Now()
+	if !item.expiration.IsZero() && !item.expiration.After(now) {
+		return false, nil
+	}
+	if s, ok := item.value.(string); !ok || s != token {
+		return false, nil
+	}
+	item.expiration = now.Add(ttl)
+	m.touch(ele)
+	return true, nil
+}
+
 func (m *MemoryCache) LPush(ctx context.Context, key string, value any, expiration time.Duration) error {
 	key = tenant.RedisKey(ctx, key)
 	m.mu.Lock()

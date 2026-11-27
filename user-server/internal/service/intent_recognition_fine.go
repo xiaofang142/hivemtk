@@ -196,60 +196,7 @@ func minorLLMThreshold() float64 {
 //  4. 持久化 IntentLog
 //  5. 返回最终结果
 func (s *IntentRecognizer) RecognizeIntent(ctx context.Context, message, customerID, sessionID string) (*IntentResult, error) {
-	start := time.Now()
-	if message == "" {
-		return &IntentResult{
-			Major:      IntentMajorConsult,
-			Minor:      IntentMinorConsultGeneral,
-			Confidence: 0.3,
-			Method:     "rule",
-		}, nil
-	}
-
-	if !loadIntentEnabledFor(ctx) {
-		return &IntentResult{
-			Major:      IntentMajorConsult,
-			Minor:      IntentMinorConsultGeneral,
-			Confidence: 0.3,
-			Method:     "disabled",
-		}, nil
-	}
-
-	ruleResult := s.recognizeFineByRule(ctx, message)
-
-	var final *IntentResult
-	if ruleResult != nil {
-		final = ruleResult
-		if ruleResult.Confidence < minorLLMThreshold() && s.dispatcher != nil {
-			if llmResult, err := s.recognizeFineByLLM(ctx, message); err == nil && llmResult != nil {
-				llmResult.Method = "hybrid"
-				final = llmResult
-			}
-		}
-	} else if s.dispatcher != nil {
-		if llmResult, err := s.recognizeFineByLLM(ctx, message); err == nil && llmResult != nil {
-			final = llmResult
-		}
-	}
-
-	if final == nil {
-		final = &IntentResult{
-			Major:      IntentMajorConsult,
-			Minor:      IntentMinorConsultGeneral,
-			Confidence: 0.3,
-			Method:     "rule",
-		}
-	}
-
-	final.LatencyMs = int(time.Since(start).Milliseconds())
-
-	s.saveIntentLog(ctx, customerID, sessionID, message, final)
-
-	if customerID != "" {
-		s.triggerSOPByIntent(ctx, customerID, sessionID, final.Major, final.Confidence)
-	}
-
-	return final, nil
+	return s.RecognizeIntentWithContext(ctx, message, customerID, sessionID, nil)
 }
 
 func (s *IntentRecognizer) recognizeFineByRule(ctx context.Context, text string) *IntentResult {

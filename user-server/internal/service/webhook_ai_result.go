@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	agentcontext "hivemtk-user/internal/aiagent/context"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tracing"
 	"hivemtk-user/internal/pkg/utils/logger"
@@ -47,6 +48,38 @@ func (s *WebhookService) deliverAIResult(
 				Str("event_id", req.payload.EventID).Msg("AI result exit: nil decision; no outbound")
 			return
 		}
+		// 群聊发送前硬门：编排器已拦截的结果不得重生成绕过；直接 SalesEngine
+		// 路径产生的群回复也在这里按同一 audience/隐私契约拦截。无来源快照即放弃。
+		groupReply := (req.incoming != nil && req.incoming.IsGroup) || (req.hub != nil && req.hub.IsGroup)
+		var groupView *agentcontext.AgentConversationContext
+		currentSenderID := ""
+		if req.incoming != nil {
+			groupView, currentSenderID = req.incoming.ContextView, req.incoming.SenderID
+		}
+		isGroupBlocked := result.GroupReplyBlocked
+		groupReasons := result.GroupReplyReasons
+		if !isGroupBlocked {
+			if decision := CheckGroupReplyGate(groupReply, groupView, currentSenderID, result.Reply); !decision.Allowed {
+				isGroupBlocked, groupReasons = true, decision.Reasons
+				result.GroupReplyBlocked, result.GroupReplyReasons = true, decision.Reasons
+				result.AIReplied, result.Reply = false, ""
+			}
+		}
+		if isGroupBlocked {
+			if dErr := markIncomingDisposition(ctx, s.dispositionSvc, req.incoming, DispositionTransition{
+				Status: model.ConversationDispositionSkipped, Reason: strings.Join(groupReasons, ","),
+			}); dErr != nil {
+				logger.Ctx(ctx).Warn().Err(dErr).Msg("群回复拦截后处置台账更新失败")
+			}
+			recordDecision("group_privacy_blocked", tracing.StatusSkipped, false, nil)
+			logger.Ctx(ctx).Info().Int("answer_attempt", attempt+1).
+				Str("session_id", result.SessionID).
+				Str("conv_id", req.hub.ConversationID).
+				Strs("reasons", groupReasons).
+				Msg("[Webhook] 群回复未通过 audience/隐私硬门——不发送")
+			return
+		}
+
 		outCtx := HandleResultToContext(ctx, result)
 		if req.agent != nil && req.agent.AgentCode != "" {
 			outCtx = AgentIDToContext(outCtx, req.agent.AgentCode)
@@ -70,6 +103,9 @@ func (s *WebhookService) deliverAIResult(
 			return
 		}
 		if strings.EqualFold(strings.TrimSpace(result.Reply), "NO_REPLY") {
+			_ = markIncomingDisposition(ctx, s.dispositionSvc, req.incoming, DispositionTransition{
+				Status: model.ConversationDispositionSkipped, Reason: "no_reply",
+			})
 			recordDecision("no_reply", tracing.StatusSkipped, false, nil)
 			logger.Ctx(ctx).Info().Int("answer_attempt", attempt+1).
 				Str("channel", string(req.channel)).Str("conv_id", req.hub.ConversationID).
@@ -77,6 +113,9 @@ func (s *WebhookService) deliverAIResult(
 			return
 		}
 		if !result.AIReplied || (strings.TrimSpace(result.Reply) == "" && len(result.Cards) == 0) {
+			_ = markIncomingDisposition(ctx, s.dispositionSvc, req.incoming, DispositionTransition{
+				Status: model.ConversationDispositionSkipped, Reason: "no_answer",
+			})
 			recordDecision("no_answer", tracing.StatusSkipped, false, nil)
 			logger.Ctx(ctx).Info().Int("answer_attempt", attempt+1).
 				Str("session_id", result.SessionID).Str("handler", string(result.HandlerType)).Msg("no outbound")
@@ -105,6 +144,13 @@ func (s *WebhookService) deliverAIResult(
 			outcome = "duplicate_reply"
 		}
 		recordDecision(outcome, status, sent, sendErr)
+		if sent && sendErr == nil {
+			// sendOutbound 的 accepted 只代表已交给投递层；没有平台回执前不得标 replied，
+			// 因此这里只推进到 processing，真实送达回执到达后才由对账任务推进水位。
+			_ = markIncomingDisposition(ctx, s.dispositionSvc, req.incoming, DispositionTransition{
+				Status: model.ConversationDispositionProcessing, Reason: "delivery_accepted",
+			})
+		}
 		if !isDuplicate || attempt > 0 || generate == nil || req.incoming == nil {
 			return
 		}

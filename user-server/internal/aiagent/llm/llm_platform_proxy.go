@@ -59,10 +59,14 @@ func (s *LLMService) callPlatformProxy(ctx context.Context, config *LLMConfig, b
 			"请在系统设置中配置平台地址后重试")
 	}
 	meta := platform.LLMCallMeta{
-		Scenario: config.Scenario,
-		TraceID:  config.TraceID,
-		AgentID:  config.AgentID,
-		UserID:   config.UserID,
+		Scenario:            config.Scenario,
+		TraceID:             config.TraceID,
+		AgentID:             config.AgentID,
+		UserID:              config.UserID,
+		ContractVersion:     platform.LLMProxyContractVersion,
+		OpaqueSessionKey:    config.LLMSessionRef,
+		ExecutionScenarioID: config.ExecutionScenarioID,
+		IdempotencyKey:      config.RequestIdempotencyKey,
 		// 平台按 (merchant_key, tenant_code) 每租户一行记账：从 ctx 解析本租户
 		// code，取不到（无绑定/查不到行/库未就绪）= 空串照发，平台走旧行为兜底。
 		TenantCode: platform.TenantCodeFromContext(ctx),
@@ -74,8 +78,23 @@ func (s *LLMService) callPlatformProxy(ctx context.Context, config *LLMConfig, b
 
 	switch resp.StatusCode {
 	case http.StatusOK:
-		// 走原解析路径：报文是厂商原样转发，OpenAI 兼容结构不变
-		return parseChatResponse(resp.Body)
+		// 走原解析路径：报文是厂商原样转发，OpenAI 兼容结构不变。
+		// 平台 v2 契约把 cached usage 放在响应头（厂商 body 不一定带），
+		// 合并进 chatResponse 后由 GenerateWithTools 归一到 TokenUsage。
+		parsed, parseErr := parseChatResponse(resp.Body)
+		if parseErr != nil {
+			return nil, parseErr
+		}
+		if resp.CachedInputTokens > 0 {
+			parsed.Usage.CachedInputTokens = int(resp.CachedInputTokens)
+		}
+		if resp.CacheCreationTokens > 0 {
+			parsed.Usage.CacheCreationTokens = int(resp.CacheCreationTokens)
+		}
+		if resp.OutcomeUnknown {
+			return nil, fmt.Errorf("平台代理返回未确定结果（outcome_unknown），请用同一幂等键对账")
+		}
+		return parsed, nil
 
 	case http.StatusPaymentRequired:
 		// 余额不足。**必须**单独一类错误：调度器与上层要据此提示"去充值"，

@@ -9,6 +9,7 @@ import (
 
 	agent_runtime "hivemtk-user/internal/aiagent/agent/runtime"
 	"hivemtk-user/internal/aiagent/agent/tooluse"
+	agentcontext "hivemtk-user/internal/aiagent/context"
 	"hivemtk-user/internal/aiagent/llm"
 
 	"hivemtk-user/internal/dto"
@@ -140,15 +141,7 @@ func (e *SalesEngine) runAgentLoop(
 		// 工具被过滤为空（scenario 限定类别后无可用工具）→ 退回直连 dispatch。
 		// system prompt 必须经 plainDispatchSystemPrompt 拼接，否则知识库召回被丢弃。
 		systemPrompt := e.plainDispatchSystemPrompt(ctx, req, targetLang, ragChunks)
-		result, err := e.dispatcher.Dispatch(ctx, llm.DispatchRequest{
-			Scenario:     scenario,
-			Prompt:       prompt,
-			SystemPrompt: systemPrompt,
-			MaxTokens:    req.Config.MaxTokens,
-			Temperature:  req.Config.Temperature,
-			CacheKey:     llm.CacheKeyWithSystem(scenario, systemPrompt, prompt),
-			CacheTTL:     3600,
-		})
+		result, err := e.dispatcher.Dispatch(ctx, salesGeneratePlainDispatchRequest(req, scenario, prompt, systemPrompt))
 		if err != nil {
 			return "", nil, nil, err
 		}
@@ -172,15 +165,14 @@ func (e *SalesEngine) runAgentLoop(
 		Content: prompt,
 	})
 
-	if e.sessionMsgRepo != nil && req.SessionID != "" {
-		// 历史注入走 token 预算截断：无预算的原样注入在长会话下会顶爆
-		// provider ContextWindow，dispatcher 逐个跳过候选最终降级模板回复
+	historyMsgs := salesGenerateHistoryMessages(req.ContextView)
+	if len(historyMsgs) == 0 && e.sessionMsgRepo != nil && req.SessionID != "" {
+		// 无统一上下文时保留既有 SessionMessage 回退，避免升级期丢失历史。
 		if hist, herr := e.sessionMsgRepo.ListRecentDescBySessionID(ctx, req.SessionID, agentLoopHistoryMaxCandidates()); herr == nil {
 			hist = excludeSystemHistoryNotices(hist)
 			if len(hist) > 0 && hist[0].Content == req.UserMessage {
 				hist = hist[1:]
 			}
-			// 预算截断：与 fetchHistoryWithinTokenBudget 同一口径
 			budget := agentLoopHistoryTokenBudget * (100 - agentLoopHistoryOutputReservePct) / 100
 			used := 0
 			keep := len(hist)
@@ -194,11 +186,10 @@ func (e *SalesEngine) runAgentLoop(
 			}
 			hist = hist[:keep]
 			if len(hist) > 0 {
-
 				for i, j := 0, len(hist)-1; i < j; i, j = i+1, j-1 {
 					hist[i], hist[j] = hist[j], hist[i]
 				}
-				historyMsgs := make([]llm.ChatMessage, 0, len(hist))
+				historyMsgs = make([]llm.ChatMessage, 0, len(hist))
 				for _, m := range hist {
 					role := "user"
 					if m.SenderType == "ai" || m.SenderType == "agent" {
@@ -206,14 +197,15 @@ func (e *SalesEngine) runAgentLoop(
 					}
 					historyMsgs = append(historyMsgs, llm.ChatMessage{Role: role, Content: m.Content})
 				}
-
-				newMessages := make([]llm.ChatMessage, 0, len(messages)+len(historyMsgs))
-				newMessages = append(newMessages, messages[0])
-				newMessages = append(newMessages, historyMsgs...)
-				newMessages = append(newMessages, messages[1:]...)
-				messages = newMessages
 			}
 		}
+	}
+	if len(historyMsgs) > 0 {
+		newMessages := make([]llm.ChatMessage, 0, len(messages)+len(historyMsgs))
+		newMessages = append(newMessages, messages[0])
+		newMessages = append(newMessages, historyMsgs...)
+		newMessages = append(newMessages, messages[1:]...)
+		messages = newMessages
 	}
 
 	agentLoopCtx, agentLoopCancel := context.WithTimeout(ctx, agentLoopTotalTimeout)
@@ -287,15 +279,19 @@ func (e *SalesEngine) runAgentLoop(
 		iterCtx, iterCancel := context.WithTimeout(agentLoopCtx, agentLoopMaxPerIterTimeout)
 		logger.Infof("[AgentLoop] iter=%d messages=%d tools=%d prompt_len=%d max_tokens=%d used_tokens=%d", iter, len(messages), len(curTools), len(prompt), curMaxTokens, totalTokensUsed)
 		logger.Infof("[AgentLoop] prompt_preview=%s", truncate(prompt, 300))
+		sessionRef, idem := salesGenerateDispatchCallContext(req, fmt.Sprintf("agentloop-%d", iter))
 		result, err := e.dispatcher.Dispatch(iterCtx, llm.DispatchRequest{
-			Scenario:     scenario,
-			Prompt:       prompt,
-			SystemPrompt: e.personaWithLang(ctx, req.Config.Persona, targetLang),
-			MaxTokens:    curMaxTokens,
-			Temperature:  req.Config.Temperature,
-			Tools:        curTools,
-			ToolChoice:   slotToolChoice(slotGateNone),
-			Messages:     messages,
+			Scenario:              scenario,
+			Prompt:                prompt,
+			SystemPrompt:          e.personaWithLang(ctx, req.Config.Persona, targetLang),
+			MaxTokens:             curMaxTokens,
+			Temperature:           req.Config.Temperature,
+			Tools:                 curTools,
+			ToolChoice:            slotToolChoice(slotGateNone),
+			Messages:              messages,
+			ExecutionScenarioID:   string(agentcontext.ExecutionScenarioSalesGenerate),
+			LLMSessionRef:         sessionRef,
+			RequestIdempotencyKey: idem,
 		})
 		iterCancel()
 		if err != nil {
@@ -329,6 +325,15 @@ func (e *SalesEngine) runAgentLoop(
 		}
 		totalTokensUsed += iterTokens
 		guard.charge(iterTokens, result.Cost)
+
+		if result.FinishReason == "length" && strings.TrimSpace(result.Content) != "" && !lengthRetryDone {
+			lengthRetryDone = true
+			if next, done := salesGenerateRetryMaxTokens(curMaxTokens, result.FinishReason, result.Content, false); !done {
+				curMaxTokens = next
+				logger.Warnf("[AgentLoop] iter=%d 输出被截断，加倍输出预算重试: max_tokens=%d", iter, curMaxTokens)
+				continue
+			}
+		}
 
 		if result.FinishReason != "tool_calls" || len(result.ToolCalls) == 0 {
 

@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 	"time"
 
@@ -113,6 +114,20 @@ func (m *CacheManager) PopAll(ctx context.Context, key string) ([]string, error)
 
 func (m *CacheManager) ReleaseLock(ctx context.Context, key, token string) (bool, error) {
 	return m.cache.ReleaseLock(ctx, key, token)
+}
+
+// RefreshLock 仅在 token 仍匹配时原子延长锁 TTL；不支持续期的后端返回明确错误。
+func (m *CacheManager) RefreshLock(ctx context.Context, key, token string, ttl time.Duration) (bool, error) {
+	if ttl <= 0 {
+		return false, errors.New("锁续期 TTL 必须大于 0")
+	}
+	refresher, ok := m.cache.(interface {
+		RefreshLock(context.Context, string, string, time.Duration) (bool, error)
+	})
+	if !ok {
+		return false, ErrLockRefreshUnsupported
+	}
+	return refresher.RefreshLock(ctx, key, token, ttl)
 }
 
 // LPush 向列表头部推入

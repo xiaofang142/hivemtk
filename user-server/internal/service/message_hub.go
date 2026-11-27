@@ -250,6 +250,9 @@ type MessageHubService struct {
 	// recaller 平台撤回端口（B2）。nil = 未装配 ⇒ 撤回端点回 503，
 	// 绝不在没有端口时假装撤回成功（见 message_hub_recall.go 文件头）。
 	recaller ReachRecaller
+
+	// tombstoneSvc 撤回/编辑后写墓碑并失效摘要与 native generation；未装配时跳过。
+	tombstoneSvc *AgentContextTombstoneService
 }
 
 type hubStream struct {

@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	agentcontext "hivemtk-user/internal/aiagent/context"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
 )
@@ -24,6 +25,11 @@ const (
 // LeadReactTask 是单次 ReAct 取证的不可变可信视图。租户不进入该结构，始终只从
 // context.Context 解析；ACL 只来自冻结的 leadHistoryScope，模型参数不能改写范围。
 type LeadReactTask struct {
+	TenantID           uint
+	TranscriptID       uint
+	ContextView        *agentcontext.AgentConversationContext
+	Scope              *agentcontext.ConversationScope
+	Ledger             leadReactToolLedger
 	Platform           string
 	CanonicalAccountID uint
 	ChannelID          uint
@@ -118,6 +124,9 @@ func buildLeadReactTask(ctx context.Context, hub *model.MessageHub, jctx *LeadJu
 	}
 
 	tid, ok := tenant.FromContext(ctx)
+	if ok {
+		task.TenantID = tid
+	}
 	if !ok || tid == 0 || tenant.IsSystemScope(ctx) || hub == nil || scope == nil {
 		return task
 	}

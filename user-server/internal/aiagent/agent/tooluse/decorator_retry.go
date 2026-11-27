@@ -25,6 +25,10 @@ func RetryDecorator(policy RetryPolicy) ToolDecorator {
 			if maxAttempts < 1 {
 				maxAttempts = 1
 			}
+			// 副作用不确定或高危工具禁止自动重放：必须由上层 ledger 对账后决定是否重试。
+			if toolRetryForbidden(ctx) {
+				maxAttempts = 1
+			}
 			var lastErr error
 			for attempt := 0; attempt < maxAttempts; attempt++ {
 

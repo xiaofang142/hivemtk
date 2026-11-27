@@ -61,6 +61,11 @@ func NewDelayedOutboundRepositoryDefault() *DelayedOutboundRepository {
 	return NewDelayedOutboundRepository(GetDB())
 }
 
+// NewDelayedOutboundRepositoryWithDB 使用指定连接，供生命周期与真实库 parity 测试复用。
+func NewDelayedOutboundRepositoryWithDB(db *gorm.DB) *DelayedOutboundRepository {
+	return NewDelayedOutboundRepository(db)
+}
+
 // NewReplayRepositories 保持回扫资格查询与任务仓储使用相同句柄，不向Service暴露数据库。
 func NewReplayRepositories(r *DelayedOutboundRepository) (*CustomerSessionRepository, *MessageHubRepository) {
 	if r == nil {
@@ -138,6 +143,18 @@ func (r *DelayedOutboundRepository) CreatePending(ctx context.Context, rec *mode
 	}
 	if rec == nil {
 		return errors.New("delayed outbound: nil 记录不是入队对象")
+	}
+	if rec.CorrelationID != "" {
+		var existing model.DelayedOutboundReply
+		err := r.db.WithContext(ctx).
+			Where("tenant_id = ? AND correlation_id = ?", rec.TenantID, rec.CorrelationID).
+			First(&existing).Error
+		if err == nil {
+			return nil
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
 	}
 	return r.db.WithContext(ctx).Create(rec).Error
 }
