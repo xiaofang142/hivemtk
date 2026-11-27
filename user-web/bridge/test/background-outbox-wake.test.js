@@ -31,7 +31,7 @@ describe('后台非认领唤醒', () => {
     expect(await f.runtime.register({ ...f.registration, registrationId: 'registration-b' }, { ...f.sender, tab: { id: 8 } })).toBe(true);
     expect(f.fetcher).toHaveBeenCalledTimes(1);
     const [url, options] = f.fetcher.mock.calls[0];
-    expect(url).toContain('/api/bridge/outbox/wake');
+    expect(url).toContain('/api/channelbus/outbox/wake');
     expect(url).toContain('tenant_code=tenant-a');
     expect(url).not.toContain('wake-secret');
     expect(options.headers['X-Channel-Identify-Code']).toBe('wake-secret');

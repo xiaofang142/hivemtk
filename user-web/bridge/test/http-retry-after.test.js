@@ -15,7 +15,7 @@ describe('HTTP Retry-After 不早于服务端限制且可取消', () => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
   });
-  const url = 'https://service.example/api/bridge/outbox';
+  const url = 'https://service.example/api/channelbus/outbox';
   const ok = { status: 200, headers: {}, body: '{}' };
 
   it('中转响应头与原生 Headers 一样不区分大小写', async () => {

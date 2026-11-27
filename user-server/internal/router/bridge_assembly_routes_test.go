@@ -35,6 +35,18 @@ func TestSetup_SelectedBridgeRoutesRegisteredExactlyOnce(t *testing.T) {
 		{"POST", "/api/inbox/unlock-human/:session_id"},
 		{"POST", "/api/bridge/selector-health"},
 		{"GET", "/api/bridge/selector-health"},
+		// canonical 线路：与旧组逐条对应，共用 handler；旧路径仅作兼容别名。
+		{"POST", "/api/channelbus/ingest"},
+		{"GET", "/api/channelbus/outbox"},
+		{"POST", "/api/channelbus/outbox/ack"},
+		{"POST", "/api/channelbus/gateway"},
+		{"GET", "/api/channelbus/gateway"},
+		{"GET", "/api/channelbus/outbox/sse"},
+		{"GET", "/api/channelbus/outbox/wake"},
+		{"GET", "/api/channelbus/capabilities"},
+		{"POST", "/api/channelbus/selector-health"},
+		{"GET", "/api/channelbus/selector-health"},
+		{"GET", "/api/channelbus/ws"},
 	}
 	for _, w := range want {
 		n := 0
@@ -55,9 +67,20 @@ func TestSetup_SelectedBridgeRoutesRegisteredExactlyOnce(t *testing.T) {
 	// 桥接摄入口的 handler 身份不变（门链由桥接中间件与 CS-06 电池另钉，
 	// 既有 token 特例不改成一律 JWT）。
 	for _, route := range r.Routes() {
-		if route.Method == "POST" && route.Path == "/api/bridge/ingest" {
+		if route.Method != "POST" {
+			continue
+		}
+		if route.Path == "/api/bridge/ingest" || route.Path == "/api/channelbus/ingest" {
 			if !strings.Contains(route.Handler, "HandleHTTPIngest") {
-				t.Errorf("/api/bridge/ingest handler 身份漂移: %s", route.Handler)
+				t.Errorf("%s handler 身份漂移: %s", route.Path, route.Handler)
+			}
+		}
+	}
+	// canonical WS 与旧 WS 必须共用同一个 HandleWS 入口。
+	for _, route := range r.Routes() {
+		if route.Method == "GET" && (route.Path == "/api/ws/channel" || route.Path == "/api/channelbus/ws") {
+			if !strings.Contains(route.Handler, "HandleWS") {
+				t.Errorf("%s handler 身份漂移: %s", route.Path, route.Handler)
 			}
 		}
 	}

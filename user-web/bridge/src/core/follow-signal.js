@@ -15,7 +15,7 @@
 //
 // 上行键名与服务端约定：`new_user_unfollowed` / `new_user_signal` 已登记在
 // user-server internal/channelgw/protocol.go 的 IngestExtraAllowKeys 显式白名单
-// （ctx. 前缀之外的放行接缝），经 /api/bridge/ingest 与 WS 双传输透传进
+// （ctx. 前缀之外的放行接缝），经 /api/channelbus/ingest 与 WS 双传输透传进
 // message_hub.extra。键名改动必须两端同步。
 
 // extra 键名（与服务端 IngestExtraAllowKeys 逐字一致）

@@ -11,7 +11,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { bridgeFetch } from '../src/core/http-ingest.js';
 
-const PAGE_URL = 'https://workapi.xapptool.cn/api/bridge/outbox?channel=douyin';
+const PAGE_URL = 'https://workapi.xapptool.cn/api/channelbus/outbox?channel=douyin';
 
 describe('bridgeFetch 页面上下文 relay 契约', () => {
   let sendMessageMock;

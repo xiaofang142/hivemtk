@@ -5,8 +5,8 @@ const pending = new Map();
 const MAX_PENDING = 128;
 const MAX_DOCUMENT_PENDING = 16;
 const METHODS = new Map([
-  ['/api/bridge/ingest', 'POST'], ['/api/bridge/outbox', 'GET'],
-  ['/api/bridge/outbox/ack', 'POST'], ['/api/bridge/capabilities', 'GET'],
+  ['/api/channelbus/ingest', 'POST'], ['/api/channelbus/outbox', 'GET'],
+  ['/api/channelbus/outbox/ack', 'POST'], ['/api/channelbus/capabilities', 'GET'],
 ]);
 const QUERY_KEYS = new Set(['channel', 'account_id', 'conversation_id', 'tenant_code', 'limit']);
 
@@ -86,7 +86,7 @@ function configuredRequest(message, cfg, channel) {
     if (!QUERY_KEYS.has(key) || url.searchParams.getAll(key).length !== 1) throw new Error('查询参数未确认');
   }
   const requestedChannel = url.searchParams.get('channel');
-  if ((path !== '/api/bridge/capabilities' && !requestedChannel)
+  if ((path !== '/api/channelbus/capabilities' && !requestedChannel)
     || (requestedChannel && normalizeChannel(requestedChannel) !== channel)) throw new Error('渠道不匹配');
   if ((url.searchParams.get('tenant_code') || '') !== (cfg.tenantCode || '')) throw new Error('租户配置不匹配');
   const headers = new Headers(message.options?.headers || {});
@@ -107,7 +107,7 @@ function configuredRequest(message, cfg, channel) {
       const scope = url.searchParams.get(key);
       if (scope && payload[key] && scope !== payload[key]) throw new Error('请求体身份不匹配');
     }
-    if (path === '/api/bridge/ingest') {
+    if (path === '/api/channelbus/ingest') {
       const account = url.searchParams.get('account_id') || payload.account_id;
       const conversation = url.searchParams.get('conversation_id') || payload.conversation_id;
       if (typeof account !== 'string' || !account || !Array.isArray(payload.messages)) throw new Error('消息范围缺失');

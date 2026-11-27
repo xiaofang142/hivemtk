@@ -119,7 +119,7 @@ const SSE_ERROR_BODY_MAX_CHARS = 512;
 /**
  * 把非 2xx 的响应转成带判据的错误对象。
  *
- * 为什么不能只报 HTTP 状态码：/api/bridge/outbox/sse 的 401 有两种截然不同的成因
+ * 为什么不能只报 HTTP 状态码：/api/channelbus/outbox/sse 的 401 有两种截然不同的成因
  * （没带头 = `缺少 X-Channel-Identify-Code`；带头但值不对 = `渠道识别码无效`），
  * 400 也分「缺 channel/account_id」与「channel 不在白名单」。运维在扩展日志里只看到一个
  * 数字时无从下手，而服务端已经把答案写在响应体里了——丢掉它就是丢掉了唯一可执行的线索。
@@ -202,7 +202,7 @@ export async function connectSSE(channel, accountId, opts = {}) {
   } = opts;
 
   // 构建 URL
-  const url = new URL(`${serverUrl}/api/bridge/outbox/sse`);
+  const url = new URL(`${serverUrl}/api/channelbus/outbox/sse`);
   url.searchParams.set('channel', channel);
   url.searchParams.set('account_id', accountId);
   if (lastEventId) {

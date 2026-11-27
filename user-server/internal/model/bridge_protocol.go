@@ -1,8 +1,12 @@
 package model
 
+import "hivemtk-user/internal/pkg/channelbus"
+
+// 下行终态别名一律指向 channelbus：model 侧不再持有独立词表，
+// 避免与线路协议单源漂移（G-01 / 二次审计 F-04）。
 const (
-	BridgeAckStatusDelivered = "delivered"
-	BridgeAckStatusFailed    = "failed"
+	BridgeAckStatusDelivered = channelbus.StatusDelivered
+	BridgeAckStatusFailed    = channelbus.StatusFailed
 
 	// BridgeAckStatusUnknown CH-37b 刀4（R2/R6）：「动作已提交但结果不明」终态。
 	//
@@ -16,7 +20,7 @@ const (
 	// 不得伪装为 delivered。证据分级可理解为: local(pending/入队) → bridge_claimed(inflight+claimed_at) →
 	// platform/report 终态 (delivered/failed/unknown); “买家可见/已读”若渠道不支持则不应断言 delivered，需 unknown 或待对账。
 	// 无 DDL：message_hub.status 是无约束 varchar(20)，'unknown' 7 字符直接可用。
-	BridgeAckStatusUnknown = "unknown"
+	BridgeAckStatusUnknown = channelbus.StatusUnknown
 
 	BridgeAckStatusAcked      = "acked"
 	BridgeAckStatusDuplicate  = "duplicate"

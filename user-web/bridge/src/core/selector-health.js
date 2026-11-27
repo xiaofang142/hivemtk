@@ -19,7 +19,7 @@
 import { buildAuthHeaders } from './http-ingest.js';
 import { TENANT_CODE } from './constants.js';
 
-export const SELECTOR_HEALTH_PATH = '/api/bridge/selector-health';
+export const SELECTOR_HEALTH_PATH = '/api/channelbus/selector-health';
 
 // 与服务端 SelectorHealthMinAttempts / SelectorHealthDegradedBelow / 上报口上限同源。
 export const SELECTOR_HEALTH_DEFAULTS = Object.freeze({
@@ -211,7 +211,7 @@ function toHttpUrl(serverUrl) {
  * 构造上报请求（纯函数，便于用例断言 URL/头/体，不碰网络）。
  *
  * 识别码走 Header（X-Channel-Identify-Code + Authorization），与 http-ingest.js 同一条铁律：
- * 服务端 `/api/bridge/*` 的守卫只认 X-Channel-Identify-Code（或 identify_code 查询参数），
+ * 服务端 `/api/channelbus/*` 的守卫只认 X-Channel-Identify-Code（或 identify_code 查询参数），
  * 旧 X-Bridge-Token 已退役，只发 Bearer 会被 401，而下行/上报都把 401 吞成一行日志。
  */
 export function buildSelectorHealthRequest({

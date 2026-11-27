@@ -14,6 +14,7 @@ import (
 	"hivemtk-user/internal/channelbot/telegram"
 	"hivemtk-user/internal/channelbot/whatsapp"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/channelbus"
 	"hivemtk-user/internal/pkg/protocolhash"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
@@ -467,10 +468,10 @@ type WebhookIngestAck struct {
 }
 
 const (
-	WebhookIngestAckAccepted  = "accepted"
-	WebhookIngestAckDuplicate = "duplicate"
-	WebhookIngestAckRetry     = "retry"
-	WebhookIngestAckRejected  = "rejected"
+	WebhookIngestAckAccepted  = channelbus.StatusAccepted
+	WebhookIngestAckDuplicate = channelbus.StatusDuplicate
+	WebhookIngestAckRetry     = channelbus.StatusRetry
+	WebhookIngestAckRejected  = channelbus.StatusRejected
 )
 
 // fillFromResult 由 Receive 的 defer 统一生成，避免每个 return 分支各写一份 ack

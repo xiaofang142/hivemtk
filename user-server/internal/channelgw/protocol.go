@@ -6,37 +6,41 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/channelbus"
 )
 
 // 协议版本：
 //   - v1: 初始版本（无 v 字段，默认按 v1 处理）
 //   - v2: 加 protocol_version 字段、frame 增加 v 字段；保留 v1 向后兼容
 //   - 后续破坏性变更必须 bump v+1，并写清迁移路径
+//
+// 线路协议常量单一权威在 internal/pkg/channelbus；此处保留别名导出，既有
+// 调用方零改动，且不可能再出现"又一个协议版本常量"。
 const (
-	ProtocolVersionV1      = 1
-	ProtocolVersionV2      = 2
-	CurrentProtocolVersion = ProtocolVersionV2
+	ProtocolVersionV1      = channelbus.ProtocolVersionV1
+	ProtocolVersionV2      = channelbus.ProtocolVersionV2
+	CurrentProtocolVersion = channelbus.CurrentProtocolVersion
 )
 
 // 帧类型常量（渠道客户端 <-> 服务器 双向，HTTP 与 WS 传输共用同一套语义）。
 const (
-	FrameRegister       = "register"
-	FrameRegisterReject = "register_rejected"
-	FrameInbound        = "inbound_message"
-	FrameHistory        = "history"
-	FramePong           = "pong"
-	FrameAck            = "ack"
-	FramePing           = "ping"
-	FrameOutboundReply  = "outbound_reply"
-	FrameConfigPush     = "config_push"
+	FrameRegister       = channelbus.FrameRegister
+	FrameRegisterReject = channelbus.FrameRegisterReject
+	FrameInbound        = channelbus.FrameInbound
+	FrameHistory        = channelbus.FrameHistory
+	FramePong           = channelbus.FramePong
+	FrameAck            = channelbus.FrameAck
+	FramePing           = channelbus.FramePing
+	FrameOutboundReply  = channelbus.FrameOutboundReply
+	FrameConfigPush     = channelbus.FrameConfigPush
 )
 
 // 传输类型标识（渠道注册表声明每渠道支持的传输）。
 type Transport string
 
 const (
-	TransportHTTP      Transport = "http"
-	TransportWebSocket Transport = "websocket"
+	TransportHTTP      Transport = channelbus.TransportHTTP
+	TransportWebSocket Transport = channelbus.TransportWebSocket
 )
 
 // HistoryItem 会话级 history 中的单轮消息（一个会话 = 一条消息，内含多轮历史）。

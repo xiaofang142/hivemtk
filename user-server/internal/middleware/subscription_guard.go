@@ -85,6 +85,9 @@ var subscriptionCustomerFacing = []string{
 	"/api/bridge/ingest", // bridge ingress（扩展端上报）
 	"/api/bridge/outbox", // bridge outbox（含 /ack /sse 子路径见下）
 	"/api/bridge/outbox/*",
+	"/api/channelbus/ingest", // canonical 线路：与旧 bridge 路径同构
+	"/api/channelbus/outbox",
+	"/api/channelbus/outbox/*",
 	"/api/webhook/wechat/*", // wechat webhook
 }
 

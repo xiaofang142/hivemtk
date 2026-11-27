@@ -73,7 +73,7 @@ async function loadPopup(fetchMock) {
 }
 
 const SERVER = 'http://localhost:8204';
-const CAPS_PATH = '/api/bridge/capabilities';
+const CAPS_PATH = '/api/channelbus/capabilities';
 const TOKEN = 'bridge-secret-abc';
 
 function jsonResponse(body, status = 200) {

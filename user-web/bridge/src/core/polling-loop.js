@@ -58,7 +58,7 @@ function parseFollowUserCapabilities(data) {
 
 /**
  * getServerCapabilities 查询服务端下行能力。
- * 请求 GET /api/bridge/capabilities，
+ * 请求 GET /api/channelbus/capabilities，
  * 返回 { sse_enabled, poll_interval_ms, patrol_unread_first_channels,
  *        follow_user_enabled, follow_user_channels }（M-6）。
  * 请求失败时返回保守的 fallback（sse_enabled: false；未读优先清单 = 空 = 开关关；
@@ -69,7 +69,7 @@ function parseFollowUserCapabilities(data) {
  */
 export async function getServerCapabilities(cfg) {
   const baseUrl = (cfg && cfg.serverUrl) || DEFAULT_USER_SERVER.baseUrl;
-  const url = applyTenantCode(`${baseUrl}/api/bridge/capabilities`, cfg && cfg.tenantCode);
+  const url = applyTenantCode(`${baseUrl}/api/channelbus/capabilities`, cfg && cfg.tenantCode);
   const timeoutMs = 5000;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);

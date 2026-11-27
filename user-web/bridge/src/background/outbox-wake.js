@@ -164,7 +164,7 @@ export function createOutboxWakeRuntime(api, fetcher = globalThis.fetch) {
       const base = new URL(cfg.serverUrl);
       if (base.username || base.password || !['https:', 'http:'].includes(base.protocol)) return false;
       if (base.protocol === 'http:' && !['localhost', '127.0.0.1', '[::1]'].includes(base.hostname)) return false;
-      url = new URL(base.pathname.replace(/\/$/, '') + '/api/bridge/outbox/wake', base.origin);
+      url = new URL(base.pathname.replace(/\/$/, '') + '/api/channelbus/outbox/wake', base.origin);
       url.searchParams.set('channel', canonicalChannel(message.channel));
       url.searchParams.set('account_id', message.accountId);
       url = applyTenantCode(url.toString(), cfg.tenantCode);

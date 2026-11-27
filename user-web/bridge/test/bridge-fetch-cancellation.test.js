@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ackOutbox, bridgeFetch, fetchWithRetry, getOutbox, postIngest } from '../src/core/http-ingest.js';
 
-const URL = 'https://example.invalid/api/bridge/outbox';
+const URL = 'https://example.invalid/api/channelbus/outbox';
 const CRED = { serverUrl: 'https://example.invalid', channel: 'douyin', accountId: 'test-account' };
 const OK = { status: 200, headers: {}, body: '{"status":"ok","messages":[]}' };
 

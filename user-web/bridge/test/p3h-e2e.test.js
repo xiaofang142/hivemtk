@@ -83,7 +83,7 @@ describe('P3-H e2e: 三通道端到端 (douyin/e2e)', () => {
   it.skipIf(!serverAvailable)('ingest 上报 customer 消息 → 服务端落库 + AI 触发', async () => {
     const reqId = `e2e-req-${Date.now().toString(36)}`;
     const r = await postJSON(
-      `/api/bridge/ingest?channel=${CHANNEL}&account_id=${ACCOUNT}`,
+      `/api/channelbus/ingest?channel=${CHANNEL}&account_id=${ACCOUNT}`,
       {
         channel: CHANNEL,
         account_id: ACCOUNT,
@@ -107,7 +107,7 @@ describe('P3-H e2e: 三通道端到端 (douyin/e2e)', () => {
   });
 
   it.skipIf(!serverAvailable)('outbox 拉取 → 验证响应 schema 与 P3-D ack 输入', async () => {
-    const r = await getJSON(`/api/bridge/outbox?channel=${CHANNEL}&account_id=${ACCOUNT}&limit=10`);
+    const r = await getJSON(`/api/channelbus/outbox?channel=${CHANNEL}&account_id=${ACCOUNT}&limit=10`);
     expect(r.status).toBe(200);
     expect(r.body).toBeTruthy();
     if (r.body && r.body.messages && r.body.messages.length > 0) {
@@ -123,7 +123,7 @@ describe('P3-H e2e: 三通道端到端 (douyin/e2e)', () => {
     // 准备测试 msg_ids：2 条真实（如果拉到了）+ 1 条不存在
     const realIds = aiSeedId ? [aiSeedId] : [];
     const r = await postJSON(
-      `/api/bridge/outbox/ack?channel=${CHANNEL}&account_id=${ACCOUNT}`,
+      `/api/channelbus/outbox/ack?channel=${CHANNEL}&account_id=${ACCOUNT}`,
       {
         msg_ids: [...realIds, 'mh:nonexistent_e2e_p3h'],
         status: 'delivered',
@@ -150,7 +150,7 @@ describe('P3-H e2e: 三通道端到端 (douyin/e2e)', () => {
   it.skipIf(!serverAvailable)('二次 ack 同一 msg_id → 验证 duplicate', async () => {
     if (!aiSeedId) return; 
     const r = await postJSON(
-      `/api/bridge/outbox/ack?channel=${CHANNEL}&account_id=${ACCOUNT}`,
+      `/api/channelbus/outbox/ack?channel=${CHANNEL}&account_id=${ACCOUNT}`,
       { msg_ids: [aiSeedId], status: 'delivered' }
     );
     expect(r.status).toBe(200);
@@ -166,7 +166,7 @@ describe('P3-H e2e: 三通道端到端 (douyin/e2e)', () => {
 
   it.skipIf(!serverAvailable)('account_id 缺失 → 400 拒绝', async () => {
     const r = await postJSON(
-      `/api/bridge/ingest?channel=${CHANNEL}`,
+      `/api/channelbus/ingest?channel=${CHANNEL}`,
       {
         channel: CHANNEL,
         account_id: '',
@@ -180,7 +180,7 @@ describe('P3-H e2e: 三通道端到端 (douyin/e2e)', () => {
 
   it.skipIf(!serverAvailable)('channel 不在白名单 → 400 拒绝', async () => {
     const r = await postJSON(
-      `/api/bridge/ingest?channel=evil_unknown&account_id=${ACCOUNT}`,
+      `/api/channelbus/ingest?channel=evil_unknown&account_id=${ACCOUNT}`,
       {
         channel: 'evil_unknown',
         account_id: ACCOUNT,
@@ -196,7 +196,7 @@ describe('P3-H e2e: 三通道端到端 (douyin/e2e)', () => {
     const reqId = `e2e-trace-${Math.random().toString(36).slice(2, 10)}`;
     // ingest 不依赖消息落库（空消息体应快速返回 400 而不是 200）
     const r = await postJSON(
-      `/api/bridge/ingest?channel=${CHANNEL}&account_id=${ACCOUNT}`,
+      `/api/channelbus/ingest?channel=${CHANNEL}&account_id=${ACCOUNT}`,
       { channel: CHANNEL, account_id: ACCOUNT, conversation_id: 'c', messages: [] },
       { 'X-Request-Id': reqId }
     );

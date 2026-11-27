@@ -16,6 +16,7 @@ import (
 
 	"hivemtk-user/internal/channelgw"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/channelbus"
 	"hivemtk-user/internal/pkg/metrics"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/tracing"
@@ -723,7 +724,7 @@ func (h *BridgeIngestHandler) HandleHTTPIngest(c *gin.Context) {
 	// 统一网关契约（hivemtk.channel.v1）：SageX Android 客户端的 AckValidator
 	// 只接受 schema_version + acks[{event_id,status}]，缺 acks 即 ACK_INVALID 暂停。
 	// 这里按已落库结果生成 ACK，additive 附加到既有 ingested 响应，浏览器扩展不受影响。
-	resp.SchemaVersion = "hivemtk.channel.v1"
+	resp.SchemaVersion = channelbus.SchemaVersion
 	resp.Acks = buildIngestAcks(resp.Ingested)
 	logger.Ctx(ctx).Info().
 		Str("module", "bridge").
@@ -749,11 +750,11 @@ func (h *BridgeIngestHandler) HandleHTTPIngest(c *gin.Context) {
 func buildIngestAcks(results []*HTTPIngestResult) []*channelgw.IngestAck {
 	acks := make([]*channelgw.IngestAck, 0, len(results))
 	for _, item := range results {
-		status := "accepted"
+		status := channelbus.StatusAccepted
 		if item.Duplicate {
-			status = "duplicate"
+			status = channelbus.StatusDuplicate
 		} else if !item.Accepted {
-			status = "retry"
+			status = channelbus.StatusRetry
 		}
 		acks = append(acks, &channelgw.IngestAck{EventID: item.EventID, Status: status})
 	}
@@ -1281,6 +1282,10 @@ var _ = bytes.NewBuffer
 
 // =================== 统一渠道网关（路由1：identify_code 唯一凭证） ===================
 
+// legacyGatewaySchemaVersion 是 SageX 上传侧历史 schema_version=1.0 在 gateway
+// 上的兼容别名；canonical 值统一由 channelbus.SchemaVersion 提供。
+const legacyGatewaySchemaVersion = "1.0"
+
 type UnifiedChannelGatewayRequest struct {
 	Action         string                  `json:"action"` // report|ack|heartbeat
 	SchemaVersion  string                  `json:"schema_version"`
@@ -1321,6 +1326,18 @@ func (h *BridgeIngestHandler) HandleGateway(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "invalid json body"})
 		return
 	}
+	// 线路协议身份校验：旧客户端可省略 schema_version；显式传值时必须与总线
+	// canonical 值一致（1.0 为 SageX 上传侧历史别名，gateway 同样兼容）。
+	// 不校验会让 gateway 与 sagex/upload 对同一协议标识一个验一个不验。
+	if version := strings.TrimSpace(req.SchemaVersion); version != "" &&
+		version != channelbus.SchemaVersion && version != legacyGatewaySchemaVersion {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"schema_version": channelbus.SchemaVersion,
+			"status":         "error",
+			"message":        "unsupported schema_version",
+		})
+		return
+	}
 	action := strings.ToLower(strings.TrimSpace(req.Action))
 	if action == "" {
 		if len(req.Items) > 0 {
@@ -1351,13 +1368,13 @@ func (h *BridgeIngestHandler) HandleGateway(c *gin.Context) {
 				touchBridgeAccountOnline(c.Request.Context(), channel, accountID)
 			}
 		}
-		c.JSON(http.StatusOK, gin.H{"schema_version": "hivemtk.channel.v1", "status": "ok", "action": "heartbeat"})
+		c.JSON(http.StatusOK, gin.H{"schema_version": channelbus.SchemaVersion, "status": "ok", "action": "heartbeat"})
 		return
 	case "report":
 		h.handleGatewayReport(c, &req)
 		return
 	default:
-		c.JSON(http.StatusBadRequest, gin.H{"schema_version": "hivemtk.channel.v1", "status": "error", "message": "unsupported action"})
+		c.JSON(http.StatusBadRequest, gin.H{"schema_version": channelbus.SchemaVersion, "status": "error", "message": "unsupported action"})
 	}
 }
 
@@ -1378,7 +1395,7 @@ func (h *BridgeIngestHandler) handleGatewayReport(c *gin.Context, req *UnifiedCh
 		return
 	}
 	if channel == "" || accountID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"schema_version": "hivemtk.channel.v1", "status": "error", "message": "channel/account_id required (or identify_code)"})
+		c.JSON(http.StatusBadRequest, gin.H{"schema_version": channelbus.SchemaVersion, "status": "error", "message": "channel/account_id required (or identify_code)"})
 		return
 	}
 
@@ -1405,7 +1422,7 @@ func (h *BridgeIngestHandler) handleGatewayReport(c *gin.Context, req *UnifiedCh
 	}
 
 	if h.ingress == nil && h.mockHandle == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"schema_version": "hivemtk.channel.v1", "status": "error", "message": "ingress unavailable"})
+		c.JSON(http.StatusInternalServerError, gin.H{"schema_version": channelbus.SchemaVersion, "status": "error", "message": "ingress unavailable"})
 		return
 	}
 	tenantID, _ := tenant.FromContext(c.Request.Context())
@@ -1420,20 +1437,20 @@ func (h *BridgeIngestHandler) handleGatewayReport(c *gin.Context, req *UnifiedCh
 			result, err = h.ingress.HandleIngressMessage(c.Request.Context(), ev)
 		}
 		if err != nil {
-			acks = append(acks, map[string]any{"event_id": ev.EventID, "status": "retry", "code": "INGRESS_FAILED"})
+			acks = append(acks, map[string]any{"event_id": ev.EventID, "status": channelbus.StatusRetry, "code": "INGRESS_FAILED"})
 			continue
 		}
 		if result == nil {
-			acks = append(acks, map[string]any{"event_id": ev.EventID, "status": "retry", "code": "INGRESS_RESULT_MISSING"})
+			acks = append(acks, map[string]any{"event_id": ev.EventID, "status": channelbus.StatusRetry, "code": "INGRESS_RESULT_MISSING"})
 			continue
 		}
 		if !result.Accepted {
-			acks = append(acks, map[string]any{"event_id": ev.EventID, "status": "rejected", "code": "INGRESS_NOT_ACCEPTED"})
+			acks = append(acks, map[string]any{"event_id": ev.EventID, "status": channelbus.StatusRejected, "code": "INGRESS_NOT_ACCEPTED"})
 			continue
 		}
-		acks = append(acks, map[string]any{"event_id": ev.EventID, "status": "accepted"})
+		acks = append(acks, map[string]any{"event_id": ev.EventID, "status": channelbus.StatusAccepted})
 	}
-	c.JSON(http.StatusOK, gin.H{"schema_version": "hivemtk.channel.v1", "status": "ok", "acks": acks})
+	c.JSON(http.StatusOK, gin.H{"schema_version": channelbus.SchemaVersion, "status": "ok", "acks": acks})
 }
 
 // gatewayReportIdentity 固定使用已解析身份；渠道提示不决定消费分支。

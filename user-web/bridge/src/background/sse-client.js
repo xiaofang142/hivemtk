@@ -1,7 +1,7 @@
 // background/sse-client.js
 // Service Worker 中的 SSE 客户端：
 // 1. 监听 chrome.alarms keepalive（每 15s 唤醒 Worker）
-// 2. 经 core/sse-fetch-client（fetch 流式，X-Channel-Identify-Code 头携带识别码）连接 /api/bridge/outbox/sse
+// 2. 经 core/sse-fetch-client（fetch 流式，X-Channel-Identify-Code 头携带识别码）连接 /api/channelbus/outbox/sse
 // 3. 按 (channel, account_id) 路由消息到对应标签页的 Content Script
 // 4. 断线重连带 Last-Event-ID
 // 5. 持久化 Last-Event-ID 到 chrome.storage.local

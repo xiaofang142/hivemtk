@@ -21,13 +21,13 @@ import { serializeConfig, importConfig } from '../src/popup/config-io.js';
 
 describe('tenant_code / applyTenantCode', () => {
   it('带短码 ⇒ URL 上多出 tenant_code 参数', () => {
-    const url = applyTenantCode('http://localhost:8204/api/bridge/ingest?channel=douyin', 't42xk');
+    const url = applyTenantCode('http://localhost:8204/api/channelbus/ingest?channel=douyin', 't42xk');
     expect(url).toContain('tenant_code=t42xk');
     expect(url).toContain('channel=douyin');
   });
 
   it('短码为空 ⇒ URL 不变（离线单机模式不带多余参数）', () => {
-    const base = 'http://localhost:8204/api/bridge/ingest?channel=douyin';
+    const base = 'http://localhost:8204/api/channelbus/ingest?channel=douyin';
     expect(applyTenantCode(base, '')).toBe(base);
     expect(applyTenantCode(base, undefined)).toBe(base);
     expect(applyTenantCode(base, '   ')).toBe(base);
@@ -108,7 +108,7 @@ describe('tenant_code / 四条链路都带上短码', () => {
       { v: 2, messages: [] }
     );
     expect(calls[0].url).toContain('tenant_code=t42xk');
-    expect(calls[0].url).toContain('/api/bridge/ingest');
+    expect(calls[0].url).toContain('/api/channelbus/ingest');
   });
 
   it('outbox 带上 tenant_code', async () => {
@@ -116,7 +116,7 @@ describe('tenant_code / 四条链路都带上短码', () => {
       { serverUrl: 'http://localhost:8204', channel: 'douyin', accountId: 'acc-1', token: 'tk', tenantCode: 't42xk' },
       { batchSize: 10 }
     );
-    expect(calls[0].url).toContain('/api/bridge/outbox');
+    expect(calls[0].url).toContain('/api/channelbus/outbox');
     expect(calls[0].url).toContain('tenant_code=t42xk');
   });
 
@@ -126,7 +126,7 @@ describe('tenant_code / 四条链路都带上短码', () => {
       ['mh:abc'],
       { conversationId: 'conv-1' }
     );
-    expect(calls[0].url).toContain('/api/bridge/outbox/ack');
+    expect(calls[0].url).toContain('/api/channelbus/outbox/ack');
     expect(calls[0].url).toContain('tenant_code=t42xk');
   });
 
@@ -146,7 +146,7 @@ describe('tenant_code / 四条链路都带上短码', () => {
       token: 'tk',
       tenantCode: 't42xk',
     });
-    expect(calls[0].url).toContain('/api/bridge/outbox/sse');
+    expect(calls[0].url).toContain('/api/channelbus/outbox/sse');
     expect(calls[0].url).toContain('tenant_code=t42xk');
   });
 

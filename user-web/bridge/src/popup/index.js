@@ -302,7 +302,7 @@ async function readHealthVerdict(res) {
   };
 }
 
-// 凭证探测：GET /api/bridge/capabilities，带 X-Channel-Identify-Code。
+// 凭证探测：GET /api/channelbus/capabilities，带 X-Channel-Identify-Code。
 //
 // 为什么原本要补这一格：「测试连接」只打无鉴权的健康口，所以**凭证填错也照样报「✓ 服务端可达」**，
 // 用户下一步看到的就是"扩展连着、一条客户消息也不上来、一条回复也不下发"。
@@ -311,7 +311,7 @@ async function readHealthVerdict(res) {
 //   不带凭证 ⇒ 401 `缺少 X-Channel-Identify-Code`；带错 ⇒ 401 `渠道识别码无效`；带对 ⇒ 200 + 能力读数。
 // 反过来说 ingest/outbox/ack 会真写队列，不能拿来"测试"。
 // 返回体绝不回显凭证；服务端那句 message 是闸门自己写的固定文案，直接抄给用户比任何猜测准。
-const BRIDGE_CREDENTIAL_PROBE_PATH = '/api/bridge/capabilities';
+const BRIDGE_CREDENTIAL_PROBE_PATH = '/api/channelbus/capabilities';
 let _credAbortCtl = null;
 async function probeBridgeCredential(serverUrl, token) {
   const base = normalizeServerUrl(serverUrl);

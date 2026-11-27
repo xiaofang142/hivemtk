@@ -3,8 +3,8 @@ import { createLogger } from './logger.js';
 
 const log = createLogger('http', 'bridge');
 
-// HTTP ingest 端点路径（与 user-server/internal/bridge/handler_http.go POST /api/bridge/ingest 严格对齐）
-const INGEST_PATH = '/api/bridge/ingest';
+// HTTP ingest 端点路径（与 user-server/internal/bridge/handler_http.go POST /api/channelbus/ingest 严格对齐）
+const INGEST_PATH = '/api/channelbus/ingest';
 
 // 长轮询/连接默认参数
 const HTTP_INGEST_DEFAULTS = Object.freeze({
@@ -22,7 +22,7 @@ function toHttpUrl(serverUrl) {
 
 // 构造带认证的请求头（识别码一律走 Header，绝不放 URL query）。
 //
-// 服务端闸门是 `middleware.BridgeIngressGuard`（router.go 挂在 /api/bridge/* 上），自 US4
+// 服务端闸门是 `middleware.BridgeIngressGuard`（router.go 挂在 /api/channelbus/* 上），自 US4
 // 起它只认 `X-Channel-Identify-Code` 头或 `identify_code` 查询参数；旧 `X-Bridge-Token`
 // 已一次性退役，发旧头一律 401。`Authorization: Bearer` 一并保留：不改已有部署/反代
 // 可能读取的头部形状，但闸门本身不读它。
@@ -52,7 +52,7 @@ export function applyTenantCode(url, tenantCode) {
 // 构造完整的上行 URL（HTTP ingest 端点 + channel/account_id/conversation_id 全部 query 参数）。
 //
 // 文档源：DEFAULT_USER_SERVER.baseUrl（用户配置或默认）与 user-server internal/router/router.go:337
-// （POST /api/bridge/ingest）严格对齐。
+// （POST /api/channelbus/ingest）严格对齐。
 //
 // 入参：
 //   - serverUrl: 用户配置的 baseUrl（http/https/ws/wss 都接受，自动归一为 http(s)）
@@ -370,7 +370,7 @@ async function postIngest({ serverUrl, channel, accountId, conversationId, token
 }
 
 
-const OUTBOX_PATH = '/api/bridge/outbox';
+const OUTBOX_PATH = '/api/channelbus/outbox';
 
 async function getOutbox({ serverUrl, channel, accountId, token, tenantCode }, opts = {}) {
   const acct = accountId || 'default';

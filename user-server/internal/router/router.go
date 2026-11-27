@@ -284,6 +284,9 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		ExemptPaths: []string{
 			"/api/bridge/ingest",
 			"/api/ws/channel",
+			// canonical 端点与旧路径必须同构：迁移后批量上报不能被全局桶 429。
+			"/api/channelbus/ingest",
+			"/api/channelbus/ws",
 		},
 	}))
 
@@ -793,6 +796,23 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 
 		bridgeWS.GET("/bridge/capabilities", controller.NewBridgeCapabilitiesController().GetCapabilities)
 
+		// 统一线路协议（canonical）端点：与 /api/bridge/* 共用完全相同的 handler，
+		// 只是路径归一到 /api/channelbus/*。旧路径继续保留，已发布扩展无需立即升级；
+		// 新接入方一律使用本组，避免"每接一个渠道新增一套 URL"。
+		// 鉴权与旧组严格同构：InitGuard + BridgeIngressGuard（识别码只走头/query）。
+		busWS := r.Group("/api/channelbus")
+		busWS.Use(middleware.InitGuard())
+		busWS.Use(middleware.BridgeIngressGuard())
+		busWS.POST("/ingest", bridgeHandler.HandleHTTPIngest)
+		busWS.GET("/outbox", bridgeHandler.GetBridgeOutbox)
+		busWS.POST("/outbox/ack", bridgeHandler.AckBridgeOutbox)
+		busWS.POST("/gateway", bridgeHandler.HandleGateway)
+		busWS.GET("/gateway", bridgeHandler.GetBridgeOutbox)
+		busWS.GET("/outbox/sse", bridgeHandler.HandleOutboxSSE)
+		busWS.GET("/outbox/wake", controller.NewBridgeOutboxWakeController(service.GlobalBridgeOutboxWake).Stream)
+		busWS.GET("/capabilities", controller.NewBridgeCapabilitiesController().GetCapabilities)
+		busWS.POST("/selector-health", selectorHealthCtrl.Ingest)
+
 		sagexUploadSvc := service.NewSageXUploadService(
 			repository.NewSageXInstallationRepository(),
 			repository.NewSageXEventReceiptRepository(),
@@ -825,6 +845,8 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		// bridge 包，而 bridge 已经 import channelgw——反向依赖会成环，所以在这里接线。
 		channelWSTransport.TenantBinder = bridge.BridgeTenantForRequest
 		bridgeWS.GET("/ws/channel", channelWSTransport.HandleWS)
+		// canonical 路径别名：WS 帧格式与 /api/ws/channel 完全一致，新接入方统一走这里。
+		busWS.GET("/ws", channelWSTransport.HandleWS)
 
 		tracing.Init(gormDB)
 		tooluse.ToolTraceSink = tracing.ReportToolCall

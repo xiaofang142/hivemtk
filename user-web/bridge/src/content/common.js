@@ -464,9 +464,9 @@ export function startBridge(channel, buildAdapter) {
     // （所有渠道 douyin/xhs/tiktok/xianyu 共用），用户可从 console 直接看到上行地址。
     //
     // 2026-08-06 架构重构：上行统一收口到 Uplink（父层封装，三通道相互独立）。
-    // 4 个渠道的聊天内容都经 uplink.enqueue 推入上报队列；Uplink 负责短窗口合并 + POST /api/bridge/ingest。
+    // 4 个渠道的聊天内容都经 uplink.enqueue 推入上报队列；Uplink 负责短窗口合并 + POST /api/channelbus/ingest。
     // 消息 hash（event_id）在前端完成：渠道已给则沿用，否则 Uplink 兜底补全（后端按 event_id 去重）。
-    // AI 回复不再随 ingest 响应返回，改由 downlink 独立轮询 GET /api/bridge/outbox 拉取下发。
+    // AI 回复不再随 ingest 响应返回，改由 downlink 独立轮询 GET /api/channelbus/outbox 拉取下发。
     // account_id 必须每次实时从 DOM 抓取：bridge 初始化时 SPA 可能尚未渲染账号链接，
     // 若一次性固化（旧实现 const accountId = ...），后续 outbox 拉取恒为 'default'，
     // 与 inbound 入库的真实 account_id 不匹配 → ClaimPendingOutbound 精确查询返回空 → 下行卡 inflight。
@@ -479,7 +479,7 @@ export function startBridge(channel, buildAdapter) {
       uplink.enqueue(message);
     };
 
-    // M-5（2026-11-11）：巡检未读优先的渠道开关来自参数中心（/api/bridge/capabilities 下发）。
+    // M-5（2026-11-11）：巡检未读优先的渠道开关来自参数中心（/api/channelbus/capabilities 下发）。
     //   异步拉取不阻塞启动：patrol() 每轮实时读开关值，拉到后下一轮生效；rescan 间隔
     //   由 setPatrolUnreadFirstChannels 在开关翻转时重排。拉取失败/字段缺失 = 开关关
     //   = 现行顺序遍历（fail-open）。
@@ -519,7 +519,7 @@ export function startBridge(channel, buildAdapter) {
     // 2026-08-06 架构重构：启动桥接巡检 + 下发轮询（三通道相互独立）。
     // PollingLoop 内含：
     //   - 通道A·上报巡检：每 3s 遍历会话列表、逐会话切换随机 1-2s、抓消息推入 Uplink
-    //   - 通道C·下发轮询：每 1.5s 拉取 GET /api/bridge/outbox，转发网页后经通道B·ack 确认
+    //   - 通道C·下发轮询：每 1.5s 拉取 GET /api/channelbus/outbox，转发网页后经通道B·ack 确认
     const pollingLoop = new PollingLoop({
       getAdapter: () => adapter,
       getConfig,

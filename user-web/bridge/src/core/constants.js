@@ -12,9 +12,9 @@
 // 交叉验证：user-server/Dockerfile:57  ENV SERVER_PORT=8204
 // 交叉验证：user-server/cmd/api/main.go listenAddr 默认 :8204
 //
-// 这里刻意没有 wsPath：扩展与 user-server 之间只有 HTTP 上行 /api/bridge/ingest、
-// 下行轮询 /api/bridge/outbox、回执 /api/bridge/outbox/ack，加一条下行推送 SSE
-// /api/bridge/outbox/sse（capabilities 报 sse_enabled=false 时自动退回轮询）。
+// 这里刻意没有 wsPath：扩展与 user-server 之间只有 HTTP 上行 /api/channelbus/ingest、
+// 下行轮询 /api/channelbus/outbox、回执 /api/channelbus/outbox/ack，加一条下行推送 SSE
+// /api/channelbus/outbox/sse（capabilities 报 sse_enabled=false 时自动退回轮询）。
 // 那个常量的值 /api/ws/bridge 在服务端从未注册过（router 层全量 grep 零命中；同前缀下
 // 真实存在的是 /api/ws/channel，那是 channelgw 的传输口，扩展不走它），而扩展 src/ 里
 // 也从未出现 new WebSocket。
@@ -350,9 +350,9 @@ export const SECURITY = Object.freeze({
 // 9) 桥接下发三通道配置（2026-08-06 架构重构，要求1：参数可配置）
 // =============================================================
 // 三通道相互独立：
-//   通道A·上报:  uplink  → POST /api/bridge/ingest（父层统一上报，消息 hash 前端完成）
-//   通道B·状态:  status → POST /api/bridge/outbox/ack（确认 delivered）
-//   通道C·下发:  downlink → GET /api/bridge/outbox（独立轮询拉取待发消息）
+//   通道A·上报:  uplink  → POST /api/channelbus/ingest（父层统一上报，消息 hash 前端完成）
+//   通道B·状态:  status → POST /api/channelbus/outbox/ack（确认 delivered）
+//   通道C·下发:  downlink → GET /api/channelbus/outbox（独立轮询拉取待发消息）
 //
 // 全部可在 docs/bridge/DEFAULTS.md 覆盖（运行时读取使用者覆盖值）。
 export const BRIDGE_THREE_CHANNEL = Object.freeze({

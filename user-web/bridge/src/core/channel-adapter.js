@@ -145,7 +145,7 @@ export class BaseAdapter {
     // 点发送等不可逆动作前自检该令牌，命中即清场退出 —— 防降级文本已发出、
     // 被弃的 hook 迟到又点一次发送的双发（详见 media-inject.js 顶部注释）。
     this._activeMediaAbort = null;
-    // M-5：未读优先巡检的渠道开关集合（来自参数中心，经 /api/bridge/capabilities 下发）。
+    // M-5：未读优先巡检的渠道开关集合（来自参数中心，经 /api/channelbus/capabilities 下发）。
     //   空集 = 开关关 = 现行顺序遍历。本地 localStorage 覆盖优先级更高（见 _patrolUnreadFirstEnabled）。
     this._unreadFirstChannels = new Set();
     // M-6：followUser 自动关注动作。默认关（caps 下发 bridge/follow_user_enabled）；
@@ -902,7 +902,7 @@ export class BaseAdapter {
   //   - 调度分区自身抛错 → 该轮 fail-open 回顺序遍历。
   // 开关来源与优先级：
   //   1. 本地 localStorage `hivebridge:patrolUnreadFirst:<channel>`（"1"/"0"，应急覆盖）；
-  //   2. 参数中心经 /api/bridge/capabilities 下发的渠道清单（setPatrolUnreadFirstChannels）；
+  //   2. 参数中心经 /api/channelbus/capabilities 下发的渠道清单（setPatrolUnreadFirstChannels）；
   //   3. 默认关。
   setPatrolUnreadFirstChannels(list) {
     const prev = this._patrolUnreadFirstEnabled();

@@ -11,13 +11,13 @@ import {
 } from '../src/core/http-ingest.js';
 
 describe('http-ingest / buildIngestUrl', () => {
-  it('默认 baseUrl 拼接 /api/bridge/ingest（2026-08-14 P0-A：token 不在 URL）', () => {
+  it('默认 baseUrl 拼接 /api/channelbus/ingest（2026-08-14 P0-A：token 不在 URL）', () => {
     const url = buildIngestUrl('http://localhost:8204', {
       channel: 'xiaohongshu',
       accountId: 'acc-1',
       token: 'tkn-1234',
     });
-    expect(url).toBe('http://localhost:8204/api/bridge/ingest?channel=xiaohongshu&account_id=acc-1');
+    expect(url).toBe('http://localhost:8204/api/channelbus/ingest?channel=xiaohongshu&account_id=acc-1');
     expect(url).not.toContain('token=');
   });
 
@@ -27,7 +27,7 @@ describe('http-ingest / buildIngestUrl', () => {
       accountId: 'acc-2',
       token: 't',
     });
-    expect(url.startsWith('http://localhost:8204/api/bridge/ingest?')).toBe(true);
+    expect(url.startsWith('http://localhost:8204/api/channelbus/ingest?')).toBe(true);
     expect(url).not.toContain('token=');
   });
 
@@ -37,7 +37,7 @@ describe('http-ingest / buildIngestUrl', () => {
       accountId: 'acc-3',
       token: 't',
     });
-    expect(url.startsWith('https://api.example.com/api/bridge/ingest?')).toBe(true);
+    expect(url.startsWith('https://api.example.com/api/channelbus/ingest?')).toBe(true);
     expect(url).not.toContain('token=');
   });
 
@@ -78,7 +78,7 @@ describe('http-ingest / buildIngestUrl', () => {
   });
 
   it('INGEST_PATH 与 user-server 端点对齐', () => {
-    expect(INGEST_PATH).toBe('/api/bridge/ingest');
+    expect(INGEST_PATH).toBe('/api/channelbus/ingest');
   });
 
   it('HTTP_INGEST_DEFAULTS 关键字段冻结', () => {
@@ -121,7 +121,7 @@ describe('http-ingest / describeIngestParams', () => {
     });
     const desc = describeIngestParams(url);
     expect(desc.origin).toBe('http://localhost:8204');
-    expect(desc.path).toBe('/api/bridge/ingest');
+    expect(desc.path).toBe('/api/channelbus/ingest');
     expect(desc.query.channel).toBe('douyin');
     expect(desc.query.account_id).toBe('a1');
   });
@@ -375,7 +375,7 @@ describe('http-ingest / postIngest', () => {
     );
     expect(resp.ok).toBe(true);
     expect(resp.ingested[0].event_id).toBe('e1');
-    expect(captured.url).toContain('/api/bridge/ingest');
+    expect(captured.url).toContain('/api/channelbus/ingest');
     expect(captured.url).toContain('channel=xiaohongshu');
     expect(captured.url).toContain('account_id=acc-x');
     expect(captured.url).toContain('conversation_id=conv-x');
