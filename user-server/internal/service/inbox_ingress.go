@@ -648,6 +648,7 @@ func (s *InboxIngressService) HandleIngressMessage(ctx context.Context, event *m
 			result.Accepted = false
 			result.QueuedForAI = false
 			result.Reason = fmt.Sprintf("discarded by route rule %d", decision.RuleID)
+			s.recordAITriggerDecision(ctx, event, "skipped", "route_discard")
 			return result, nil
 		}
 	}
@@ -689,6 +690,7 @@ func (s *InboxIngressService) HandleIngressMessage(ctx context.Context, event *m
 				Str("conv_id", event.ConversationID).
 				Str("event_id", event.EventID).
 				Msg("[Inbox] 钩子2：msg_id 已存在，幂等跳过")
+			s.recordAITriggerDecision(ctx, event, "skipped", "duplicate_msg_id")
 			return result, nil
 		}
 		if err == nil && existing != nil && existing.ConversationID != event.ConversationID {
@@ -705,6 +707,7 @@ func (s *InboxIngressService) HandleIngressMessage(ctx context.Context, event *m
 		result.HumanLocked = true
 		result.Accepted = true
 		result.Reason = "session is human-locked; bypass AI routing"
+		s.recordAITriggerDecision(ctx, event, "skipped", "human_locked")
 		if err := s.persistMessage(ctx, event); err != nil {
 			return result, fmt.Errorf("持久化消息失败: %w", err)
 		}
@@ -722,6 +725,7 @@ func (s *InboxIngressService) HandleIngressMessage(ctx context.Context, event *m
 		result.Accepted = true
 		result.QueuedForAI = false
 		result.Reason = fmt.Sprintf("intercepted by middleware: %s (self_echo=%v dup=%v)", decision.Reason, decision.IsSelfEcho, decision.IsDup)
+		s.recordAITriggerDecision(ctx, event, "skipped", "middleware_intercepted")
 		logger.Ctx(ctx).Info().
 			Str("event_id", event.EventID).
 			Bool("self_echo", decision.IsSelfEcho).
@@ -757,6 +761,7 @@ func (s *InboxIngressService) HandleIngressMessage(ctx context.Context, event *m
 	if isSystemMsg {
 		result.QueuedForAI = false
 		result.Reason = "sender_type=system; persisted only (系统消息不触发 AI)"
+		s.recordAITriggerDecision(ctx, event, "skipped", "system_message")
 		logger.Ctx(ctx).Info().
 			Str("channel", event.Channel).
 			Str("conv_id", event.ConversationID).
@@ -768,6 +773,7 @@ func (s *InboxIngressService) HandleIngressMessage(ctx context.Context, event *m
 	if channelOwnsAITrigger(ctx) {
 		result.QueuedForAI = false
 		result.Reason = "AI 由渠道 webhook dispatch 按门控触发；中台仅落库，避免同一消息双路径重复回复"
+		s.recordAITriggerDecision(ctx, event, "skipped", "channel_owned_trigger")
 		// 仍要打「AI 处理中」标记：渠道 dispatch 紧接着就会开始推理，
 		// 否则并发到达的消息会被 sendOutbound 尾部的 recheck 误判为孤儿并补触发重复回复。
 		s.markAIProcessing(ctx, event.ConversationID)
@@ -789,6 +795,7 @@ func (s *InboxIngressService) HandleIngressMessage(ctx context.Context, event *m
 		} else if !unreplied {
 			result.QueuedForAI = false
 			result.Reason = "last message is outbound (平台自己发的); not triggering AI"
+			s.recordAITriggerDecision(ctx, event, "skipped", "last_message_outbound")
 			logger.Ctx(ctx).Info().
 				Str("channel", event.Channel).
 				Str("conv_id", event.ConversationID).
@@ -798,6 +805,7 @@ func (s *InboxIngressService) HandleIngressMessage(ctx context.Context, event *m
 		} else if !withinWindow {
 			result.QueuedForAI = false
 			result.Reason = "last inbound outside 5min window; not triggering AI (历史消息)"
+			s.recordAITriggerDecision(ctx, event, "skipped", "outside_reply_window")
 			logger.Ctx(ctx).Info().
 				Str("channel", event.Channel).
 				Str("conv_id", event.ConversationID).
@@ -1300,6 +1308,7 @@ func (s *InboxIngressService) handleIngressSingleForBatch(ctx context.Context, e
 		result.HumanLocked = true
 		result.Accepted = true
 		result.Reason = "session is human-locked; bypass AI routing"
+		s.recordAITriggerDecision(ctx, event, "skipped", "human_locked")
 		if err := s.persistMessage(ctx, event); err != nil {
 			return result, fmt.Errorf("持久化消息失败: %w", err)
 		}
@@ -1317,6 +1326,7 @@ func (s *InboxIngressService) handleIngressSingleForBatch(ctx context.Context, e
 		result.Accepted = true
 		result.QueuedForAI = false
 		result.Reason = fmt.Sprintf("intercepted by middleware: %s (self_echo=%v dup=%v)", decision.Reason, decision.IsSelfEcho, decision.IsDup)
+		s.recordAITriggerDecision(ctx, event, "skipped", "middleware_intercepted")
 		logger.Ctx(ctx).Info().
 			Str("event_id", event.EventID).
 			Bool("self_echo", decision.IsSelfEcho).
@@ -1348,6 +1358,7 @@ func (s *InboxIngressService) handleIngressSingleForBatch(ctx context.Context, e
 	if isSystemMsg {
 		result.QueuedForAI = false
 		result.Reason = "sender_type=system; persisted only"
+		s.recordAITriggerDecision(ctx, event, "skipped", "system_message")
 		return result, nil
 	}
 
