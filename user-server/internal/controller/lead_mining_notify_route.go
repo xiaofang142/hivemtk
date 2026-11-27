@@ -2,6 +2,8 @@ package controller
 
 import (
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -12,15 +14,21 @@ import (
 )
 
 type LeadMiningNotifyRouteController struct {
-	svc *service.LeadMiningNotifyRouteService
+	svc    *service.LeadMiningNotifyRouteService
+	notify *service.LeadNotifyService
 }
 
 func NewLeadMiningNotifyRouteController() *LeadMiningNotifyRouteController {
-	return &LeadMiningNotifyRouteController{svc: service.NewLeadMiningNotifyRouteService()}
+	return &LeadMiningNotifyRouteController{
+		svc:    service.NewLeadMiningNotifyRouteService(),
+		notify: service.GlobalLeadNotifyService(),
+	}
 }
 
 func (ctrl *LeadMiningNotifyRouteController) RegisterRoutes(auth *gin.RouterGroup, admin *gin.RouterGroup) {
 	auth.GET("/lead-mining/notify-routes", ctrl.List)
+	auth.GET("/lead-mining/notify-deliveries", ctrl.ListDeliveries)
+	auth.GET("/lead-mining/notify-deliveries/summary", ctrl.SummarizeDeliveries)
 	admin.POST("/notify-routes", ctrl.Create)
 	admin.DELETE("/notify-routes/:route_id", ctrl.Delete)
 
@@ -36,6 +44,59 @@ func (ctrl *LeadMiningNotifyRouteController) List(c *gin.Context) {
 		return
 	}
 	response.Success(c, items, "ok")
+}
+
+func (ctrl *LeadMiningNotifyRouteController) ListDeliveries(c *gin.Context) {
+	if ctrl.notify == nil {
+		response.Error(c, http.StatusServiceUnavailable, "通知服务未装配")
+		return
+	}
+	query, ok := leadNotifyDeliveryQuery(c)
+	if !ok {
+		response.Error(c, http.StatusBadRequest, "请求参数错误")
+		return
+	}
+	items, err := ctrl.notify.ListDeliveries(c.Request.Context(), query)
+	if err != nil {
+		response.ErrorFromDB(c, err, "获取通知送达历史失败")
+		return
+	}
+	response.Success(c, items, "ok")
+}
+
+func (ctrl *LeadMiningNotifyRouteController) SummarizeDeliveries(c *gin.Context) {
+	if ctrl.notify == nil {
+		response.Error(c, http.StatusServiceUnavailable, "通知服务未装配")
+		return
+	}
+	query, ok := leadNotifyDeliveryQuery(c)
+	if !ok {
+		response.Error(c, http.StatusBadRequest, "请求参数错误")
+		return
+	}
+	items, err := ctrl.notify.SummarizeDeliveries(c.Request.Context(), query)
+	if err != nil {
+		response.ErrorFromDB(c, err, "获取通知送达汇总失败")
+		return
+	}
+	response.Success(c, items, "ok")
+}
+
+func leadNotifyDeliveryQuery(c *gin.Context) (model.LeadNotifyDeliveryQuery, bool) {
+	query := model.LeadNotifyDeliveryQuery{
+		ClueID:  strings.TrimSpace(c.Query("clue_id")),
+		EventID: strings.TrimSpace(c.Query("event_id")),
+		RouteID: strings.TrimSpace(c.Query("route_id")),
+		Channel: strings.TrimSpace(c.Query("channel")),
+	}
+	if raw := strings.TrimSpace(c.Query("limit")); raw != "" {
+		limit, err := strconv.Atoi(raw)
+		if err != nil || limit < 0 {
+			return model.LeadNotifyDeliveryQuery{}, false
+		}
+		query.Limit = limit
+	}
+	return query, true
 }
 
 func (ctrl *LeadMiningNotifyRouteController) Create(c *gin.Context) {

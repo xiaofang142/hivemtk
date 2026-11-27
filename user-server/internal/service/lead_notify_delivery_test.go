@@ -4,15 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"math"
 	"strings"
 	"testing"
+	"time"
 
 	"gorm.io/gorm"
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/testutil"
 	"hivemtk-user/internal/repository"
 )
 
@@ -50,58 +51,103 @@ func TestLeadNotifyDeliveryStatusMatrix(t *testing.T) {
 	}
 }
 
-// TestLeadNotifyOutboxIdempotency 同一 event/recipient/channel 重复投递只占一个 durable 意图。
+// TestLeadNotifyOutboxIdempotency 同一 event/recipient/channel 在真实 PG 中只占一个 durable 意图。
 func TestLeadNotifyOutboxIdempotency(t *testing.T) {
-	store := newMemoryLeadNotifyOutbox()
+	ctx := leadNotifyTestContext(t)
+	db := testutil.NewTestDB(t, &model.LeadNotifyOutbox{}, &model.LeadNotifyDelivery{})
+	store := repository.NewLeadNotifyRepository(db)
 	key := leadNotifyIdempotencyKey(11, "clue-1", "event-1", "42", "telegram")
-	first, created := store.Enqueue(context.Background(), key, leadNotifyOutboxItem{
-		TenantID: 11, ClueID: "clue-1", EventID: "event-1", Recipient: "42", Channel: "telegram",
-	})
-	if !created || first.Status != "pending" {
-		t.Fatalf("首次入队应为 pending，实际 %+v", first)
+	first := &model.LeadNotifyOutbox{
+		TenantID: 11, IdempotencyKey: key, ClueID: "clue-1", EventID: "event-1",
+		Recipient: "42", Channel: "telegram", NextAttemptAt: time.Now().UTC(),
 	}
-	second, created := store.Enqueue(context.Background(), key, leadNotifyOutboxItem{})
-	if created || second.Status != "pending" {
-		t.Fatalf("重复事件不得新建投递意图：created=%v item=%+v", created, second)
+	created, err := store.Enqueue(ctx, first)
+	if err != nil || !created || first.Status != model.LeadNotifyStatusPending {
+		t.Fatalf("首次入队应为 pending，实际 item=%+v created=%v err=%v", first, created, err)
 	}
-	if len(store.All()) != 1 {
-		t.Fatalf("幂等键重复占用了 %d 条记录", len(store.All()))
+	duplicate := &model.LeadNotifyOutbox{TenantID: 11, IdempotencyKey: key}
+	created, err = store.Enqueue(ctx, duplicate)
+	if err != nil || created || duplicate.ID != first.ID || duplicate.Status != model.LeadNotifyStatusPending {
+		t.Fatalf("重复事件不得新建投递意图：created=%v item=%+v err=%v", created, duplicate, err)
+	}
+	rows, err := store.ListOutboxByEvent(ctx, 11, "event-1")
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("幂等键重复占用了 %d 条记录，err=%v", len(rows), err)
 	}
 }
 
-// TestLeadNotifyOutboxBackoffAndManualRetry 失败按退避进入 retry，人工重试可重置 pending；回执丢失单独标记。
+// TestLeadNotifyOutboxBackoffAndManualRetry 真实仓储按退避进入 retry/exhausted，人工重试重置 pending；回执丢失单独标记。
 func TestLeadNotifyOutboxBackoffAndManualRetry(t *testing.T) {
-	store := newMemoryLeadNotifyOutbox()
-	key := leadNotifyIdempotencyKey(1, "clue-1", "event-1", "u-1", "in_app")
-	store.Enqueue(context.Background(), key, leadNotifyOutboxItem{TenantID: 1, ClueID: "clue-1", EventID: "event-1", Recipient: "u-1", Channel: "in_app"})
-	item, _ := store.Fail(context.Background(), key, errors.New("timeout"), 1)
-	if item.Status != "retry" || !item.NextAttemptAt.After(item.LastAttemptAt) {
-		t.Fatalf("失败应按退避进入 retry：%+v", item)
+	ctx := leadNotifyTestContext(t)
+	db := testutil.NewTestDB(t, &model.LeadNotifyOutbox{}, &model.LeadNotifyDelivery{})
+	store := repository.NewLeadNotifyRepository(db)
+	now := time.Now().UTC()
+	item := &model.LeadNotifyOutbox{
+		TenantID: 11, IdempotencyKey: "backoff-key", ClueID: "clue-1", EventID: "event-1",
+		Recipient: "42", Channel: "in_app", NextAttemptAt: now, MaxAttempts: 2,
 	}
-	item, _ = store.Fail(context.Background(), key, errors.New("timeout"), 6)
-	if item.Status != "exhausted" {
-		t.Fatalf("超过最大重试应进入 exhausted：%+v", item)
+	if _, err := store.Enqueue(ctx, item); err != nil {
+		t.Fatalf("入队失败：%v", err)
 	}
-	item, _ = store.RetryManually(context.Background(), key, 1)
-	if item.Status != "pending" || item.Attempts != 0 {
-		t.Fatalf("人工重试应重置为 pending：%+v", item)
+	claimed, ok, err := store.ClaimByIDForDelivery(ctx, item.ID, now)
+	if err != nil || !ok {
+		t.Fatalf("首次认领失败：ok=%v err=%v", ok, err)
 	}
-	item, _ = store.MarkReceiptUnknown(context.Background(), key)
-	if item.Status != "receipt_unknown" || item.ReceiptLost != true {
-		t.Fatalf("回执丢失必须单独标记：%+v", item)
+	next := now.Add(time.Minute)
+	if err := store.ScheduleRetry(ctx, item.ID, claimed.ClaimToken, next, "timeout"); err != nil {
+		t.Fatalf("退避重试失败：%v", err)
+	}
+	got, err := store.GetOutbox(ctx, 11, item.ID)
+	if err != nil || got.Status != model.LeadNotifyStatusRetry || got.NextAttemptAt.Before(next) {
+		t.Fatalf("失败应按退避进入 retry：got=%+v err=%v", got, err)
+	}
+	rows, err := store.ClaimDueForUpdate(tenant.WithSystemScope(context.Background()), next, 1)
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("到期重试认领失败：rows=%d err=%v", len(rows), err)
+	}
+	claimed = rows[0]
+	if err := store.ScheduleRetry(ctx, item.ID, claimed.ClaimToken, next.Add(time.Minute), "timeout"); err != nil {
+		t.Fatalf("耗尽重试失败：%v", err)
+	}
+	got, err = store.GetOutbox(ctx, 11, item.ID)
+	if err != nil || got.Status != model.LeadNotifyStatusExhausted {
+		t.Fatalf("超过最大重试应进入 exhausted：got=%+v err=%v", got, err)
+	}
+	if err := store.RetryManually(ctx, item.ID); err != nil {
+		t.Fatalf("人工重试失败：%v", err)
+	}
+	got, err = store.GetOutbox(ctx, 11, item.ID)
+	if err != nil || got.Status != model.LeadNotifyStatusPending || got.Attempts != 0 {
+		t.Fatalf("人工重试应重置为 pending：got=%+v err=%v", got, err)
+	}
+	claimed, ok, err = store.ClaimByIDForDelivery(ctx, item.ID, time.Now().UTC())
+	if err != nil || !ok {
+		t.Fatalf("人工重试后认领失败：ok=%v err=%v", ok, err)
+	}
+	if err := store.MarkReceiptUnknown(ctx, item.ID, claimed.ClaimToken, "receipt lost"); err != nil {
+		t.Fatalf("标记回执丢失失败：%v", err)
+	}
+	got, err = store.GetOutbox(ctx, 11, item.ID)
+	if err != nil || got.Status != model.LeadNotifyStatusReceiptUnknown {
+		t.Fatalf("回执丢失必须单独标记：got=%+v err=%v", got, err)
 	}
 }
 
-// TestLeadNotifyOutboxSurvivesRebuild 重启后（新建同 store 实例、保留共享状态）投递意图仍可恢复。
+// TestLeadNotifyOutboxSurvivesRebuild 重建 repository 后，真实 PG 中的投递意图仍可恢复。
 func TestLeadNotifyOutboxSurvivesRebuild(t *testing.T) {
-	shared := map[string]leadNotifyOutboxItem{}
-	s1 := &memoryLeadNotifyOutbox{items: shared}
-	key := leadNotifyIdempotencyKey(1, "clue-2", "event-2", "u-2", "in_app")
-	s1.Enqueue(context.Background(), key, leadNotifyOutboxItem{TenantID: 1, ClueID: "clue-2", EventID: "event-2", Recipient: "u-2", Channel: "in_app"})
-	s2 := &memoryLeadNotifyOutbox{items: shared}
-	got, ok := s2.Get(context.Background(), key)
-	if !ok || got.Status != "pending" {
-		t.Fatalf("重启后投递意图丢失：ok=%v item=%+v", ok, got)
+	ctx := leadNotifyTestContext(t)
+	db := testutil.NewTestDB(t, &model.LeadNotifyOutbox{}, &model.LeadNotifyDelivery{})
+	key := leadNotifyIdempotencyKey(11, "clue-2", "event-2", "42", "in_app")
+	if _, err := repository.NewLeadNotifyRepository(db).Enqueue(ctx, &model.LeadNotifyOutbox{
+		TenantID: 11, IdempotencyKey: key, ClueID: "clue-2", EventID: "event-2",
+		Recipient: "42", Channel: "in_app", NextAttemptAt: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("入队失败：%v", err)
+	}
+	rebuilt := repository.NewLeadNotifyRepository(db)
+	rows, err := rebuilt.ListOutboxByEvent(ctx, 11, "event-2")
+	if err != nil || len(rows) != 1 || rows[0].Status != model.LeadNotifyStatusPending {
+		t.Fatalf("重建后投递意图丢失：rows=%+v err=%v", rows, err)
 	}
 }
 
@@ -164,47 +210,65 @@ func (s *leadNotifyRouteStoreStub) AppendDeliveryRecords(_ context.Context, rout
 func leadNotifyTestContext(t *testing.T) context.Context {
 	t.Helper()
 	previous := tenant.CurrentMode()
-	tenant.SetMode(tenant.ModeOff)
+	tenant.SetMode(tenant.ModeOn)
 	t.Cleanup(func() { tenant.SetMode(previous) })
-	return context.Background()
+	return tenant.WithTenantID(context.Background(), 11)
 }
 
-// TestLeadNotifyNotifyOwner_NoRouteFails 三级路由与账号负责人都缺席时必须报错，不能假成功。
+func newLeadNotifyDeliveryTestService(t *testing.T, store *leadNotifyRouteStoreStub) (*LeadNotifyService, *repository.LeadNotifyRepository, *gorm.DB) {
+	t.Helper()
+	db := testutil.NewTestDB(t,
+		&model.LeadNotifyOutbox{}, &model.LeadNotifyDelivery{}, &model.SystemUser{},
+		&model.ChannelAccount{}, &model.Channel{},
+	)
+	outbox := repository.NewLeadNotifyRepository(db)
+	svc := NewLeadNotifyServiceWithDeps(
+		store,
+		nil,
+		repository.NewLeadNotifyUserRepository(db),
+		outbox,
+		&durableLeadNotifySender{},
+	)
+	return svc, outbox, db
+}
+
+// TestLeadNotifyNotifyOwner_NoRouteFails 三级路由与账号负责人都缺席时必须报错，并把 no_route 写入独立历史。
 func TestLeadNotifyNotifyOwner_NoRouteFails(t *testing.T) {
 	ctx := leadNotifyTestContext(t)
 	store := &leadNotifyRouteStoreStub{}
-	svc := NewLeadNotifyServiceWith(store, nil)
+	svc, outbox, _ := newLeadNotifyDeliveryTestService(t, store)
 
 	err := svc.NotifyOwner(ctx, ArchiveClueInput{ClueID: "clue-no-route"}, "customer-no-route")
 	if err == nil || !strings.Contains(err.Error(), "无可用通知路由") {
 		t.Fatalf("无路由应返回明确错误，实际 err=%v", err)
 	}
 	if store.appendCalls != 0 {
-		t.Fatalf("无路由时不应尝试写入不存在的送达记录，实际调用 %d 次", store.appendCalls)
+		t.Fatalf("独立历史模式下不应写路由 JSONB，实际调用 %d 次", store.appendCalls)
+	}
+	rows, err := outbox.ListDeliveries(ctx, model.LeadNotifyDeliveryQuery{ClueID: "clue-no-route"})
+	if err != nil || len(rows) != 1 || rows[0].Status != model.LeadNotifyStatusNoRoute || rows[0].Success {
+		t.Fatalf("无路由必须落独立持久审计：rows=%+v err=%v", rows, err)
 	}
 }
 
-// TestLeadNotifyNotifyOwner_NoRecipientsFailsAndRecords 空收件人必须留失败记录并报错。
+// TestLeadNotifyNotifyOwner_NoRecipientsFailsAndRecords 空收件人必须把 no_recipient 写入独立历史并报错。
 func TestLeadNotifyNotifyOwner_NoRecipientsFailsAndRecords(t *testing.T) {
 	ctx := leadNotifyTestContext(t)
 	store := &leadNotifyRouteStoreStub{routes: []model.LeadMiningNotifyRoute{{
 		RouteID: "route-no-recipient", Scope: "tenant", Enabled: true,
 	}}}
-	svc := NewLeadNotifyServiceWith(store, nil)
+	svc, outbox, _ := newLeadNotifyDeliveryTestService(t, store)
 
 	err := svc.NotifyOwner(ctx, ArchiveClueInput{ClueID: "clue-no-recipient"}, "customer-no-recipient")
 	if err == nil {
 		t.Fatal("空收件人不得返回成功")
 	}
-	if store.appendCalls != 1 || store.appendedRouteID != "route-no-recipient" {
-		t.Fatalf("空收件人结果必须落库：calls=%d route=%q", store.appendCalls, store.appendedRouteID)
+	if store.appendCalls != 0 {
+		t.Fatalf("独立历史模式下不应写路由 JSONB，实际调用 %d 次", store.appendCalls)
 	}
-	var records []map[string]any
-	if rawErr := json.Unmarshal([]byte(store.appendedRecords), &records); rawErr != nil {
-		t.Fatalf("送达记录不是合法 JSON：%v raw=%s", rawErr, store.appendedRecords)
-	}
-	if len(records) != 1 || records[0]["success"] != false || !strings.Contains(fmt.Sprint(records[0]["error"]), "no_recipient") {
-		t.Fatalf("空收件人应留下 no_recipient 失败记录，实际 %s", store.appendedRecords)
+	rows, err := outbox.ListDeliveries(ctx, model.LeadNotifyDeliveryQuery{ClueID: "clue-no-recipient"})
+	if err != nil || len(rows) != 1 || rows[0].Status != model.LeadNotifyStatusNoRecipient || rows[0].Success || !strings.Contains(rows[0].Error, "no_recipient") {
+		t.Fatalf("空收件人应留下 no_recipient 独立历史，实际 rows=%+v err=%v", rows, err)
 	}
 }
 
@@ -219,24 +283,34 @@ func TestLeadNotifyMarshalDeliveryRecords_FailureVisible(t *testing.T) {
 	}
 }
 
-// TestLeadNotifyNotifyOwner_VirtualRouteMissingRecordFails 虚拟账号负责人路由写 0 行必须显式失败。
-func TestLeadNotifyNotifyOwner_VirtualRouteMissingRecordFails(t *testing.T) {
+// TestLeadNotifyNotifyOwner_RouteLedgerFailureDoesNotBlockDurableDelivery 路由 JSONB 写失败不得阻断独立 outbox/历史投递。
+func TestLeadNotifyNotifyOwner_RouteLedgerFailureDoesNotBlockDurableDelivery(t *testing.T) {
 	ctx := leadNotifyTestContext(t)
 	store := &leadNotifyRouteStoreStub{
 		routes: []model.LeadMiningNotifyRoute{{
-			RouteID: "account-owner-fallback", Scope: "account", Enabled: true,
-			NotifyUserIDs: model.JSONStrings{"not-a-user-id"},
+			RouteID: "route-independent-ledger", Scope: "tenant", Enabled: true,
+			NotifyUserIDs: model.JSONStrings{"42"}, NotifyTypes: model.JSONStrings{model.LeadNotifyChannelInApp},
 		}},
 		appendErr: gorm.ErrRecordNotFound,
 	}
-	svc := NewLeadNotifyServiceWith(store, nil)
-
-	err := svc.NotifyOwner(ctx, ArchiveClueInput{ClueID: "clue-fallback"}, "customer-fallback")
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		t.Fatalf("虚拟路由送达记录写 0 行应返回 ErrRecordNotFound，实际 err=%v", err)
+	svc, outbox, db := newLeadNotifyDeliveryTestService(t, store)
+	user := &model.SystemUser{
+		TenantID: 11, ID: 42, Username: "notify-ledger", Password: "x",
+		Role: model.SystemUserRoleUser, Status: 1, Enabled: true, DataScope: model.DataScopeSelf,
 	}
-	if store.appendedRouteID != "account-owner-fallback" {
-		t.Fatalf("应写回虚拟账号负责人路由标识，实际 route=%q", store.appendedRouteID)
+	if err := db.Session(&gorm.Session{SkipHooks: true}).WithContext(ctx).Create(user).Error; err != nil {
+		t.Fatalf("创建系统用户失败：%v", err)
+	}
+
+	if err := svc.NotifyOwner(ctx, ArchiveClueInput{ClueID: "clue-fallback"}, "customer-fallback"); err != nil {
+		t.Fatalf("路由 JSONB 已不是权威台账，不得阻断耐久投递：%v", err)
+	}
+	if store.appendCalls != 0 {
+		t.Fatalf("生产投递不得再写路由 JSONB，实际调用 %d 次", store.appendCalls)
+	}
+	rows, err := outbox.ListDeliveries(ctx, model.LeadNotifyDeliveryQuery{ClueID: "clue-fallback"})
+	if err != nil || len(rows) != 1 || !rows[0].Success || rows[0].RouteID != "route-independent-ledger" {
+		t.Fatalf("独立送达历史不正确：rows=%+v err=%v", rows, err)
 	}
 }
 

@@ -384,4 +384,6 @@ func RegisterMigrations(registry *migration.MigrationRegistry, db *gorm.DB) {
 	// v3.116.0：渠道统一数据落地——补齐规范渠道全局行 + 历史旧码归一（幂等）。
 	// 对应顶层 migrations/100_channel_code_unify.sql。
 	register(NewChannelCodeUnifyMigration(db))
+	// v3.117.0（item2）：线索通知耐久 outbox 与独立送达历史；Down 只回滚本 lane 两表。
+	register(NewLeadNotifyOutboxMigration(db))
 }

@@ -379,6 +379,10 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 	// （行永远停在 status=0），不会假装自己在发。
 	app.InitEmailRuntime(gormDB)
 
+	// 线索通知耐久 outbox：必须在路由与发掘服务装配之前——归档/发掘通知、历史 API
+	// 与后台重试必须共用同一份 service/outbox；无 DB 句柄时保持未装配并 fail-closed。
+	app.InitLeadNotifyRuntime(gormDB)
+
 	engine := app.BuildSalesEngine(gormDB)
 	// 双模式生命周期：被动复用上面这个会话引擎实例，主动走 SOP 编排出口。
 	// 放在 BuildSalesEngine 之后、路由之前 —— 路由挂的必须是这个已装配的运行时。
@@ -415,7 +419,7 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 	miningSvc := service.NewLeadMiningService(repository.NewClueRepositoryWithDB(gormDB))
 	// 发掘服务创建后立刻装配通知出口与 ReAct 判定器：worker 在此刻已开始消费，
 	// 若等到 Bridge 装配块才注入，embed 消息在窗口期内命中会丢负责人通知。
-	miningSvc.SetNotifier(service.NewLeadNotifyService())
+	miningSvc.SetNotifier(app.GetLeadNotifyService())
 	if err := installLeadMiningReAct(gormDB); err != nil {
 		logger.Errorf("[LeadMining] ReAct dispatcher 装配失败：%v", err)
 	}

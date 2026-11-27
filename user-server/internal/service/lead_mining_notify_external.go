@@ -3,13 +3,11 @@ package service
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"hivemtk-user/internal/model"
-	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 )
@@ -125,50 +123,19 @@ func findRecentLeadMiningClueForNotification(ctx context.Context, n *model.Notif
 
 func clueTypePtr(v int64) *int64 { return &v }
 
-// dispatchLeadMiningExternalNotifications sends best-effort external notifications
-// (telegram/feishu) according to lead_mining_notify_routes. It must never block/panic
-// the main lead mining flow.
+// dispatchLeadMiningExternalNotifications 将旧的 best-effort 外发路径收口到耐久 outbox。
+// 这里不再直接启动发送 goroutine；即时尝试与后台重试都由 LeadNotifyService 统一处理。
 func dispatchLeadMiningExternalNotifications(ctx context.Context, clue *model.Clue) {
 	if clue == nil {
 		return
 	}
-	tid, ok := tenant.FromContext(ctx)
-	if !ok || tid == 0 {
-		tid = tenant.DefaultTenantID
-	}
-	routes, err := repository.NewLeadMiningNotifyRouteRepository().ListEnabledByAccount(ctx, clue.SourceChannel, clue.SourceAccountID)
-	if err != nil {
-		logger.Warnf("[lead-mining-notify] 查询通知路由失败 clue=%s: %v", clue.ID, err)
+	svc := GlobalLeadNotifyService()
+	if svc == nil {
+		logger.Warnf("[lead-mining-notify] 耐久通知服务未装配，跳过外发 clue=%s", clue.ID)
 		return
 	}
-	routes = selectLeadMiningNotifyRoutes(routes, clue.SourceChannel, clue.SourceAccountID)
-	if len(routes) == 0 {
-		return
-	}
-	msg := buildLeadMiningExternalMessage(clue)
-	for _, r := range routes {
-		route := r
-		if !route.Enabled || strings.TrimSpace(route.Target) == "" {
-			continue
-		}
-		channel := strings.ToLower(strings.TrimSpace(route.NotifyChannel))
-		if channel == "" || channel == "in_app" {
-			continue
-		}
-		dedupKey := leadMiningExternalDedupKey(tid, clue.ID, channel, strings.TrimSpace(route.Target))
-		if !claimLeadMiningExternalDedup(dedupKey) {
-			logger.Infof("[lead-mining-notify] dedup skip clue=%s channel=%s target=%s", clue.ID, channel, maskLeadMiningTarget(route.Target))
-			continue
-		}
-		bgCtx := tenant.OnlyTenant(context.Background(), tid)
-		switch channel {
-		case "telegram", "tg":
-			go sendLeadMiningTelegram(bgCtx, clue, route, msg)
-		case "feishu", "lark":
-			go sendLeadMiningFeishu(bgCtx, clue, route, msg)
-		default:
-			logger.Warnf("[lead-mining-notify] unknown notify_channel=%s route=%s", channel, route.RouteID)
-		}
+	if err := svc.EnqueueExternalForClue(ctx, clue); err != nil {
+		logger.Warnf("[lead-mining-notify] 外部通知入队失败 clue=%s: %v", clue.ID, err)
 	}
 }
 
@@ -331,69 +298,6 @@ func maskLeadMiningTarget(t string) string {
 		return "***"
 	}
 	return t[:2] + "***" + t[len(t)-2:]
-}
-
-func sendLeadMiningTelegram(ctx context.Context, clue *model.Clue, route model.LeadMiningNotifyRoute, msg string) {
-	defer func() {
-		if r := recover(); r != nil {
-			logger.Errorf("[lead-mining-notify] telegram panic clue=%s: %v", clue.ID, r)
-		}
-	}()
-	target := strings.TrimSpace(route.Target)
-	parts := strings.SplitN(target, ":", 2)
-	if len(parts) != 2 {
-		logger.Warnf("[lead-mining-notify] telegram target 格式应为 accountID:chatID route=%s target=%s", route.RouteID, maskLeadMiningTarget(target))
-		return
-	}
-	accID, err := strconv.ParseUint(strings.TrimSpace(parts[0]), 10, 64)
-	if err != nil || accID == 0 {
-		logger.Warnf("[lead-mining-notify] telegram accountID 非法 route=%s", route.RouteID)
-		return
-	}
-	chatID, err := strconv.ParseInt(strings.TrimSpace(parts[1]), 10, 64)
-	if err != nil || chatID == 0 {
-		logger.Warnf("[lead-mining-notify] telegram chatID 非法 route=%s", route.RouteID)
-		return
-	}
-	svc := NewTelegramIntegrationService(repository.NewTelegramAccountRepository())
-	if err := svc.SendMessage(ctx, uint(accID), chatID, msg); err != nil {
-		logger.Warnf("[lead-mining-notify] telegram 发送失败 clue=%s route=%s: %v", clue.ID, route.RouteID, err)
-		return
-	}
-	logger.Infof("[lead-mining-notify] telegram 发送成功 clue=%s route=%s", clue.ID, route.RouteID)
-}
-
-func sendLeadMiningFeishu(ctx context.Context, clue *model.Clue, route model.LeadMiningNotifyRoute, msg string) {
-	defer func() {
-		if r := recover(); r != nil {
-			logger.Errorf("[lead-mining-notify] feishu panic clue=%s: %v", clue.ID, r)
-		}
-	}()
-	target := strings.TrimSpace(route.Target)
-	// format: accountID:receiveID or accountID:receiveID:receiveIDType
-	parts := strings.SplitN(target, ":", 3)
-	if len(parts) < 2 {
-		logger.Warnf("[lead-mining-notify] feishu target 格式应为 accountID:receiveID[:receiveIDType] route=%s target=%s", route.RouteID, maskLeadMiningTarget(target))
-		return
-	}
-	accID, err := strconv.ParseUint(strings.TrimSpace(parts[0]), 10, 64)
-	if err != nil || accID == 0 {
-		logger.Warnf("[lead-mining-notify] feishu accountID 非法 route=%s", route.RouteID)
-		return
-	}
-	receiveID := strings.TrimSpace(parts[1])
-	receiveIDType := "open_id"
-	if len(parts) == 3 && strings.TrimSpace(parts[2]) != "" {
-		receiveIDType = strings.TrimSpace(parts[2])
-	} else if strings.HasPrefix(receiveID, "oc_") {
-		receiveIDType = "chat_id"
-	}
-	svc := NewFeishuIntegrationService(repository.NewFeishuAccountRepository(), repository.NewFeishuMessageRepository())
-	if err := svc.SendMessage(ctx, uint(accID), receiveID, msg, receiveIDType, ""); err != nil {
-		logger.Warnf("[lead-mining-notify] feishu 发送失败 clue=%s route=%s: %v", clue.ID, route.RouteID, err)
-		return
-	}
-	logger.Infof("[lead-mining-notify] feishu 发送成功 clue=%s route=%s", clue.ID, route.RouteID)
 }
 
 func enrichLeadMiningClueCustomer(ctx context.Context, clue *model.Clue) {

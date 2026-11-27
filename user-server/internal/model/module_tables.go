@@ -119,7 +119,7 @@ var customerOwnedTables = []string{
 	// CRM 主数据、客户导入、授权配置与线索治理，均由 customer 模块页面管理。
 	"ai_insight_drafts", "business_account_authorizations", "companies",
 	"customer_company_relations", "customer_import_jobs",
-	"lead_mining_judgements", "lead_mining_notify_routes",
+	"lead_mining_judgements", "lead_mining_notify_routes", "lead_notify_deliveries", "lead_notify_outbox",
 }
 
 // inbox 模块独占
