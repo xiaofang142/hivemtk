@@ -127,7 +127,7 @@ func TestLexicalRetrieve_NoMissingConfigError(t *testing.T) {
 	}
 
 	// 造一条中文 chunk，tsvector 用 simple（与生产触发器在缺 zh_rag 时的写法一致）。
-	const content = "四川同咨科技提供私域 AI 营销系统"
+	const content = "示例科技提供私域 AI 营销系统"
 	if err := db.Exec(
 		`INSERT INTO knowledge_chunks (document_id, product_id, content, embed_status, content_tsv)
 		 VALUES ($1, $2, $3, 'pending', to_tsvector('simple', $3))`,

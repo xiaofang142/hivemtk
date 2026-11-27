@@ -22,7 +22,7 @@ func misattribEvent(nonce, eventID, conv, content string) *model.MessageEvent {
 	return &model.MessageEvent{
 		Channel:        model.ChannelDouyin,
 		SenderID:       "customer-" + nonce,
-		SenderName:     "说缘" + nonce,
+		SenderName:     "示例会话" + nonce,
 		SenderType:     "customer",
 		Content:        content,
 		EventID:        eventID,

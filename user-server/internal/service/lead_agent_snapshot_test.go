@@ -27,7 +27,7 @@ func TestLeadMiningConfigResolver_AgentConfigIsLive(t *testing.T) {
 	}}, &lmConfigRepoStub{cfg: &model.LeadMiningConfig{Enabled: true, MinIntentScore: 50, Model: "legacy-model"}})
 	r.SetAgentReader(&lmAgentReaderStub{agent: &model.AIAgent{
 		ID: 51, AgentType: string(model.AgentTypeLeadMining), AgentMode: "active", Status: 1,
-		Persona: "四川同咨微信线索挖掘助手", SystemPrompt: "只识别成都本地高意向客户并归档",
+		Persona: "示例公司微信线索挖掘助手", SystemPrompt: "只识别成都本地高意向客户并归档",
 		LLMModel: "qwen-plus",
 	}})
 
@@ -38,7 +38,7 @@ func TestLeadMiningConfigResolver_AgentConfigIsLive(t *testing.T) {
 	if snap.LeadAgentID != 51 || snap.LeadAgentMode != "active" {
 		t.Fatalf("智能体绑定未进入快照: %+v", snap)
 	}
-	if snap.LeadAgentPersona != "四川同咨微信线索挖掘助手" || snap.LeadAgentPrompt != "只识别成都本地高意向客户并归档" {
+	if snap.LeadAgentPersona != "示例公司微信线索挖掘助手" || snap.LeadAgentPrompt != "只识别成都本地高意向客户并归档" {
 		t.Fatalf("智能体人设/系统提示未进入快照: %+v", snap)
 	}
 	if snap.Model != "qwen-plus" {
@@ -63,12 +63,12 @@ func TestLeadJudgePromptIncludesAgentConfig(t *testing.T) {
 	jctx := &LeadJudgeContext{
 		AgentSnapshot: &LeadMiningConfigSnapshot{
 			LeadAgentID:      51,
-			LeadAgentPersona: "四川同咨微信线索挖掘助手",
+			LeadAgentPersona: "示例公司微信线索挖掘助手",
 			LeadAgentPrompt:  "只识别成都本地高意向客户并归档",
 		},
 	}
 	prompt := buildLeadJudgeSystemPrompt(jctx)
-	for _, want := range []string{"四川同咨微信线索挖掘助手", "只识别成都本地高意向客户并归档"} {
+	for _, want := range []string{"示例公司微信线索挖掘助手", "只识别成都本地高意向客户并归档"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("判定提示缺失智能体配置 %q:\n%s", want, prompt)
 		}

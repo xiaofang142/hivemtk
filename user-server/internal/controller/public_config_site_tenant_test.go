@@ -24,7 +24,7 @@ import (
 //
 // 为什么这是缺陷而不该照现状：注册是**新商户自助开户**（POST /api/tenant/register），
 // 开户时人还没有任何租户短码 —— 让入口依赖"已有租户短码"是死结。站点自己的归属租户
-// （官网站点 = 四川同咨科技有限公司，code=tz3rmdj）就是应该提供这个短码的那一方。
+// （官网站点 = 示例科技有限公司，code=tz3rmdj）就是应该提供这个短码的那一方。
 //
 // 修法：加一个部署期配置 SITE_TENANT_CODE（站点默认租户短码），
 // 公开配置在**请求没带短码**时用它兜底 —— 于是匿名访问也能拿到该站点的
@@ -50,18 +50,18 @@ func TestPublicConfig_FallsBackToSiteTenantCode(t *testing.T) {
 		t.Fatalf("重建租户登记表失败: %v", err)
 	}
 
-	// 站点归属租户：官网域名的主体（四川同咨科技有限公司）
+	// 站点归属租户：官网域名的主体（示例科技有限公司）
 	if err := db.GetDB().Create(&model.Tenant{
 		ID:     18,
 		Code:   "tz3rmdj",
-		Name:   "四川同咨科技有限公司",
+		Name:   "示例科技有限公司",
 		Status: model.TenantStatusActive,
 	}).Error; err != nil {
 		t.Fatalf("建租户失败: %v", err)
 	}
 	// 该租户的站点配置：开放注册
 	if err := db.GetDB().WithContext(tenant.OnlyTenant(context.Background(), 18)).Create(&model.SystemConfig{
-		Name:           "四川同咨科技有限公司",
+		Name:           "示例科技有限公司",
 		EnableRegister: true,
 		EnableRAG:      true,
 	}).Error; err != nil {
@@ -96,7 +96,7 @@ func TestPublicConfig_FallsBackToSiteTenantCode(t *testing.T) {
 	if !resp.Data.EnableRegister {
 		t.Errorf("匿名访问应读到站点租户的注册开关（enable_register=true），实际 false —— 登录页会因此隐藏注册入口")
 	}
-	if resp.Data.SiteName != "四川同咨科技有限公司" {
+	if resp.Data.SiteName != "示例科技有限公司" {
 		t.Errorf("站点名应为站点租户的名字，实际 %q", resp.Data.SiteName)
 	}
 }
@@ -137,13 +137,13 @@ func TestPublicConfig_ExplicitTenantCodeWinsOverSiteFallback(t *testing.T) {
 	if err := db.GetDB().Create(&model.Tenant{
 		ID:     18,
 		Code:   "tz3rmdj",
-		Name:   "四川同咨科技有限公司",
+		Name:   "示例科技有限公司",
 		Status: model.TenantStatusActive,
 	}).Error; err != nil {
 		t.Fatalf("建站点租户失败: %v", err)
 	}
 	if err := db.GetDB().WithContext(tenant.OnlyTenant(context.Background(), 18)).Create(&model.SystemConfig{
-		Name:           "四川同咨科技有限公司",
+		Name:           "示例科技有限公司",
 		EnableRegister: true,
 	}).Error; err != nil {
 		t.Fatalf("建站点配置失败: %v", err)

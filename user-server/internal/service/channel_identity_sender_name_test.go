@@ -42,10 +42,10 @@ func (m *senderNameAccountRepo) List(_ context.Context, opts repository.ChannelA
 // 保持 unknown（fail-closed），强证据优先不被名称覆盖。
 func TestT03_SenderNameMark_Identity(t *testing.T) {
 	ctx := context.Background()
-	const mark = "四川同咨微信"
+	const mark = "示例公司微信"
 	base := []model.ChannelAccount{
 		{ID: 10, TenantID: 18, ChannelID: 20, Type: "dm", SelfIdentifyName: mark},
-		{ID: 11, TenantID: 18, ChannelID: 21, Type: "dm", SelfIdentifyName: "四川同咨QQ"},
+		{ID: 11, TenantID: 18, ChannelID: 21, Type: "dm", SelfIdentifyName: "示例公司QQ"},
 	}
 
 	cases := []struct {
