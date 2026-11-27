@@ -808,3 +808,22 @@ trace `tr-6ad4f19888e34b623824538916af6bfd450c78fa`，personal_wx / account 10 /
 | 线索智能体 → 判定记录 →「回放」 | 最新判例 15:12 QQ 群降级判定，回放抽屉 Result JSON 显示 `degraded=true`、`matched_keywords=["约"]`、`react_outcome.degraded=true` | 降级可见且证据可回放；有效线索仍受上游 LLM 阻断 ⚠️ |
 
 结论：本轮发布的三项代码改动（占位符归一、线索过滤、审计标记）在真实线上 UI 全部可验证；既有的上游 LLM 空响应、发送能力缺失、测试污染数据三类问题在 UI 中也如实呈现，无回归、无掩盖。
+
+### 19.7 持续监测（space 125，2026-11-27 15:18+08）
+
+仅用 `page.fetch` 读生产接口，未做 UI 点击，未改代码/配置/数据。
+
+| 监测项 | 真实数据 | 判定 |
+|---|---|---|
+| `/api/monitor/health` | 15:18:04 inbound=30.42/min、outbound=0、pending=16、oldest=1239min、delivered=0、abnormal=4167、total_traces=36867、trace_published=1236、dropped=0 | 入口与观测稳定，出站仍为 0 ⚠️ |
+| `/api/message-hub/stats` | total=7232、inbound=7216、outbound=16；`by_msg_type.image=78`、`text=7154`；平台 personal_wx=5800/qq=1372/douyin=33/xhs=27 | 归一后 image 类型已形成可统计规模，历史 text 占位不回填 ✅ |
+| `/api/message-hub/list?msg_type=image` | 最新 10 行（15:15–15:17）全部 content=`[表情]`/`[动画表情]`/`[图片]`、msg_type=image、extra 带 `placeholder_normalized=image` 与 `source_placeholder` | 修复持续生效，非偶发 ✅ |
+| 单条 image 消息 id=69633 | trace=`tr-80de5bcc…`，turn=`1580a89a…`；trace-tree nodes=ingest(ok) / ai_trigger_decision(queued, ok, abnormal="") / inbox_sync(ok)，`checklist.complete=true,missing=null` | 决策观测正常；queued 仍不等于已送达 ⚠️ |
+| `/api/monitor/anomalies` | `stuck_reachable` 16 行全为抖音 `conv:做点吃的也不是很难啊` / 1239min；`node_abnormal`：微信 ai_result 92.99%、retrieval_embedding 11.14%、agent_turn 71.54% | 测试污染与上游 LLM/检索问题无变化 ⚠️ |
+| `/api/monitor/node-health` | personal_wx ingest 5803 次、异常率 0、avg=4ms；ai_dispatch 2469 次、p95≈60804ms | 接入快，AI 处理长尾严重 ⚠️ |
+| `/api/lead-mining/status` / judgements | running=true、workers=4、queue_depth=0；最新 8 条判例（15:09–15:17）全部 `degraded=true`、`evidence_complete=false`、`feedback=none` | 线索仍受上游 LLM 空响应阻断 ⚠️ |
+| `/api/lead-mining/clue-stats` | total=17、verify_total=0、status=new=17 | 无新增有效线索 ⚠️ |
+| `/api/capabilities` | total=54、ready=8；`personal_wx|dm.send|bridge` 与 `douyin|dm.send|bridge` 均 `ready=false, reason_code=capability_mapping_missing` | 出站能力缺失未变 ⚠️ |
+| `/api/message-hub/list?direction=outbound&status=pending` | 16 行仍为 2026-11-26 18:39 的抖音 `account_id=default` 测试污染 | 非业务故障，未删数据 ✅ |
+
+结论：发布后持续监测未发现新回归；占位符归一与观测修复稳定生效。业务闭环断点仍是上游 LLM 空响应、真实渠道发送能力未交付、测试污染数据，均属配置/外部/数据清理范畴，不在本轮代码修复范围。
