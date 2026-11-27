@@ -1232,3 +1232,15 @@ follow_user_channels 扩为八渠道（生产库实值已更新）。链 B 从�
 **发布**：链 A 二进制 sha256 `49c6e2a58dad7e6f…`（前值 `2768695c…`）、镜像 `sha256:9195a237…`，回滚点镜像 `mtk-user-server:rollback-20261127-074300` / 二进制 `user-server.bak-20261127-074300`，容器内+公网 health 200。链 D SPA `index-CjW3I2J3.js` / `index-sL46khOG.css`，buildId `ba0a99e1e-1795736694274`，回滚快照 `user-web.snapshot-20261127-074508.tgz`。
 
 **线上核验（ego-browser space 99 施工 / space 102 主智能体独立复算，逐元素显式操作）**：conversations API 200（group=206 + single=9 = 215；昵称命中 2；account_id=10+group=150），群线程口 200（total=1341、36 名成员）；UI 单聊/群聊分区、4 张群卡 43/47/36/11 人，三张独立卡合并为「相侵相碍一家人 · 36 人」；点开群卡见「群聊会话」+「群聊模式：显示多成员消息」+成员下拉（默认「我爱腾讯」），显式改选「小橖梨.」后 10 处「本人」高亮；类型筛选选「群聊」后单聊区消失，昵称输入「我爱腾讯」并点搜索后仅剩该群卡；全程未点击任何写按钮。截图 `t10-group-highlight.png` / `t10-main-highlight.png`。收口 `task.finish({ keep: [] })`。现网生产库全为 inbound 消息，右侧平台发言无法用线上数据直接渲染，由 API `is_self` + 后端五类判据定向测试 + 前端单测共同证明，未造生产数据。
+
+## 2026-11-27 09:2x 链 D — 渠道 tab 页左侧系统菜单消失修复（HEAD `878eda81b`，提交 `aef6eb749`）
+
+**问题**：`#/channels/accounts`、`#/channels/identify-codes` 丢失应用级左侧菜单（用户截图反馈），`/channels/manage` 正常。根因：`projectNavigation` 把渠道三页收敛成单个合成叶子（path=`/channels/manage`），`findNavigationTrail` 对非主 tab 路径经 `channelPaths` 反查只返回单节点 `[channels]`；`Layout.vue` 的 `currentTopMenu = trail[0]` 无 children → `v-if="currentTopMenu?.children?.length"` 为 false → `.app-aside` 整块不渲染。内层 `el-tabs--left` 一直正常，不是它。
+
+**变更**：`user-web/src/utils/menuNavigation.js` 以 `findChannelsTrail(nodes, path, parents = [])` 反查返回含 `system` 父节点的完整归属链，`findNavigationTrail` 直接采用该链；三页均为 `[system, channels]`，`/channels/manage` 走原精确匹配、行为不变。`navigation_content_regression.test.js` 增回归用例（fixture 含 `systemConfig` 兄弟节点，确保 `system` 不被 `projectNavigation` 剪掉）。提交 `aef6eb749`，其后 HEAD 合入上游 merge `878eda81b`。仅改 `user-web/src/**`，按发布 skill §7 链 A/B/C 不涉及。
+
+**验证**：vitest 定向 4/4、全量 151 files / 1365 tests 全绿；eslint 0 error / 5 既有 warning。
+
+**发布（链 D）**：`npm run build` 成功，buildId `878eda81b-1795742589433`，入口 `assets/index-CsZdBERL.js`；先快照 `user-web.snapshot-20261127-092320.tgz` 再 rsync 到 `/www/wwwroot/hivemtk/user-web/`，`.user.ini` unlink rc=23 为宝塔保护文件、无害忽略；线上 index.html 入口与本地 dist 一致、`version.json` buildId 一致。
+
+**线上核验（ego-browser space `hivemtk-online` id=105 / 本地 space `hivemtk-local` id=106，显式 hash 导航 + snapshot）**：三页均有 `.app-aside`（w=240、含「渠道」项），内层 `el-tabs--left` 与 `[渠道, 账号, 识别码]` 三 tab 完好，`/channels/manage` 行为不变。截图 `channels-online-fixed-channels-{accounts,identify-codes,manage}.png`、`channels-fixed-channels-{accounts,identify-codes}.png`。收口 `task.finish({ keep: [] })`。
