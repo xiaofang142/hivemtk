@@ -22,7 +22,7 @@
     "accounts": "账号",
     "identifyCodes": "识别码",
     "senderNameMark": "自他判断名称（上报发送者标记）",
-    "senderNameMarkPlaceholder": "请输入上报消息里的发送者名称，如「四川同咨微信」",
+    "senderNameMarkPlaceholder": "请输入上报消息里的发送者名称，如「示例公司微信」",
     "senderNameMarkHint": "仅当稳定身份缺失且名称精确匹配本账号标记时识别为自己；不会据此判定客户",
     "senderNameMarkRequired": "自他判断名称（上报发送者标记）必填",
     "unmarked": "未设置标记",

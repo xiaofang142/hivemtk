@@ -18,7 +18,7 @@
     "accounts": "アカウント",
     "identifyCodes": "識別コード",
     "senderNameMark": "自他判定名（報告元送信者マーク）",
-    "senderNameMarkPlaceholder": "報告メッセージの送信者名を入力（例：「四川同咨微信」）",
+    "senderNameMarkPlaceholder": "報告メッセージの送信者名を入力（例：「示例公司微信」）",
     "senderNameMarkHint": "安定IDがなく名前がこのアカウントのマークと完全一致した場合のみ「自分」と判定。顧客とは判定しません",
     "senderNameMarkRequired": "自他判定名（報告元送信者マーク）は必須です",
     "unmarked": "マーク未設定",

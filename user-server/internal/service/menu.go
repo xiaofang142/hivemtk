@@ -55,9 +55,28 @@ func (s *MenuService) GetUserMenuTree(ctx context.Context, role string) ([]model
 	// 菜单树而卡死在默认页。按 role.go 的既定口径归一化为 staff 再走两道闸。
 	role = model.NormalizeRole(role)
 
-	// 第 1 道：模块闸。未装配判定函数时 FilterMenuTreeByModule 原样返回全树
-	// （离线首启 / 单测不注入），保证不会因为"闸没接上"而空菜单。
-	moduleTree := model.FilterMenuTreeByModule(model.SystemMenuTree, model.GetModuleEnabledFilter())
+	// 第 1 道：模块闸。
+	//
+	// 2026-11-27 修复（多租户菜单口径缺陷，线上实测复现）：
+	// 此前这里用 model.GetModuleEnabledFilter()，那是**进程级单快照** ——
+	// ModuleEnabledFunc() 取 EnabledKeys(WithSystemScope)，而 SystemScope 在
+	// gateTenantOf 里恒定解析为 DefaultTenantID。后果是：
+	//
+	//   非默认租户购买的付费模块，接口闸（IsEnabled，逐请求按租户）放行 200，
+	//   菜单却按默认租户的开通集渲染 ⇒ 整枝被剪掉 ⇒ 买到了但侧栏没有入口。
+	//   线上样本：租户 18 购买 browser-automation（¥1 买断、12 个菜单键），
+	//   /api/browser-automation/tasks 返回 200，而 /api/menus 一个键都不下发。
+	//
+	// 这不是"菜单与接口短暂不一致"，只要购买方不是默认租户就**永久不一致**：
+	// refreshProcessGate 重灌的仍是 SystemScope 视图，重灌多少次都算不进租户 18 的购买。
+	//
+	// 现在改成按**当前请求的租户**判定：EnabledKeys(ctx) 读的就是 ctx 绑定租户的镜像
+	// （TenantMiddleware 已在 auth 组上注入，本方法只从 /api/menus 调用，ctx 必带租户）。
+	// 模块闸与接口闸自此同源同口径。
+	//
+	// 保留全局 filter 作兜底：仅当 gate 服务不可用（未装配）时才用它，
+	// 保证离线首启 / 单测不注入时不会因闸没接上而空菜单。
+	moduleTree := model.FilterMenuTreeByModule(model.SystemMenuTree, s.moduleEnabledFuncFor(ctx))
 
 	if role == model.SystemRoleCodeAdmin {
 		return moduleTree, nil
@@ -75,6 +94,37 @@ func (s *MenuService) GetUserMenuTree(ctx context.Context, role string) ([]model
 	// 在**给定树**上剪枝的，若传全树，已被模块闸剪掉的分支会因"子节点仍命中
 	// 角色授权"而复活 —— 于是关掉的模块又被角色授权请回来。
 	return model.FilterMenuTree(moduleTree, set), nil
+}
+
+// moduleEnabledFuncFor 构造**按当前请求租户**判定的模块开通函数。
+//
+// 与 ModuleGateService.ModuleEnabledFunc() 的区别只有一点，但正是缺陷所在：
+// 那个方法把 ctx 固定成 tenant.WithSystemScope（= DefaultTenantID 视图）并固化进
+// 闭包，供 cron / 装配等**没有请求租户**的场景使用；本方法用调用方 ctx，
+// 于是读的是**这台机器上当前登录用户所属租户**的模块镜像。
+//
+// 为什么必须这样：菜单是"这台租户买到了什么"的呈现，和接口闸（IsEnabled，
+// 逐请求按租户）必须是同一口径。菜单按默认租户渲染而接口按真实租户放行，
+// 结果就是「买到了但侧栏没有入口」—— 租户 18 买 browser-automation 的线上样本即是。
+//
+// 兜底口径：gate 服务不可用（未注入仓储 / 离线首启）时回落到全局 filter；
+// 全局 filter 也没有（测试环境未注入）时返回 nil，FilterMenuTreeByModule 会
+// 原样返回全树，保证不会因闸没接上而空菜单。
+func (s *MenuService) moduleEnabledFuncFor(ctx context.Context) func(string) bool {
+	gate := NewModuleGateService()
+	// gate 服务不可用（进程单例未装配 / 全局 DB 未就绪 / 离线首启）时，
+	// 回落 to 进程级全局 filter，保证不因闸没接上而空菜单。
+	if gate == nil || (gate.repo == nil && !repository.DBReady()) {
+		return model.GetModuleEnabledFilter()
+	}
+	keys := gate.EnabledKeys(ctx)
+	return func(moduleKey string) bool {
+		if moduleKey == "" {
+			return true
+		}
+		_, ok := keys[moduleKey]
+		return ok
+	}
 }
 
 // GetRoleMenuKeys 某角色**有效**的菜单 key 列表（admin 返回全量）
