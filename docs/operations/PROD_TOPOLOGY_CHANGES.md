@@ -4,13 +4,20 @@
 > 否则换机 / 重建部署时会静默丢失（2026-11-04 二次审核发现：`deploy/` 目录
 > 不入库，上传卷与 nginx 分流改完只存在于当前机器）。
 
+## 2026-11-27 · SageX 高可用链路修复与授权加固正式发布（链 A）
+
+- **范围/源码**：本轮 HEAD `9da5bab23`（用户端仓），自上次发布基线 `ba0a99e1e` 起共 8 个 `user-server/` 提交上线，含本轮 `03d0d8a97 fix(sagex): set channel_msg_id to avoid content-window dedup loss`（SageX 上报事件写顶层 `channel_msg_id`，跳过 ingress 同发送者同内容窗口去重，仅靠带安装维度的 `msg_id` 幂等）与 `9da5bab23 chore(user-server): sanitize tenant names in fixtures and docs`（其余 6 个为并行会话已推送提交）。两端远端 `gitee-upstream/master` + `upstream/master` 均已包含 HEAD。
+- **链 A 前置**：`git status --porcelain -- user-server/` 为空；`./deploy/deploy-api.sh --dry-run` 预检通过；发布脚本内 `go vet` 通过，`go test` 仅因本机缺 `POSTGRES_TEST_PASSWORD` 命中 DB 环境门禁（脚本判定为非阻断的环境问题，不宣称该批测试通过）；交叉编译 `CGO_ENABLED=0 GOOS=linux GOARCH=amd64` 产物 75M。
+- **链 A 结果**：`deployed_at` 回滚点后缀 `20261127-111608`；线上二进制 SHA-256 `cbed79dcdf6c81b5…`（双端一致）；镜像 `sha256:8552bf40631ee5826707ca84c3f71e8d483e92044a6c9b4e1c3d10523b262427`；容器启动 `2026-11-27T03:17:40.399937473Z`；回滚点 `mtk-user-server:rollback-20261127-111608` 与二进制 `user-server.bak-20261127-111608`；容器内 `/health` 与公网 `https://workapi.xapptool.cn` 均 ok，默认口令探针 GREEN（公开口令 401）。
+- **关联证据**：SageX 客户端改造提交 `80a3fd6`（GitHub `xiaofang142/sagex` main）与无线真机压测（REDMI `M2101K9C`，两端 journal→Room→outbox 计数一致、`TELEMETRY dropped=0 journal_failures=0 parse_failures=0`）在 `sagex/docs/design/sagex-high-availability-design-2026-11-27.md` 留证；服务端修复上线后，相同内容合法消息不再被 ingress 内容窗口吞掉。
+
 ## 2026-11-26 · T05 线索通知配置员工语义收口正式发布
 
 - **范围/裁决**：线索通知配置属于系统配置——命中线索后通过 `notify_user_ids` 通知本系统员工（系统用户 id）；`channel_account_id`/`channel` 仅为三级路由作用域键，`target` 为 TG/飞书机器人或群聊投递目标（accountID:chatID）。配置内无智能体字段，用户所称「智能体」为误称；客服智能体（`channel_accounts.auto_reply_agent_id`）/线索智能体（`lead_mining_agent_id` + `/api/manage/lead-mining-agents` 注册表）在另一套表/API/页面维护，与本配置无关，禁止绑定化。不拆字段、不迁移、不新增 `agent_id`；菜单归属、key/path（T02/T04 验收态）全部保留，唯一可写页仍 `/leads/notify-routes`。
 - **源码**：用户端 `hivemtk-user@190556761`（13 files，+312/-18，短 SHA `190556761` / 全 `19055676165bd83df388faa5e0158bbdc196c517`）已推 `gitee-upstream/master` + `upstream/master`。后端模型补语义注释 + 写入前契约校验（收件人须正整数系统用户 ID、`notify_types` 白名单，违者 `utils.ErrInvalidInput`→400）+ 新增契约测试 2 组 6 子用例；前端「通知人ID」自由文本改系统用户员工多选下拉（`/api/system/users`，值=员工 ID 字符串，历史值原样回显），文案明确非智能体，9 语种同步 `leadNotifyConfig` 词条。
 - **API 链 A**：`./deploy/deploy-api.sh --skip-tests`（存量债 `TestFullMigrationChainUpThenRollback` / v3.116.0 xhs_web enum 在 T01 前基线即失败，非本任务范围）退出码 0；`deployed_at=2026-11-26T23:40:37+08:00`；镜像 `sha256:ea37c07b6b28263687ee92647561b05e7f238a20e3854ac34d19d20d07f28461`；二进制 SHA-256 `7fc046a994adfc5e998eed4e327383481d17b1558b266c53cd98239cc2e3aa61`；容器启动 `2026-11-26T15:40:27.009120698Z`；回滚点 `mtk-user-server:rollback-20261126-233949`，二进制备份 `user-server.bak-20261126-233949`；容器内 + 公网 `/health` 200/ok，默认口令探针 ok。
 - **SPA 链 D**：buildId `190556761-1795707647831`，主资源 `assets/index-C42Ggjql.js`；备份 `user-web.snapshot-20261126-234053.tgz`；本地 dist 与公网入口 hash 一致。首屏缓存命中旧 `index-C35CJ0JQ.js`，禁缓存刷新后确认加载 `index-C42Ggjql.js`。
-- **线上验证**：`GET` 路由/系统用户/线索智能体注册表均 200（`t18_default` 收件人 `["18"]`=员工 admin；线索智能体 id=54 独立注册表）；`POST` 携 `notify_user_ids:["agent_54"]` → 400 `INVALID_PARAM_1001`（证明智能体 ID 被拒）。UI 逐元素操作：新副标题、`接收员工` / `投递目标（TG/飞书）` 表头；员工下拉仅 `四川同咨科技有限公司（#18）` 无智能体项；选中后取消，未写库，列表仍 1 行。ego space `hivemtk-online`(90) 以 `keep:[]` 收尾。
+- **线上验证**：`GET` 路由/系统用户/线索智能体注册表均 200（`t18_default` 收件人 `["18"]`=员工 admin；线索智能体 id=54 独立注册表）；`POST` 携 `notify_user_ids:["agent_54"]` → 400 `INVALID_PARAM_1001`（证明智能体 ID 被拒）。UI 逐元素操作：新副标题、`接收员工` / `投递目标（TG/飞书）` 表头；员工下拉仅 `示例科技有限公司（#18）` 无智能体项；选中后取消，未写库，列表仍 1 行。ego space `hivemtk-online`(90) 以 `keep:[]` 收尾。
 
 ## 2026-11-26 · T02 线索智能体族菜单去重与统一布局正式发布
 
@@ -367,12 +374,12 @@
 - 换机注意：新增 migrations/078（离线 SQL 路径幂等）+ v3.98.0（AutoMigrate 路径）——
   两枚举（platform_type_enum/channel_type_enum）同值域，缺一即拒写。
 
-## 2026-11-19 · TG 配置迁移线上：hivemtk 社群上 SaaS 租户 18（四川同咨）（任务七）
+## 2026-11-19 · TG 配置迁移线上：hivemtk 社群上 SaaS 租户 18（示例公司）（任务七）
 
 - **迁移内容（用户令「只迁移 hivemtk 那个社群」）**：本机 user_db `telegram_accounts` id=5
   （bot @hivemtk_bot）+ `telegram_group_gates` id=3「HiveMtk 开源智能客服社群」
   （chat -1003625877154，mode=mute_unlock，verify_ttl 10min，欢迎/验证文案原样）→
-  线上租户 18（tz3rmdj 四川同咨科技）。线上表原为空（0 账号/0 门禁）。
+  线上租户 18（tz3rmdj 示例科技）。线上表原为空（0 账号/0 门禁）。
 - **落库**：线上 `telegram_accounts` 新行 id=2（bot_token 经 ssh 管道直传不落终端、
   webhook_secret=服务端 md5 随机 32 位、webhook_enabled=true、ai_agent_enabled=true）；
   `telegram_group_gates` 新行 id=3（配置照抄）。**成员表不迁**：本机该群唯一成员行是
@@ -804,7 +811,7 @@ rec.TenantID=1 不再盲信。扩展 1.3.3（链 B 重载回验）+ Go 修复（
 ## 2026-11-14 18:55 一揽子收口：漏接补回复 delivered + 发布链根治页签失效（`aafb4941`）
 
 **决策执行**（调研后一揽子定夺，不分轮）：gate 窗口漏接的 7 条客户消息按会话补回复
-——3 条 AI 文案（辰辰项目介绍/做点吃的整理版致歉+介绍/说缘兼容性确认）经正式出站
+——3 条 AI 文案（辰辰项目介绍/做点吃的整理版致歉+介绍/示例会话兼容性确认）经正式出站
 队列落库，**1.3.4 串行队列一次认领零重试全部 delivered**（含 1.3.2/1.3.4 修复的实战
 验证）；bilibili/xhs 存量过期回复已自然走完 20 次预算落 failed 终态（无需人工干预）。
 
@@ -969,7 +976,7 @@ follow_user_channels 扩为八渠道（生产库实值已更新）。链 B 从�
 过滤（downlink 删 recordSentText/recentSentTexts 模块）——若其发布将削弱回声防线，
 已向用户报告。
 
-## 2026-11-26 00:05 租户 18（四川同咨）定制版与线索智能体入口恢复（链 D）
+## 2026-11-26 00:05 租户 18（示例公司）定制版与线索智能体入口恢复（链 D）
 
 **现象**：线上租户 18 反馈「独立线索发现智能体、渠道、渠道账号管理、渠道账号统一配置」看不到菜单/功能，且看不到国内渠道。逐项核对生产后确认两个独立根因：
 
@@ -1181,7 +1188,7 @@ follow_user_channels 扩为八渠道（生产库实值已更新）。链 B 从�
 
 **发布（链 D 两次同步，最终指纹）**：首次快照 `user-web.snapshot-20261127-001836.tgz`（主体验证用），修正后快照 `user-web.snapshot-20261127-002647.tgz`；rsync `--delete` 的 `.user.ini` Operation not permitted 为宝塔保护文件告警（rc=23），无害。最终 buildId `fa946e7a8-1795710401769`、入口 `assets/index-B6kdk7Z9.js`；index.html SHA-256 `6588e33649c451897e7ea7bbc3b37ceaf19e9b0e88d29e191f951dc25265f7c0`，本地/远端/公网三处一致，入口资源与 version.json 均一致，`?t=` 穿透缓存核验。
 
-**线上核验（ego-browser space 93，逐元素显式操作）**：`#/crm/list` 列表「来源账号」显示「四川同咨微信账号」、「来源渠道」显示「微信」；首行「编辑」弹窗中来源账号显示关联名称（修正前为裸 `10`）、负责人显示「请选择负责人」（修正前为裸 `0`）、账号下拉仅一项「四川同咨微信账号」；`#/businessAccountAuth/list`「新增授权」弹窗用户下拉显示「四川同咨科技有限公司（#18）」；两次弹窗均以「取消」关闭、未写库。
+**线上核验（ego-browser space 93，逐元素显式操作）**：`#/crm/list` 列表「来源账号」显示「示例公司微信账号」、「来源渠道」显示「微信」；首行「编辑」弹窗中来源账号显示关联名称（修正前为裸 `10`）、负责人显示「请选择负责人」（修正前为裸 `0`）、账号下拉仅一项「示例公司微信账号」；`#/businessAccountAuth/list`「新增授权」弹窗用户下拉显示「示例科技有限公司（#18）」；两次弹窗均以「取消」关闭、未写库。
 
 ## 2026-11-27 00:5x–01:0x 链 A + 链 D — T07 删除试点契约草稿、识别码改为账号级唯一（HEAD `9182c0a74`）
 
