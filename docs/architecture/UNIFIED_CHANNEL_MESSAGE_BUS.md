@@ -634,3 +634,63 @@ cd ../user-web/bridge && npx vitest run
 
 消息总线的**入站、归一、门禁、收件箱与追踪链路**在线上已经完整可用；**出站闭环**（AI 回复 → 能力授权 → outbox → ack）因能力映射缺失与上游 LLM 故障长期为 0。本轮 A1/A4/T1/T5 与三次观测修复已经把“失败不可见”变为“失败可定位”，后续重点从代码整改转向线上数据验证与上游模型/能力配置治理。
 
+
+---
+
+## 17. 全链路逐步骤真机复核（2026-11-27 14:24+08）
+
+### 17.1 采集与口径
+
+本节全部数据来自 ego-browser 登录态（`hivemtk-online` space 118）在生产页面逐元素操作与 `page.fetch` 真实读取，不以源码推断业务结论。采集端点：`/api/monitor/health`、`/api/message-hub/stats`、`/api/monitor/traces`、`/api/monitor/anomalies`、`/api/monitor/trace-tree`、`/api/message-hub/list`、`/api/capabilities`、`/api/v1/capabilities/cells`。
+
+### 17.2 实时基线
+
+| 指标 | 实测值 |
+|---|---|
+| inbound_rate | 20.73/min |
+| outbound_rate | 0 |
+| pending / oldest_pending | 16 / 1185min |
+| delivered / failed / sync_gap | 0 / 0 / 0 |
+| total_traces / abnormal_count | 31042 / 3809 |
+| message_hub total / inbound / outbound | 5566 / 5550 / 16 |
+| 平台分布 | personal_wx 4778、qq 728、douyin 33、xiaohongshu 27 |
+
+### 17.3 一条完整真实生命周期（turn `22eefc1a3f15fcc785cf0592dce4fc33dafafb954e294591770299d2fbd1237f`）
+
+trace `tr-6ad4f19888e34b623824538916af6bfd450c78fa`，personal_wx / account 10 / 会话「相侵相碍一家人」，共 10 Span：
+
+1. `ingest` ok 5ms：event_id `3b86a8c7-eca3-4cf9-b210-7cc6fdbcd51c`，hub id 67926。
+2. `ai_trigger_decision` ok：`outcome=queued`、`reason=ok`、`abnormal=""`（修复后不再误标），总线 session `personal_wx:10:相侵相碍一家人`。
+3. `retrieval_embedding` failed：`product_id=""`、耗时 30361ms。
+4. `retrieval_keyword` / `retrieval_rrf` / `retrieval_parent` ok。
+5. `ai_dispatch` ok 60737ms：`ai_replied=true` 但回复是兜底文案；AI checkpoint session `sess_personal_wx_10_group:0|com.tencent.mm|g:ranker_group`。
+6. `ai_result` abnormal：`enqueued=false, outcome=send_failed`，`capability_submit_denied: capability_mapping_missing`。
+7. `inbox_sync` ok：hub 67926 synced=true。
+8. `agent_turn` abnormal：`llm_error`，provider `platform-sensenova`，`empty response from LLM: model=deepseek-v4-flash`。
+9. 无 `outbound_enqueue` / `downlink_fetch` / `delivered_ack`，与 send_failed 一致。
+10. `checklist`：`missing=null, complete=true`，但 `ai_result.abnormal=true` ⇒ **complete 只代表必需节点齐，不代表业务成功**。
+
+`/api/message-hub/list?conversation_id=相侵相碍一家人` 实测该会话 1890 行全部入站、account_id=10、无 AI 出站，与 `outbound_rate=0` 一致。
+
+### 17.4 能力真实数据（解释 ai_result 失败）
+
+`/api/capabilities` 实测 54 项能力、仅 8 项 ready：
+- `personal_wx|dm.receive|bridge` ready=true；
+- `personal_wx|dm.send|bridge` ready=false，reason=`capability_mapping_missing`；
+- `xiaohongshu|dm.send|bridge` 同为 false；
+- `douyin|dm.send|bridge` 同为 false（虽有静态格，租户绑定证据仍缺）。
+
+`/api/v1/capabilities/cells` 实测静态格只有 douyin / douyin_shop 的 text/image send 等，**personal_wx 没有 `message.text.send` 桥接格**。源码 `capregistry/channels.go:77-78` 也明确 `personal_wx` 伴生未交付（外部工程）。所以 `capability_submit_denied` 是**正确拒绝**，不是映射 bug；A1 配置期前置正是为了让新绑定在建号时即 400，而不是等到运行时空转 LLM。存量绑定仍会在运行时失败，需运维按真实发送能力重新配置，不能靠补假静态格掩盖。
+
+### 17.5 逐层结论
+
+| 层 | 真实数据结论 |
+|---|---|
+| 上报/识别码 | personal_wx account 10、QQ account 11 持续入站，识别码与 hub extra 一致 ✅ |
+| 协议归一 | bridge=true / transport=http，canonical 线路生效 ✅ |
+| 门禁/去重 | 决策节点对 middleware_intercepted / no_new_inbound 明确 skipped ✅ |
+| session | 总线键与 AI checkpoint 键不同但同轮可关联 ✅ |
+| AI 触发 | queued 正常时 abnormal 已为 "" ✅；retrieval/LLM 上游失败导致兜底回复 ❌ |
+| 出站 | 无 outbound_enqueue / delivered_ack，`outbound_rate=0`，由能力缺失正确拦截 ⚠️ |
+| 收件箱 | inbox_sync 正常，真实消息可读 ✅ |
+| 失败回收 | 16 条 pending 为 2026-11-26 测试污染（account_id=default），非真实业务 ✅ |
