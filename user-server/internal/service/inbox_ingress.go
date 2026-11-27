@@ -838,8 +838,12 @@ func (s *InboxIngressService) recordAITriggerDecision(ctx context.Context, event
 	}
 	now := time.Now()
 	status := tracing.StatusOk
+	abnormal := ""
 	if outcome == "skipped" {
 		status = tracing.StatusSkipped
+		// 只有"未触发 AI"才是异常；queued/ok 必须留空，否则 lifecycle checklist
+		// 会把正常决策也判成节点异常（Abnormal 非空即视为异常）。
+		abnormal = reason
 	}
 	// 与 ingest Span 走同一个确定性 trace_id：LineInboundTraceID 按会话派生，
 	// 不依赖 Carrier（早退分支可能还没注入 carrier），否则决策节点会落到空 trace 上，
@@ -862,7 +866,7 @@ func (s *InboxIngressService) recordAITriggerDecision(ctx context.Context, event
 		Input:            map[string]any{"event_id": event.EventID, "session_id": event.SessionID},
 		Output:           map[string]any{"outcome": outcome, "reason": reason},
 		Status:           status,
-		Abnormal:         reason,
+		Abnormal:         abnormal,
 		StartedAt:        &now,
 		CompletedAt:      &now,
 		DurationMeasured: true,

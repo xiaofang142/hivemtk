@@ -36,6 +36,23 @@ func TestCheckLifecycleStagesProductionFixtures(t *testing.T) {
 	}
 }
 
+func TestCheckLifecycleStagesDecisionOKNotAbnormal(t *testing.T) {
+	// 数据驱动回归：queued/ok 的决策节点 Abnormal 必须为空，否则 checklist 会把
+	// 正常触发误报成节点异常（生产曾实测 ai_trigger_decision.abnormal=true）。
+	spans := []model.MessageTrace{
+		{Node: tracing.NodeIngest, Status: tracing.StatusOk},
+		{Node: tracing.NodeAITriggerDecision, Status: tracing.StatusOk, Abnormal: "", Output: `{"outcome":"queued","reason":"ok"}`},
+		{Node: tracing.NodeInboxSync, Status: tracing.StatusOk},
+	}
+	got := CheckLifecycleStages(spans)
+	if !got.Complete {
+		t.Errorf("必需阶段应齐全，missing=%v", got.Missing)
+	}
+	if stageOf(got, tracing.NodeAITriggerDecision).Abnormal {
+		t.Error("queued/ok 决策节点不应被判为异常")
+	}
+}
+
 func stageOf(c LifecycleChecklist, node string) LifecycleCheckStage {
 	for _, stage := range c.Stages {
 		if stage.Node == node {

@@ -538,6 +538,36 @@ cd ../user-web/bridge && npx vitest run
 
 ---
 
+## 16. 真机数据正确性核验（唯一评判标准，2026-11-27 14:05+08）
+
+### 16.1 采集方式与原始证据
+
+- ego-browser space 117（登录态）`page.fetch` 读取 `/api/monitor/*`、`/api/message-hub/*`，原始响应落盘 `/tmp/prod-verify-1.json`、`/tmp/prod-verify-2.json`。
+- 生产 UI `#/channels/manage` → 渠道 → 账号 tab 逐行读取渠道账号 ID/识别码。
+
+### 16.2 数据判定
+
+| 对象 | 实测数据 | 判定 |
+|---|---|---|
+| 16 条 pending 出站 | tenant_id=18、platform=douyin、**account_id=`default`**、conversation=`conv:做点吃的也不是很难啊`、msg_id=`system:mh:33abb51e`、sender_id=`douyin:unknown`、trace_id=空、claimed_at=null、push_attempts=0、created_at=2026-11-26T18:39 | **不是真实 bridge 业务流量**：33 条抖音行全部 account_id=default、同一分钟、内容为 2026-11-16 历史文案与乱码式私有化文案，系模拟/测试污染数据 |
+| 真实抖音账号 | ID=12 `HiveMtk-抖音`，识别码 `cid_t18_douyin_hivemtk`（另 ID=13 小红书） | 真实扩展用数值 12 请求 outbox，`platform+account_id=default` 过滤当然不匹配；claim 逻辑本身无错 |
+| T5 回收覆盖 | `OutboundStaleAfterDefault=7*24h`；三条件（push_attempts 到界 / inflight claimed_at 超时 / created_at<now-7d） | 19h、claimed_at=null、push_attempts=0 均不命中 ⇒ **T5 不回收这 16 行**。此前“解决永久 pending”属过度声明，已纠正 |
+| 真实微信 trace `tr-6ad4f198…` | ingest ok → ai_trigger_decision queued/ok → retrieval_embedding failed → ai_dispatch ok（兜底文案）→ ai_result `send_failed` → inbox_sync ok → agent_turn `llm_error` | checklist `missing=null, complete=true` **只表示必需节点齐，不代表业务成功**；ai_result/agent_turn 仍异常 |
+| 数据修复动作 | 未删除/修改任何生产行 | 33 行测试数据需运维确认后清理；不得由 agent 擅自删生产数据 |
+
+### 16.3 由数据发现并已修复的代码缺陷
+
+- `recordAITriggerDecision` 对 `queued/ok` 也把 reason="ok" 写进 `Abnormal`，导致 `CheckLifecycleStages` 把正常决策判为节点异常（线上实测 `checklist.ai_trigger_decision.abnormal=true`）。
+- 已改为仅 `outcome=="skipped"` 时写 `Abnormal`；新增 monitor 回归测试断言 `StatusOk + Abnormal=""` 的决策节点 `abnormal=false`。
+
+### 16.4 结论修订
+
+- 统一消息总线的入站、识别、门禁、session、AI 触发观测与出站 claim/ack 主链在真实 personal_wx 数据上按设计工作；残留失败集中在检索 `product_id` 为空、LLM 上游 empty response/限流，属模型与检索侧问题，不是总线协议缺陷。
+- 抖音 16 条 pending 是测试数据而非业务积压，“卡住 16 条”不能作为 claim/ack 协议错误的证据；T5 接线解决的是**真实业务中超过 7 天的陈旧出站**，不是这批 19h 测试行。
+- 任何“已修复/已解决”的表述必须以真实数据复测为准；本文此前基于监控数字直接归因的部分已在 §16 纠正。
+
+---
+
 ## 15. 线上全链路分析（2026-11-27，ego-browser + page.fetch 实证）
 
 ### 15.1 数据源与采集方式
