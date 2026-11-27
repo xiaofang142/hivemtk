@@ -34,6 +34,10 @@ if (manifest.version !== version) {
 // 发 1.0.3 时又只改了标题、正文还是上一版内容 —— 两次都把变更说明说错。
 // 现在发版前必须为当前 package.json version 补一节，漏了 npm run release 直接红。
 const CHANGELOGS = {
+  '1.3.12': `- 统一消息总线线路协议：全部上行/下行/SSE/wake/能力端点迁移到 canonical /api/channelbus/*，
+  与服务端删除旧 /api/bridge/* 后的线路保持一致（旧路径不再兼容）。
+- 下行 ack 闭环补齐：items 回传 claimed_at/push_attempts，msg_ids 分支携带 fence，
+  终态集合新增 unknown，防止陈旧认领与结果不明被误判为已送达。`,
   '1.3.11': `- 抖音私信面板 2026-11-26 改版适配：会话行/气泡新 class 进入默认选择器，
   MAIN 身份读器在新面板写入 conv:<规范化昵称> 证据（无 sec_uid 时仍可归属当前会话），
   消息列表根按用户配置选择器取可见容器（修复回填 root 陈旧导致历史全部丢弃），
