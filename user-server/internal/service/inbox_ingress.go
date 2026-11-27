@@ -1233,17 +1233,20 @@ func (s *InboxIngressService) HandleIngressBatch(ctx context.Context, events []*
 		}
 
 		if len(newInboundContents) == 0 || firstInboundEvent == nil {
+			s.recordAITriggerDecision(ctx, groupEvents[0].event, "skipped", "no_new_inbound")
 			continue
 		}
 
 		humanLocked, _ := s.IsSessionHumanLocked(ctx, firstInboundEvent.SessionID, firstInboundEvent.Content)
 		if humanLocked {
+			s.recordAITriggerDecision(ctx, firstInboundEvent, "skipped", "batch_human_locked")
 			continue
 		}
 
 		if s.cache != nil {
 			aiKey := InboxAIProcessingKey + convID
 			if exists, _ := s.cache.Exists(ctx, aiKey); exists {
+				s.recordAITriggerDecision(ctx, firstInboundEvent, "skipped", "batch_ai_processing_locked")
 				logger.Ctx(ctx).Info().
 					Str("conv_id", convID).
 					Msg("[Inbox][Batch] AI 处理中（标记存在），跳过本次触发避免重复回复")
@@ -1293,6 +1296,7 @@ func (s *InboxIngressService) handleIngressSingleForBatch(ctx context.Context, e
 					result.Accepted = true
 					result.QueuedForAI = false
 					result.Reason = "msg_id base hash already exists in DB (outbound echo with #N suffix); idempotent skip"
+					s.recordAITriggerDecision(ctx, event, "skipped", "outbound_echo_msg_id")
 					return result, nil
 				}
 			}
@@ -1303,6 +1307,7 @@ func (s *InboxIngressService) handleIngressSingleForBatch(ctx context.Context, e
 				result.Accepted = true
 				result.QueuedForAI = false
 				result.Reason = "content_hash already exists in DB (platform outbound echo); idempotent skip"
+				s.recordAITriggerDecision(ctx, event, "skipped", "outbound_echo_content_hash")
 				return result, nil
 			}
 		}
@@ -1370,6 +1375,7 @@ func (s *InboxIngressService) handleIngressSingleForBatch(ctx context.Context, e
 	if event.SenderType == "self" || event.SenderType == "agent" {
 		result.QueuedForAI = false
 		result.Reason = "sender_type=self/agent; persisted only (平台自己发的不触发 AI)"
+		s.recordAITriggerDecision(ctx, event, "skipped", "sender_self_or_agent")
 		return result, nil
 	}
 
