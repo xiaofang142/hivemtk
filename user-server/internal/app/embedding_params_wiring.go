@@ -17,19 +17,24 @@ import (
 // aiagent/llm 不能反向 import service（service 已经 import 它，会成环），
 // 所以和 channelbot / agent_llm 两批一样在装配层注入闭包。
 //
-// Get*/UpdateValue 调用与键名字面量写在同一行：
+// 全局 override 必须写平台默认行；管理端 JWT 带租户上下文时 UpdateValue 会写
+// tenant_config_params，平台级读取点看不到，线上 PUT 400 即由此产生。
+//
+// Get*/UpdatePlatformDefault 调用与键名字面量写在同一行：
 // scripts/check-config-param-readpoints.py 认的就是这个形状。
 //
 // 返回本批接上的键名列表，供启动日志与装配层测试断言。
 func WireEmbeddingConfigParams() []string {
-	cp := service.GlobalConfigParam()
+	return wireEmbeddingConfigParamsWith(service.GlobalConfigParam())
+}
 
+func wireEmbeddingConfigParamsWith(cp globalOverridePlatformConfigParams) []string {
 	llmpkg.SetEmbeddingOverrideProvider(func(ctx context.Context) string {
 		return cp.GetString(ctx, "embedding", "global_override", "")
 	})
 
 	llmpkg.SetEmbeddingOverrideWriter(func(ctx context.Context, raw string, actorID uint) error {
-		return cp.UpdateValue(ctx, "embedding", "global_override", raw, actorID)
+		return cp.UpdatePlatformDefault(ctx, "embedding", "global_override", raw, actorID)
 	})
 
 	return []string{"embedding.global_override"}

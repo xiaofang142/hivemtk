@@ -4,6 +4,13 @@
 > 否则换机 / 重建部署时会静默丢失（2026-11-04 二次审核发现：`deploy/` 目录
 > 不入库，上传卷与 nginx 分流改完只存在于当前机器）。
 
+## 2026-11-28 · 全局 LLM/Vectors 覆盖写入平台默认行（待发布）
+
+- **根因**：`llm.global_override` / `embedding.global_override` 的 writer 误用 `ConfigParamService.UpdateValue`，管理端 JWT 带租户上下文时写 `tenant_config_params`，而全局覆盖读取按平台默认解析；线上 `PUT /api/llm/llm-config` 返回 400 `INVALID_PARAM_1001 保存失败`，配置即使提交也不生效。
+- **修复**：两个 key 登记为 `platformScopedParams`，wiring writer 改为 `UpdatePlatformDefault`，并用 narrow interface + fake 做 TDD（写坐标/审计操作者/错误透传/写完读回），`check-config-param-readpoints.py` 通过。
+- **验证**：`GOTOOLCHAIN=local go build ./...`、`go vet ./...` 通过；app/service/llm 目标测试 GREEN；`git diff --check` 无输出。
+- **配置口径**：本修复只解决“写平台默认行”的通道；换用哪个免费 provider / 是否切 embedding 仍由运营决定，测试密钥不入库、不写文档。
+
 ## 2026-11-27 · 真实流量监督修复（第二轮：hub 权威可见性 / 处置台账 / i18n）
 
 - **发布版本**：代码 `55e738752` 修复可见性/台账残留、`744222bd5` 补齐总线 session 派生；并入上游 `59dd4c082` 后 HEAD `744222bd5`，已推 `gitee-upstream/master` 与 `upstream/master`。
