@@ -52,4 +52,19 @@ func TestT03_GetByCode_SeesGlobalPresetUnderTenantScope(t *testing.T) {
 	if got.Code != code || got.TenantID != 0 {
 		t.Fatalf("读到的不是全局预设行: %+v", got)
 	}
+	byID, err := repo.GetByID(tenantCtx, ChannelGlobalTenantID, got.ID)
+	if err != nil || byID == nil || byID.ID != got.ID {
+		t.Fatalf("租户上下文必须能按 ID 读取全局模板: row=%+v err=%v", byID, err)
+	}
+	rows, err := repo.List(tenantCtx, ChannelListOptions{TenantID: 18, IncludeGlobal: true})
+	if err != nil {
+		t.Fatalf("读取全局模板与租户渠道并集失败: %v", err)
+	}
+	found := false
+	for _, row := range rows {
+		found = found || row.ID == got.ID
+	}
+	if !found {
+		t.Fatalf("IncludeGlobal 列表不得被租户 callback 过滤掉全局模板: %+v", rows)
+	}
 }
