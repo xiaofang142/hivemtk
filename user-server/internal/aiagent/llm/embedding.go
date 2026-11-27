@@ -26,15 +26,19 @@ import (
 //   - 强约束：BaseURL 默认 http://mtk-embedding:8208/v1（docker 网络）或 http://127.0.0.1:8208/v1（宿主机）
 //   - 离线/单测：需显式设置 EMBEDDING_ALLOW_FALLBACK=true 才允许 hash 降级
 type EmbeddingConfig struct {
-	APIKey         string
-	BaseURL        string
-	APIType        string
-	Protocol       string
-	Model          string
-	Dimension      int
-	RequestTimeout int
-	MaxRetries     int
-	AllowFallback  bool
+	APIKey    string
+	BaseURL   string
+	APIType   string
+	Protocol  string
+	Model     string
+	Dimension int
+	// RequestDimensions 是 OpenAI 兼容 embeddings 请求体的 dimensions 字段。
+	// 0 表示不发送（兼容原生 1024 维模型）；非 0 必须与 Dimension 一致并仍受
+	// pgvector vector(1024) 硬约束（目前只接受 1024，用于 Gemini 等默认高维模型）。
+	RequestDimensions int
+	RequestTimeout    int
+	MaxRetries        int
+	AllowFallback     bool
 }
 
 // EmbeddingServiceInterface Embedding 服务接口
@@ -176,6 +180,7 @@ func (s *EmbeddingService) DefaultConfig() *EmbeddingConfig {
 	baseURL := fileCfg.BaseURL
 	model := fileCfg.Model
 	dim := fileCfg.Dimension
+	requestDimensions := 0
 	allowFallback := fileCfg.AllowFallback
 	apiKey := fileCfg.APIKey
 	protocol := strings.ToLower(strings.TrimSpace(fileCfg.Protocol))
@@ -187,6 +192,7 @@ func (s *EmbeddingService) DefaultConfig() *EmbeddingConfig {
 		baseURL = strings.TrimSpace(o.BaseURL)
 		model = strings.TrimSpace(o.Model)
 		apiKey = o.APIKey
+		requestDimensions = o.Dimensions
 		if p := strings.ToLower(strings.TrimSpace(o.Protocol)); p != "" {
 			protocol = p
 		}
@@ -216,15 +222,16 @@ func (s *EmbeddingService) DefaultConfig() *EmbeddingConfig {
 	}
 
 	return &EmbeddingConfig{
-		APIKey:         apiKey,
-		BaseURL:        baseURL,
-		APIType:        "openai",
-		Protocol:       protocol,
-		Model:          model,
-		Dimension:      dim,
-		RequestTimeout: 60,
-		MaxRetries:     5,
-		AllowFallback:  allowFallback,
+		APIKey:            apiKey,
+		BaseURL:           baseURL,
+		APIType:           "openai",
+		Protocol:          protocol,
+		Model:             model,
+		Dimension:         dim,
+		RequestDimensions: requestDimensions,
+		RequestTimeout:    60,
+		MaxRetries:        5,
+		AllowFallback:     allowFallback,
 	}
 }
 
@@ -423,8 +430,9 @@ func (s *EmbeddingService) EmbedOne(ctx context.Context, cfg *EmbeddingConfig, t
 }
 
 type embeddingRequest struct {
-	Model string   `json:"model"`
-	Input []string `json:"input"`
+	Model      string   `json:"model"`
+	Input      []string `json:"input"`
+	Dimensions int      `json:"dimensions,omitempty"`
 }
 
 type embeddingResponse struct {
@@ -492,7 +500,11 @@ func (s *EmbeddingService) callProvider(ctx context.Context, cfg *EmbeddingConfi
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	var reqBody any = embeddingRequest{Model: cfg.Model, Input: texts}
+	var reqBody any = embeddingRequest{
+		Model:      cfg.Model,
+		Input:      texts,
+		Dimensions: cfg.RequestDimensions,
+	}
 	if tei {
 		reqBody = teiEmbeddingRequest{Inputs: texts}
 	}

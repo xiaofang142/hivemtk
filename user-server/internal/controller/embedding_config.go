@@ -22,7 +22,7 @@ import (
 func GetEmbeddingConfig(ctx *gin.Context) {
 	o := llm.GetGlobalEmbeddingOverride()
 	if o == nil {
-		response.Success(ctx, gin.H{"enabled": false, "base_url": "", "api_key_set": false, "model": "", "protocol": ""}, "ok")
+		response.Success(ctx, gin.H{"enabled": false, "base_url": "", "api_key_set": false, "model": "", "protocol": "", "dimensions": 0}, "ok")
 		return
 	}
 	response.Success(ctx, gin.H{
@@ -30,6 +30,7 @@ func GetEmbeddingConfig(ctx *gin.Context) {
 		"base_url":    o.BaseURL,
 		"model":       o.Model,
 		"protocol":    o.Protocol,
+		"dimensions":  o.Dimensions,
 		"api_key_set": o.APIKey != "",
 	}, "ok")
 }
@@ -49,11 +50,12 @@ func GetEmbeddingConfig(ctx *gin.Context) {
 // @Router       /api/llm/embedding-config [put]
 func UpdateEmbeddingConfig(ctx *gin.Context) {
 	var req struct {
-		Enabled  bool   `json:"enabled"`
-		BaseURL  string `json:"base_url"`
-		APIKey   string `json:"api_key"`
-		Model    string `json:"model"`
-		Protocol string `json:"protocol"`
+		Enabled    bool   `json:"enabled"`
+		BaseURL    string `json:"base_url"`
+		APIKey     string `json:"api_key"`
+		Model      string `json:"model"`
+		Protocol   string `json:"protocol"`
+		Dimensions int    `json:"dimensions"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		response.Error(ctx, http.StatusBadRequest, "invalid body: "+err.Error())
@@ -64,6 +66,10 @@ func UpdateEmbeddingConfig(ctx *gin.Context) {
 	case "", "openai", "tei":
 	default:
 		response.Error(ctx, http.StatusBadRequest, "protocol 仅支持 openai 或 tei")
+		return
+	}
+	if req.Dimensions != 0 && req.Dimensions != 1024 {
+		response.Error(ctx, http.StatusBadRequest, "dimensions 仅支持 0（不发送）或 1024（pgvector 兼容）")
 		return
 	}
 	if req.Enabled && (req.BaseURL == "" || req.Model == "") {
@@ -83,11 +89,12 @@ func UpdateEmbeddingConfig(ctx *gin.Context) {
 		}
 	}
 	if err := llm.SetGlobalEmbeddingOverride(&llm.GlobalEmbeddingOverride{
-		Enabled:  req.Enabled,
-		BaseURL:  req.BaseURL,
-		APIKey:   req.APIKey,
-		Model:    req.Model,
-		Protocol: req.Protocol,
+		Enabled:    req.Enabled,
+		BaseURL:    req.BaseURL,
+		APIKey:     req.APIKey,
+		Model:      req.Model,
+		Protocol:   req.Protocol,
+		Dimensions: req.Dimensions,
 	}, actorID); err != nil {
 		response.ErrorFromDB(ctx, err, "保存失败，请稍后重试")
 		return

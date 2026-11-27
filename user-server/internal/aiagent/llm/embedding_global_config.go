@@ -45,6 +45,10 @@ type GlobalEmbeddingOverride struct {
 	// Protocol 向量端点协议：空/openai={base}/v1/embeddings，tei={base}/embed。
 	// 与 config.yaml inference.embedding.protocol 同义，落库后不必再依赖环境变量。
 	Protocol string `json:"protocol,omitempty"`
+	// Dimensions 是 OpenAI 兼容 embeddings 请求的 dimensions 参数。
+	// 0 表示不发送（原生 1024 维模型）；1024 用于 Gemini 等默认高维模型。
+	// 存储维度恒为 1024（pgvector 硬约束），这里只影响上游请求体。
+	Dimensions int `json:"dimensions,omitempty"`
 }
 
 var (
