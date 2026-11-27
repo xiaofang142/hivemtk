@@ -720,12 +720,12 @@ trace `tr-6ad4f19888e34b623824538916af6bfd450c78fa`，personal_wx / account 10 /
 |---|---|
 | `/api/lead-mining/judgements` 连续 5 页共 100 条 | `degraded=true` 100、`evidence_complete=false` 100、`feedback_status=none` 100、`is_clue=true` 100、`clue_type=待分类` 100、`lead_role=unknown` 100 |
 | 降级原因 | 98 条 `provider platform-sensenova: empty response from LLM: model=deepseek-v4-flash`，2 条 `platform-dashscope: qwen-plus` empty response |
-| 判例命中行 `/api/manage/leads/judgements/{1833,1832,1831}/hits` | 全部返回 `[]` |
+| 判例命中行 `/api/manage/leads/judgements/{1833,1832,1831}/hits` | 当时传入数据库自增数字 ID，全部返回 `[]`；**该结论已被 §19.1 证伪**（应用 `judgement_id=lmj_xxx`，见下） |
 | `/api/lead-mining/clue-stats` | total=17，verify_total=0，status=new=17，private=17 |
 | `/api/lead-mining/quality-stats`（7d） | total=1686、matched=779、valid_feedback=0、false_positive=0 |
 | `/api/manage/leads/customers` | total=47；样本 20 中 personal_wx=12、qq=5、无来源=3；客户带标签但创建时间集中在 2026-11-26 |
 
-结论：线索判定 100% 为“二次 LLM 不可用后的关键词降级”，证据不完整、无反馈、无类型/角色、hits 为空，无法证明按规则 scope/keyword 入库；客户表虽有带标签的入库记录，但无法与规则命中行关联。用户“无有效线索/未按规则入库”的两点质疑在扩大样本后依然成立。
+结论：线索判定 100% 为“二次 LLM 不可用后的关键词降级”，证据不完整、无反馈、无类型/角色；客户表虽有带标签入库记录，但“hits 为空、无法回溯规则”是**误用参数导致的错误结论**（见 §19.1），证据实际已持久化。用户“无有效线索”的质疑成立，“未按规则入库”的质疑不成立。
 
 ### 18.3 能力层真实数据
 
@@ -744,4 +744,37 @@ trace `tr-6ad4f19888e34b623824538916af6bfd450c78fa`，personal_wx / account 10 /
 4. **收件箱与回执（S9–S10）**：`inbox_sync` 正常；16 条 pending 为测试污染，非回收逻辑故障。
 5. **可观测性（T1/A4）**：节点已齐，但 `complete=true` 易被误读为业务成功；建议在业务健康概览中并列 `delivered=0` 与 `abnormal` 指标。
 
-优先级：P0 修复上游 LLM 空响应并为真实渠道补发送能力映射；P1 修正非文字消息解析与占位符入库；P1 持久化并回查线索 hits、补反馈闭环；P2 清理 33 行抖音/小红书测试数据并区分真实账号样本；P2 修订健康面板口径避免“节点齐=业务成功”误读。
+优先级：P0 修复上游 LLM 空响应并为真实渠道补发送能力映射；P1 修正非文字消息解析与占位符入库（本节已实施，见 §19）；P1 补反馈闭环（hits 已确认持久化，无需修复）；P2 清理 33 行抖音/小红书测试数据并区分真实账号样本；P2 修订健康面板口径避免“节点齐=业务成功”误读。
+
+## 19. 现象—数据—方案反复论证与修复闭环（2026-11-27 15:00+08）
+
+### 19.1 三项质疑的重新论证
+
+| 质疑 | 真实数据 | 多方案对比与选定 | 结论 |
+|---|---|---|---|
+| ① 大量非文字消息以 text 入库 | 扩大样本 2294 行全部 `msg_type=text`，含 `[表情]`/`[图片]`/`[视频]` 等占位符约 630 行；QQ `raw_event.parse_status=unrecognized`、`sender=null`、`media_url=""` | A) 只按 `msg_type` 统计——已证无效（占位符归在 text）；B) 客户端改上报——跨 sagex/bridge 两仓、外部工程，且多数占位无真实 URL，短期不可交付；**C) 服务端入站收口反向归一 + 线索过滤**——`NormalizeEvent` 是两类路径唯一收口点，零客户端改动，立即生效 | **成立，已选 C 修复** |
+| ② 无有效线索 | 连续 100 条判例全部 `degraded=true`、`evidence_complete=false`、`feedback=none`；98 条 `deepseek-v4-flash` 空响应、2 条 `qwen-plus` 空响应；`clue-stats.verify_total=0` | A) 去掉 `degraded` 标记冒充有效线索——会把假线索写进标签/通知，危害更大，否决；B) **保留护栏，判定为配置/供应商问题**：dispatcher 已有 fallback + 结构化重试 + `leadSideEffectsEligible` 护栏，代码层无可靠修复点；需运维切换 `ScenarioLowCost` 路由或修复上游 provider 限流（`tpm/rpm`） | **成立，属配置/上游，不代码修** |
+| ③ 未按规则入库线索/客户 | 上一轮用 `/judgements/{1833}` 的数字 ID 查 hits 得 `[]`；本轮用真实 `judgement_id=lmj_1795762463163797178` 等查，均返回 **3 行完整证据**（keyword/semantic/llm），`source_hit_ids` 与 hits 行一一对应 | A) 修 hits 持久化——不成立，数据本就在；B) **纠正查询口径**：API 文档与前端 `Evidence.vue` 明确要求 `lmj_xxx`；上一轮是我传参错误，文档需更正 | **不成立，已证伪并纠正** |
+
+复核证据（space 123，page.fetch）：`/api/lead-mining/judgements?page=1&page_size=20` → degraded=20/20、complete=0/20、feedback=none 20/20、withHits=20/20；对最新 5 条用 `judgement_id` 查 `/api/manage/leads/judgements/{lmj_...}/hits` → 均 3 行、types=keyword,semantic,llm。
+
+### 19.2 已实施的代码修复
+
+| 文件 | 修复 |
+|---|---|
+| `internal/service/webhook_dedup.go` | 新增 `PlaceholderMsgType`（`mediaContextTags` 反向单源）与 `IsNonTextPlaceholderHub`；`[图片]/[表情]/[动画表情]/[视频]/[语音]/[文件]/[链接]/[卡片]/[位置]` 精确匹配才归一，`[撤回]` 保留 text；正文里偶然含 `[图片]` 词语的真实文本不受影响 |
+| `internal/service/inbox_ingress.go` | `NormalizeEvent` 在默认 text 之前反向归一占位符 msg_type，并把 `placeholder_normalized`/`source_placeholder` 写入 `Extra` 保留审计；存量 text 行不受影响 |
+| `internal/service/lead_mining.go` | `process` 入口跳过纯占位符消息；`loadHistoryHubs` 与证据快照过滤占位符历史行，避免关键词命中占位文本产出 degraded 假线索 |
+| `internal/service/placeholder_normalization_test.go` | 新增 3 组回归测试（精确匹配、归一与 Extra 标记、hub 判定） |
+
+### 19.3 不可代码修复项的处置边界
+
+- **上游 LLM 空响应**：dispatcher 已有候选 fallback（`ScenarioLowCost` 主 provider + fallbacks）、结构化重试、熔断与平台代理未配置跳过；线上 429 `inference exceeds tpm/rpm limit` 属供应商额度/路由配置。不应通过伪造 `evidence_complete` 掩盖，需运维切换 provider 或提升额度。
+- **发送能力缺失**：`personal_wx` 伴生发送格未交付（外部工程），补假静态格会让 `capability_submit_denied` 失效并产生不可投递回复。A1 已对新绑定 fail fast；存量绑定需按真实发送能力重配。
+- **33 行测试污染数据**：涉及生产数据删除，未经用户明确授权不执行；代码层已能识别（`account_id=default`、trace 空、同批时间戳），建议运维确认后清理。
+
+### 19.4 验证与本轮发布
+
+- `gofmt` / `go build ./...` / `go vet ./...` 通过。
+- `go test ./internal/service -run 'TestPlaceholderMsgTypeRecognizesOnlyExactPlaceholders|TestNormalizeEventRewritesPlaceholderMsgType|TestIsNonTextPlaceholderHub' -count=1` → ok 0.965s。
+- 链 A 发布后复测口径：新入站 `[图片]`/`[表情]` 消息的 `msg_type` 应为 `image` 且 `extra.placeholder_normalized=image`；真实文本消息保持 text；新增线索判例不应再由纯占位符消息触发。复测结果见 §19.5。

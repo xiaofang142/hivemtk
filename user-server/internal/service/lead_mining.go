@@ -518,6 +518,11 @@ func (s *Service) process(ctx context.Context, hub *model.MessageHub, force ...b
 	if content == "" {
 		return
 	}
+	// 非文字占位符（[图片]/[表情]/[视频] 且无真实媒体）没有可判定的正文，
+	// 不得触发线索发掘；否则关键词会命中占位文本，产出 degraded 的假线索。
+	if IsNonTextPlaceholderHub(hub) {
+		return
+	}
 	scope, scopeErr := s.historyScope(ctx, hub)
 	if scopeErr != nil {
 		logger.Warnf("[lead-mining] 拒绝不明确的历史作用域 msgID=%s: %v", hub.MsgID, scopeErr)
@@ -908,7 +913,16 @@ func (s *Service) loadHistoryHubs(ctx context.Context, hub *model.MessageHub) []
 	for i, j := 0, len(hubs)-1; i < j; i, j = i+1, j-1 {
 		hubs[i], hubs[j] = hubs[j], hubs[i]
 	}
-	return hubs
+	// 非文字占位符不是可用判定上下文：历史里大量 [表情]/[图片] 会稀释真实正文，
+	// 并让关键词命中占位文本。证据快照 fetchHistoryEvidence 复用本函数，口径一致。
+	filtered := make([]model.MessageHub, 0, len(hubs))
+	for _, h := range hubs {
+		if IsNonTextPlaceholderHub(&h) {
+			continue
+		}
+		filtered = append(filtered, h)
+	}
+	return filtered
 }
 
 // fetchHistoryEvidence 取本次授权快照的真实消息行；合成 history_N 不进入快照。

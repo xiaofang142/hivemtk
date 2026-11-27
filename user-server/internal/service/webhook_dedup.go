@@ -145,6 +145,44 @@ func mediaContextTag(msgType string) string {
 	return "[" + msgType + "]"
 }
 
+// placeholderTypeMap 是 mediaContextTags 的反向表：部分渠道（SageX 上报的微信/QQ、
+// 旧 bridge 解析器）把非文字消息的内容写成占位符正文，却把 msg_type 标成 text。
+// 线上实证：微信/QQ 各约 hundreds 条 [表情]/[图片]/[视频] 以 text 入库，
+// QQ 侧 extra.raw_event.parse_status=unrecognized、sender=null、media_url 为空，
+// 既无法作为有效线索输入，也让按 msg_type 统计永远看不到这些消息。
+// 这里只收录"正文恰好等于占位符"的确定形态；正文里偶然含 [图片] 词语的真实文本不受影响。
+var placeholderTypeMap = map[string]string{
+	"[图片]":   model.MsgTypeImage,
+	"[表情]":   model.MsgTypeImage, // 贴纸/表情与 mediaContextTags 的 sticker→image 同义
+	"[动画表情]": model.MsgTypeImage,
+	"[视频]":   model.MsgTypeVideo,
+	"[语音]":   model.MsgTypeAudio,
+	"[文件]":   model.MsgTypeFile,
+	"[链接]":   model.MsgTypeLink,
+	"[卡片]":   model.MsgTypeCard,
+	"[位置]":   model.MsgTypeLocation,
+	// [撤回] 是系统事件占位，中台词表没有 event，保留 text 并在 Extra 标记即可。
+}
+
+// PlaceholderMsgType 识别"占位符正文"对应的权威 msg_type；非占位符返回空串。
+// 与 mediaContextTags 共用同一套词表语义，避免上行归一与 AI 上下文补充各说各话。
+func PlaceholderMsgType(content string) string {
+	if t, ok := placeholderTypeMap[strings.TrimSpace(content)]; ok {
+		return t
+	}
+	return ""
+}
+
+// IsNonTextPlaceholderHub 判断一条 hub 行是否只是非文字占位符（无真实媒体、无正文）。
+// 线索发掘/AI 判定必须跳过这类行，否则关键词会命中 "[微信红包]" 之类的占位文本，
+// 产出无法人工复核的降级线索。存量 msg_type=text 的旧行同样会被识别。
+func IsNonTextPlaceholderHub(h *model.MessageHub) bool {
+	if h == nil || strings.TrimSpace(h.MediaURL) != "" {
+		return false
+	}
+	return PlaceholderMsgType(h.Content) != ""
+}
+
 // AppendMediaContextToContent 把媒体信息拼进 AI 触发的 content（FR5.3，002-multi-type-messages）。
 //
 // 非文本入站消息的 content 常是占位符（「[图片]」），AI/坐席只知道「有图」却不知道图在哪。

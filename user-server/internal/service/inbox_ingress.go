@@ -596,6 +596,19 @@ func (s *InboxIngressService) NormalizeEvent(ctx context.Context, event *model.M
 			event.ConversationID = event.Channel + ":" + accountID
 		}
 	}
+	// 非文字占位符反向归一：部分渠道把 [图片]/[表情]/[视频] 写进 content 却标
+	// msg_type=text，导致按类型统计永远看不到、线索判定又拿占位文本当正文。
+	// 只认"正文恰好等于占位符"的确定形态；原始占位符写入 Extra 保留审计能力。
+	if event.MsgType == "" || event.MsgType == model.MsgTypeText {
+		if normalized := PlaceholderMsgType(event.Content); normalized != "" {
+			event.MsgType = normalized
+			if event.Extra == nil {
+				event.Extra = make(map[string]any)
+			}
+			event.Extra["placeholder_normalized"] = normalized
+			event.Extra["source_placeholder"] = strings.TrimSpace(event.Content)
+		}
+	}
 	if event.MsgType == "" {
 		event.MsgType = model.MsgTypeText
 	}
