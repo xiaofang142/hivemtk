@@ -694,3 +694,54 @@ trace `tr-6ad4f19888e34b623824538916af6bfd450c78fa`，personal_wx / account 10 /
 | 出站 | 无 outbound_enqueue / delivered_ack，`outbound_rate=0`，由能力缺失正确拦截 ⚠️ |
 | 收件箱 | inbox_sync 正常，真实消息可读 ✅ |
 | 失败回收 | 16 条 pending 为 2026-11-26 测试污染（account_id=default），非真实业务 ✅ |
+
+## 18. 扩大样本后的全链路数据复核（2026-11-27 14:48+08）
+
+采集方式：ego-browser 登录态任务空间 `hivemtk-online`（id=122），仅用 `page.fetch` 读取生产接口；`body` 为 JSON 字符串，统一先 `JSON.parse`。消息抽样用固定种子随机取页（`personal_wx` 30 页、`qq` 15 页、小账号全量），不枚举/不循环点击 UI。本节结论全部来自真实返回数据，不靠推断。
+
+### 18.1 消息层扩大样本
+
+| 平台/账号 | 抽样页数 | 抽样行数 | 不同 sender_id | msg_type | 占位符示例 | trace 为空 | sender_type 为空 | 重复 dedup_hash |
+|---|---:|---:|---:|---|---|---:|---:|---:|
+| personal_wx / 10 | 30 | 1500 | 129 | 全部 text | `[表情]`72、`[动画表情]`51、`[图片]`21、`[撤回]`2 等 48 种 | 0 | 0 | 191 |
+| qq / 11 | 15 | 750 | 174 | 全部 text | `[图片]`56、`[动画表情]`36、`[撤回]`19、`[视频]`11 等 17 种 | 0 | 750 | 134 |
+| douyin / default | 1（全量） | 17 | 2 | 全部 text | 无 | 16 | 0 | 0 |
+| xiaohongshu / hash | 1（全量） | 27 | 1 | 全部 text | 无 | 26 | 0 | 0 |
+
+结论：
+- 两真实账号消息量、用户数、trace_id 覆盖正常；QQ 全部缺 `extra.sender_type`，与 SageX 自有上报形状一致，非总线协议丢失。
+- 全部 2294 行入站均为 `text`，非文字消息以内容占位符入库（微信 48 种、QQ 17 种）；此前按 `msg_type=image` 查 0 不能证明没有非文字消息。占位符消息无法提供媒体 URL 或结构化附件，作为线索输入质量差。
+- 两账号均存在大量重复 `dedup_hash`（微信 191/1500、QQ 134/750），但 `msg_id` 与 `turn_id` 不同，属内容重复而非 DB 重复键冲突。
+- 抖音/小红书样本仍为 2026-11-26 同批测试污染（account_id=default、trace 空、内容为私有化部署/营销文案），用户数不足 10，不能作为真实业务账号结论。
+
+### 18.2 线索与客户层扩大样本
+
+| 指标 | 实测值 |
+|---|---|
+| `/api/lead-mining/judgements` 连续 5 页共 100 条 | `degraded=true` 100、`evidence_complete=false` 100、`feedback_status=none` 100、`is_clue=true` 100、`clue_type=待分类` 100、`lead_role=unknown` 100 |
+| 降级原因 | 98 条 `provider platform-sensenova: empty response from LLM: model=deepseek-v4-flash`，2 条 `platform-dashscope: qwen-plus` empty response |
+| 判例命中行 `/api/manage/leads/judgements/{1833,1832,1831}/hits` | 全部返回 `[]` |
+| `/api/lead-mining/clue-stats` | total=17，verify_total=0，status=new=17，private=17 |
+| `/api/lead-mining/quality-stats`（7d） | total=1686、matched=779、valid_feedback=0、false_positive=0 |
+| `/api/manage/leads/customers` | total=47；样本 20 中 personal_wx=12、qq=5、无来源=3；客户带标签但创建时间集中在 2026-11-26 |
+
+结论：线索判定 100% 为“二次 LLM 不可用后的关键词降级”，证据不完整、无反馈、无类型/角色、hits 为空，无法证明按规则 scope/keyword 入库；客户表虽有带标签的入库记录，但无法与规则命中行关联。用户“无有效线索/未按规则入库”的两点质疑在扩大样本后依然成立。
+
+### 18.3 能力层真实数据
+
+- `/api/capabilities`：54 项能力，ready=8；`personal_wx|dm.send|bridge` 与 `douyin|dm.send|bridge` 均 `ready=false, reason=capability_mapping_missing`；未就绪原因分布 `not_configured_no_account`=43、`capability_mapping_missing`=3。
+- `/api/v1/capabilities/cells`：仅 9 个静态格，无 personal_wx 发送格。能力缺失是配置事实，不是代码 bug；A1 只拦新建绑定，存量绑定仍会在 `ai_result` 运行时被正确拒绝。
+
+### 18.4 Trace 层扩大样本
+
+最近 4 条 trace（`tr-e6b938…`、`tr-842754…`、`tr-49240…` 等）node_count=2~3，节点仅 `ingest`、`ai_trigger_decision`、`inbox_sync`，`checklist.missing=null/complete=true` 且无异常。结合前述 10-Span 样本可知：`complete=true` 只表示必需观测节点齐全，不代表 AI 已回复或消息已送达；当前真实流量多数在入站后被早退（`middleware_intercepted`/`no_new_inbound`），少数触发 AI 的也因上游 LLM 空响应与发送能力缺失无法闭环。
+
+### 18.5 全链路结论与优先级
+
+1. **入站（S1–S4）**：识别码鉴权、门禁、去重、trace 关联在扩大样本中均正常；微信/QQ 真实消息可追溯。
+2. **线索输入（S5）**：非文字占位符大量入库且 QQ `parse_status=unrecognized`，削弱线索质量；应按真实 `msg_type` 解析媒体而非 text 占位符。
+3. **AI 与出站（S6–S8）**：链路最大断点。`personal_wx`/`douyin` 发送格缺失导致 `ai_result send_failed`；上游 `deepseek-v4-flash` 空响应导致兜底回复，二者共同造成 `outbound_rate=0`。
+4. **收件箱与回执（S9–S10）**：`inbox_sync` 正常；16 条 pending 为测试污染，非回收逻辑故障。
+5. **可观测性（T1/A4）**：节点已齐，但 `complete=true` 易被误读为业务成功；建议在业务健康概览中并列 `delivered=0` 与 `abnormal` 指标。
+
+优先级：P0 修复上游 LLM 空响应并为真实渠道补发送能力映射；P1 修正非文字消息解析与占位符入库；P1 持久化并回查线索 hits、补反馈闭环；P2 清理 33 行抖音/小红书测试数据并区分真实账号样本；P2 修订健康面板口径避免“节点齐=业务成功”误读。
