@@ -15,6 +15,7 @@ import (
 	"unicode/utf8"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/channelbus"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils/logger"
 
@@ -26,14 +27,14 @@ const (
 	// SageXProtocolVersion 是统一消息总线的线路协议标识（G-04）。
 	// 旧 schema_version=1.0 继续作为请求/响应别名字段保留，避免破坏已装 SageX 伴生；
 	// protocol_version 才是跨渠道一致的协议名，与 /bridge/gateway 的 schema_version 同值。
-	SageXProtocolVersion = "hivemtk.channel.v1"
+	SageXProtocolVersion = channelbus.SchemaVersion
 	SageXMaxEvents       = 50
 	SageXMaxRequestBytes = 1_048_576
 	SageXMaxAckBytes     = 262_144
-	SageXAckAccepted     = "accepted"
-	SageXAckDuplicate    = "duplicate"
-	SageXAckRetry        = "retry"
-	SageXAckRejected     = "rejected"
+	SageXAckAccepted     = channelbus.StatusAccepted
+	SageXAckDuplicate    = channelbus.StatusDuplicate
+	SageXAckRetry        = channelbus.StatusRetry
+	SageXAckRejected     = channelbus.StatusRejected
 )
 
 var (
@@ -522,8 +523,12 @@ func (s *SageXUploadService) buildMessageEvent(inst *model.SageXInstallation, in
 	}
 	content = sanitizeSageXText(content)
 
+	// 源消息身份带 installation 隔离，EventID 与 channel_msg_id 取同一稳定值：
+	// 顶层 channel_msg_id 让 ingress 跳过「同会话同发送者同内容」窗口去重（连发两条合法
+	// 相同内容不再被吞），平台重投仍由 msg_id 唯一索引按该身份幂等兜底。
+	eventIdentity := "sagex:" + installationID + ":" + eventID
 	msgEvent := &model.MessageEvent{
-		EventID:        "sagex:" + installationID + ":" + eventID,
+		EventID:        eventIdentity,
 		SessionID:      "sagex:" + installationID + ":" + conversationID,
 		EventType:      model.EventTypeMessageReceived,
 		Channel:        platform,
@@ -538,6 +543,7 @@ func (s *SageXUploadService) buildMessageEvent(inst *model.SageXInstallation, in
 		GroupID:        groupID,
 		Timestamp:      ts,
 		Extra: map[string]any{
+			"channel_msg_id": eventIdentity,
 			"sagex": map[string]any{
 				"event_id":        eventID,
 				"batch_id":        batchID,
@@ -615,9 +621,12 @@ func (s *SageXUploadService) buildNormalizedMessageEvents(inst *model.SageXInsta
 		if m.At <= 0 || at.After(time.Now().Add(time.Minute)) {
 			at = time.Now()
 		}
+		// 源消息级身份带 installation 隔离；EventID 与 channel_msg_id 同值，
+		// 既保持同通知重发落同一 hub 行，又让 ingress 跳过内容窗口去重。
+		sourceIdentity := "sagex:" + installationID + ":src:" + m.SourceMessageID
 		out = append(out, &model.MessageEvent{
 			// 源消息级幂等键：同通知重发/聚合更新落同一 hub 行。
-			EventID:        "sagex:" + installationID + ":src:" + m.SourceMessageID,
+			EventID:        sourceIdentity,
 			SessionID:      primary.SessionID,
 			EventType:      model.EventTypeMessageReceived,
 			Channel:        platform,
@@ -632,6 +641,7 @@ func (s *SageXUploadService) buildNormalizedMessageEvents(inst *model.SageXInsta
 			GroupID:        primary.GroupID,
 			Timestamp:      at,
 			Extra: map[string]any{
+				"channel_msg_id": sourceIdentity,
 				"sagex": map[string]any{
 					"event_id":              strings.TrimSpace(ev.EventID),
 					"batch_id":              batchID,
