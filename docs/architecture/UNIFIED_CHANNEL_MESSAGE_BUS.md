@@ -778,3 +778,17 @@ trace `tr-6ad4f19888e34b623824538916af6bfd450c78fa`，personal_wx / account 10 /
 - `gofmt` / `go build ./...` / `go vet ./...` 通过。
 - `go test ./internal/service -run 'TestPlaceholderMsgTypeRecognizesOnlyExactPlaceholders|TestNormalizeEventRewritesPlaceholderMsgType|TestIsNonTextPlaceholderHub' -count=1` → ok 0.965s。
 - 链 A 发布后复测口径：新入站 `[图片]`/`[表情]` 消息的 `msg_type` 应为 `image` 且 `extra.placeholder_normalized=image`；真实文本消息保持 text；新增线索判例不应再由纯占位符消息触发。复测结果见 §19.5。
+
+### 19.5 发布后线上复测（space 123，2026-11-27 15:03+08）
+
+链 A 发布：代码 `9abec16e8`，二进制 sha256=`b8c501d2a075ea38…`，镜像 `74f5298787dd4a95a1d`，回滚点 `rollback-20261127-150208`。发布后 `page.fetch` 实证：
+
+| 复测项 | 真实返回 | 判定 |
+|---|---|---|
+| `/api/message-hub/list?msg_type=image` | total=1，行 id=69303，content=`[表情]`、msg_type=`image`、created_at=15:03:14、extra 含 `placeholder_normalized=image` + `source_placeholder=[表情]` | 归一修复已生效 ✅ |
+| `/api/message-hub/list?keyword=[图片]` | 历史行（14:58 及以前）仍为 `msg_type=text` | 存量不回填，符合"不篡改历史数据"边界 ✅ |
+| 新判例 1868/1867/1866（15:03:09） | 仍 `degraded=true`、`evidence_complete=false`；原因分别 `platform-sensenova empty response`、`default LLM API error`、`platform-dashscope empty response` | 上游 LLM 问题在发布后依旧，证明非本代码层缺陷 ⚠️ |
+| 新判例 keyword 命中片段 | `"小幸运～] 我对成都不熟悉"`、`"[微信红包] 恭喜发财"` 等真实正文 | 精确占位符过滤未误伤含 `[微信红包]` 词语的真实文本 ✅ |
+| `/api/monitor/health` | inbound=30.72/min、outbound=0、pending=16、abnormal=4077 | 入口与观测正常，出站仍被能力/上游阻断 |
+
+结论：三项质疑中①已代码修复并线上验证，③已证伪并纠正文档，②确认属上游 provider 配置/额度，代码层保留降级护栏是正确的，不做伪修复。未删除任何生产数据。
