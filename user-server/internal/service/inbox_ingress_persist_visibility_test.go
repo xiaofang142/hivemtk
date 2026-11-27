@@ -1,10 +1,13 @@
 package service
 
 import (
+	"context"
 	"reflect"
+	"strings"
 	"testing"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/tenant"
 )
 
 func TestHubIngressVisibilityFromEvent(t *testing.T) {
@@ -66,7 +69,8 @@ func TestHubIngressVisibilityFromEvent(t *testing.T) {
 }
 
 func TestHubIngressAuthorityExtraFromEvent(t *testing.T) {
-	extra := hubIngressAuthorityExtraFromEvent(&model.MessageEvent{
+	ctx := tenant.WithTenantID(context.Background(), 7)
+	extra := hubIngressAuthorityExtraFromEvent(ctx, "10", &model.MessageEvent{
 		EventID: "evt-9", BusLLMSessionID: "llmsess_9",
 	})
 	if got := extra["llm_session_id"]; got != "llmsess_9" {
@@ -76,8 +80,32 @@ func TestHubIngressAuthorityExtraFromEvent(t *testing.T) {
 		t.Fatalf("真实消息 ID 未写入 correlation: %v", got)
 	}
 
-	empty := hubIngressAuthorityExtraFromEvent(&model.MessageEvent{})
+	derived := hubIngressAuthorityExtraFromEvent(ctx, "10", &model.MessageEvent{
+		EventID: "evt-10", Channel: "personal_wx", IsGroup: true, GroupID: "g-1", ConversationID: "thread-9",
+	})
+	if got, ok := derived["llm_session_id"].(string); !ok || !strings.HasPrefix(got, "llmsess_") {
+		t.Fatalf("总线缺失时服务端必须确定性派生 session: %v", derived["llm_session_id"])
+	}
+
+	empty := hubIngressAuthorityExtraFromEvent(ctx, "", &model.MessageEvent{})
 	if len(empty) != 0 {
 		t.Fatalf("缺少权威值时应返回空 extra: %v", empty)
+	}
+}
+
+func TestHubIngressBusLLMSessionIDDerivationIsStable(t *testing.T) {
+	ctx := tenant.WithTenantID(context.Background(), 7)
+	base := &model.MessageEvent{Channel: "personal_wx", IsGroup: true, GroupID: "g-1", ConversationID: "thread-1", SenderID: "u-1"}
+	a := hubIngressBusLLMSessionID(ctx, "10", base)
+	b := hubIngressBusLLMSessionID(ctx, "10", &model.MessageEvent{Channel: "personal_wx", IsGroup: true, GroupID: "g-1", ConversationID: "thread-2", SenderID: "u-2"})
+	if a == "" || a != b {
+		t.Fatalf("同群不同线程/发言人必须复用同一派生 session: %q vs %q", a, b)
+	}
+	c := hubIngressBusLLMSessionID(ctx, "10", &model.MessageEvent{Channel: "personal_wx", IsGroup: true, GroupID: "g-2", ConversationID: "thread-1"})
+	if a == c {
+		t.Fatalf("跨群不得复用 session: %q", a)
+	}
+	if got := hubIngressBusLLMSessionID(ctx, "10", &model.MessageEvent{BusLLMSessionID: "bus-provided", IsGroup: true, GroupID: "g-1"}); got != "bus-provided" {
+		t.Fatalf("总线权威值必须原样优先: %q", got)
 	}
 }

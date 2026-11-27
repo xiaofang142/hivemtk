@@ -6,9 +6,12 @@
 
 ## 2026-11-27 · 真实流量监督修复（第二轮：hub 权威可见性 / 处置台账 / i18n）
 
-- **是否发布**：待本轮代码提交、链 A/链 D 重新发布后回填最终 SHA/哈希/health。
+- **发布版本**：代码 `55e738752` fix(agent-context): 修复生产可见性与处置台账残留；并入上游 `59dd4c082` 后合并提交 `a0725250e`，已推 `gitee-upstream/master` 与 `upstream/master`。
+- **链 A**：`./deploy/deploy-api.sh --skip-tests` 成功；本地/线上二进制 SHA-256 `3905fe89c9e63109…`；运行镜像 `da69a16917015212075`；回滚点 `mtk-user-server:rollback-20261127-210956` / `user-server.bak-20261127-210956`；内网/公网 `/api/health` 均 `ok`，默认口令探针 GREEN。
+- **链 D（SPA）**：buildId `a0725250e-1795785173858`，主 JS `assets/index-CDGJKxB3.js`；备份 `/tmp/user-web-backup-20261127-211315.tar.gz`（SHA-256 `0289aca1cef3de11bbd3fc2870024e2b0f55410018ea10740c30835743b70e7a`）；`rsync --exclude=.user.ini` 成功，远端与本地主 JS SHA-256 `9fa72ff17bcc5e0f98d73904a9e7c20445a7ee759abb64baefcb5c74aa1e781b` 一致，公网资源 200。
 - **监督证据**：生产 `message_hub` 共 20453 行，其中 `visibility=unknown` 20452、群聊 unknown 12815、`extra->>'llm_session_id'` 命中 0、群 audience 命中 0；说明 H1 只修了内存入站 hub，权威持久化路径 `inbox_ingress.persistMessage` 仍未写可见性/audience/总线 session，导致群聊跨消息上下文仍会被 fail-closed 丢光。
 - **代码修复**：`inbox_ingress_persist.go` 落库前统一写权威可见性（群=`member`+`audience=[group_id]`+evidence；DM=`public`+稳定 SenderID/ConversationID，禁昵称），并写 `llm_session_id`/`correlation_id`/`llm_correlation_id` 到 hub.Extra；TDD 测试 `inbox_ingress_persist_visibility_test.go` RED→GREEN。
+- **总线 key 兜底**：发布后监督发现真实 bridge 入站 `BusLLMSessionID` 为空（`new_hub_llm_session=0`），服务端现按权威 scope 确定性派生一次（同群跨线程/成员稳定，跨群不复用），并写入 hub.Extra；新增 `TestHubIngressBusLLMSessionIDDerivationIsStable` RED→GREEN。
 - **存量回填**：新增 `migrations/104_backfill_message_hub_visibility.sql`；备份 `/tmp/user_db-pre-visibility-backfill-20261127.dump`（178M）后 `ON_ERROR_STOP=1` 执行 `UPDATE 20691`；回填后 `member=12975`、`public=7716`、`unknown=65`（仅不可证明稳定根身份或出站行，保持 fail-closed），群 audience 12975，inbound correlation 20691，回填证据 20691。
 - **处置台账**：生产 47 条 disposition 全为 `pending`，无 `replied`；根因是 AI 生成失败/转人工/人工锁/投递失败均未落终止状态。`runAIGeneration` 加统一 fallback deferred 兜底（失败→`skipped/ai_failed|ai_nil_result`），`deliverAIResult` 对转人工、人工锁、投递失败补 `skipped`；TDD 测试 `webhook_ai_disposition_fallback_test.go` RED→GREEN。
 - **i18n**：补齐 9 语种 `回复未送达` key，重新构建已无该 warning。

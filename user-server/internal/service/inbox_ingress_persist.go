@@ -123,7 +123,7 @@ func (s *InboxIngressService) persistMessageWithLeadEligibility(ctx context.Cont
 	if hub.Extra == nil {
 		hub.Extra = model.JSONMap{}
 	}
-	for k, v := range hubIngressAuthorityExtraFromEvent(event) {
+	for k, v := range hubIngressAuthorityExtraFromEvent(ctx, accountID, event) {
 		hub.Extra[k] = v
 	}
 	if hub.Extra != nil {
