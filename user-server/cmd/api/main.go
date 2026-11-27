@@ -175,8 +175,9 @@ func main() {
 	db.AutoMigrate()
 	markPhase("db_migrate")
 
-	// 卡片交互到期任务在 DB 就绪后装配。出站回收需要可信的租户及证据加载源。
-	service.ReportOutboundReclaimDisabled()
+	// 卡片交互到期任务在 DB 就绪后装配。出站回收按 channel_accounts 识别码
+	// 反查租户并逐租户扫描（见 outbound_reclaim_wiring.go），不再只打 disabled。
+	startTenantScopedOutboundReclaim(db.GetDB())
 	service.StartChannelInteractionExpiryAfterDBInit()
 
 	// W-6 工具审计落库：退出前排空异步队列（见 internal/app/tool_audit_wiring.go）。

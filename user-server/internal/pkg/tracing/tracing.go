@@ -43,25 +43,27 @@ type ToolTraceEvent struct {
 
 // ===== 生命周期节点（固定顺序，用于画链路图 + 计算节点间时延） =====
 const (
-	NodeIngest          = "ingest"
-	NodeAIDispatch      = "ai_dispatch"
-	NodeAIResult        = "ai_result"
-	NodeOutboundEnqueue = "outbound_enqueue"
-	NodeInboxSync       = "inbox_sync"
-	NodeDownlinkFetch   = "downlink_fetch"
-	NodeDeliveredAck    = "delivered_ack"
-	NodeAgentTurn       = model.NodeAgentTurn
-	NodeToolCall        = model.NodeToolCall
+	NodeIngest            = "ingest"
+	NodeAITriggerDecision = "ai_trigger_decision"
+	NodeAIDispatch        = "ai_dispatch"
+	NodeAIResult          = "ai_result"
+	NodeOutboundEnqueue   = "outbound_enqueue"
+	NodeInboxSync         = "inbox_sync"
+	NodeDownlinkFetch     = "downlink_fetch"
+	NodeDeliveredAck      = "delivered_ack"
+	NodeAgentTurn         = model.NodeAgentTurn
+	NodeToolCall          = model.NodeToolCall
 )
 
 var nodeOrder = map[string]int{
-	NodeIngest:          1,
-	NodeAIDispatch:      2,
-	NodeAIResult:        2,
-	NodeOutboundEnqueue: 3,
-	NodeInboxSync:       4,
-	NodeDownlinkFetch:   5,
-	NodeDeliveredAck:    6,
+	NodeIngest:            1,
+	NodeAITriggerDecision: 2,
+	NodeAIDispatch:        2,
+	NodeAIResult:          2,
+	NodeOutboundEnqueue:   3,
+	NodeInboxSync:         4,
+	NodeDownlinkFetch:     5,
+	NodeDeliveredAck:      6,
 }
 
 // NodeOrder 节点在生命周期中的固定位置（未知节点排末尾）。
@@ -73,15 +75,16 @@ func NodeOrder(node string) int {
 }
 
 var nodeLabels = map[string]string{
-	NodeIngest:          "消息上报接入",
-	NodeAIDispatch:      "AI 处理编排",
-	NodeAIResult:        "生成结果安全出口",
-	NodeOutboundEnqueue: "AI 回复出站入队",
-	NodeInboxSync:       "收件箱同步",
-	NodeDownlinkFetch:   "下行出库拉取",
-	NodeDeliveredAck:    "送达确认",
-	NodeAgentTurn:       "Agent 一轮推理",
-	NodeToolCall:        "工具调用",
+	NodeIngest:            "消息上报接入",
+	NodeAITriggerDecision: "AI 触发决策",
+	NodeAIDispatch:        "AI 处理编排",
+	NodeAIResult:          "生成结果安全出口",
+	NodeOutboundEnqueue:   "AI 回复出站入队",
+	NodeInboxSync:         "收件箱同步",
+	NodeDownlinkFetch:     "下行出库拉取",
+	NodeDeliveredAck:      "送达确认",
+	NodeAgentTurn:         "Agent 一轮推理",
+	NodeToolCall:          "工具调用",
 }
 
 // NodeLabel 节点中文名（UI 展示）。

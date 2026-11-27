@@ -543,6 +543,7 @@ type TraceTreeData struct {
 	Channel        string               `json:"channel"`
 	AccountID      string               `json:"account_id"`
 	Spans          []model.MessageTrace `json:"spans"`
+	Checklist      LifecycleChecklist   `json:"checklist"`
 }
 
 // TraceTree 取一条消息 / 单轮对话的完整链路明细。
@@ -556,7 +557,7 @@ func TraceTree(ctx context.Context, traceID, conversationID, msgID string, scope
 	if err != nil {
 		return nil, err
 	}
-	data := &TraceTreeData{Spans: rows}
+	data := &TraceTreeData{Spans: rows, Checklist: CheckLifecycleStages(rows)}
 	if len(rows) > 0 {
 		data.TraceID = rows[0].TraceID
 		data.TurnID = rows[0].TurnID

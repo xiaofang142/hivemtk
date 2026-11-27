@@ -7,6 +7,7 @@ import (
 	"hivemtk-user/internal/cache"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/tracing"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
@@ -812,6 +813,44 @@ func (s *InboxIngressService) HandleIngressMessage(ctx context.Context, event *m
 	return result, nil
 }
 
+// recordAITriggerDecision 把"这条消息为什么不触发 AI"显式落进链路追踪。
+//
+// 线上曾出现抖音会话只有 ingest/inbox_sync 两个 Span、却没有 AI 与出站 Span 的
+// 卡住消息：过去只能猜是落库后哪道闸门吞了触发。本节点是 best-effort 观测，
+// 任何失败都不影响入站主链；outcome=skipped/queued，reason 给出闸门名。
+func (s *InboxIngressService) recordAITriggerDecision(ctx context.Context, event *model.MessageEvent, outcome, reason string) {
+	if s == nil || event == nil {
+		return
+	}
+	accountID := "default"
+	if event.Extra != nil {
+		if v, ok := event.Extra["account_id"].(string); ok && v != "" {
+			accountID = v
+		}
+	}
+	now := time.Now()
+	status := tracing.StatusOk
+	if outcome == "skipped" {
+		status = tracing.StatusSkipped
+	}
+	_ = tracing.RecordNodeContext(ctx, tracing.NodeSpan{
+		ConversationID:   event.ConversationID,
+		AccountID:        accountID,
+		Channel:          event.Channel,
+		Node:             tracing.NodeAITriggerDecision,
+		NodeOrder:        tracing.NodeOrder(tracing.NodeAITriggerDecision),
+		Direction:        "inbound",
+		MsgID:            event.EventID,
+		Input:            map[string]any{"event_id": event.EventID, "session_id": event.SessionID},
+		Output:           map[string]any{"outcome": outcome, "reason": reason},
+		Status:           status,
+		Abnormal:         reason,
+		StartedAt:        &now,
+		CompletedAt:      &now,
+		DurationMeasured: true,
+	})
+}
+
 func (s *InboxIngressService) triggerAIForEvent(ctx context.Context, event *model.MessageEvent) {
 	// SageX 通知上报默认不触发 AI 自动回复：通知来源是个人 QQ/微信，
 	// 群聊/私聊自动回复风险高，且个人微信出站没有可靠投递通道。
@@ -822,6 +861,7 @@ func (s *InboxIngressService) triggerAIForEvent(ctx context.Context, event *mode
 				Str("channel", event.Channel).
 				Str("event_id", event.EventID).
 				Msg("[Inbox] SageX notification event: AI auto-reply disabled by default")
+			s.recordAITriggerDecision(ctx, event, "skipped", "sagex_notification")
 			return
 		}
 	}
@@ -839,6 +879,7 @@ func (s *InboxIngressService) triggerAIForEvent(ctx context.Context, event *mode
 			Str("account_id", accountID).
 			Str("conv_id", event.ConversationID).
 			Msg("[Inbox] auto reply module disabled for channel account — skip AI trigger")
+		s.recordAITriggerDecision(ctx, event, "skipped", "auto_reply_disabled")
 		return
 	}
 	// T051：自动回复侧写/读交叉引用备注（共享 ConversationContext，不直调线索发现）。
@@ -863,6 +904,7 @@ func (s *InboxIngressService) triggerAIForEvent(ctx context.Context, event *mode
 			Str("account_id", accountID).
 			Str("session_id", event.SessionID).
 			Msg("[Inbox] aiTrigger 未配置 — 桥接入站消息不会创建 customer_sessions / 不会生成 AI 回复。请检查 router.Setup() 中 bridgeIngressSvc.SetAITrigger(webhookSvc) 是否在 bridge WS 注册前调用。")
+		s.recordAITriggerDecision(ctx, event, "skipped", "ai_trigger_unconfigured")
 		return
 	}
 	opts := make([]TriggerInboundOption, 0, 3)
@@ -922,9 +964,11 @@ func (s *InboxIngressService) triggerAIForEvent(ctx context.Context, event *mode
 			Msg("[Inbox] aiTrigger.TriggerInboundAI start")
 
 		if !s.markAIProcessing(ctx, event.ConversationID) {
+			s.recordAITriggerDecision(ctx, event, "skipped", "ai_processing_locked")
 			return
 		}
 		s.aiTrigger.TriggerInboundAI(ctx, event.Channel, accountID, event.ConversationID, event.SenderID, aiContent, event.EventID, opts...)
+		s.recordAITriggerDecision(ctx, event, "queued", "ok")
 	}()
 }
 

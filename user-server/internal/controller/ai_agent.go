@@ -617,6 +617,10 @@ func (ctrl *ChannelAgentBindingController) Create(c *gin.Context) {
 		IsPrimary:   boolPtrOrDefaultTrue(req.IsPrimary),
 		Enabled:     boolPtrOrDefaultTrue(req.Enabled),
 	}
+	if err := service.ValidateBridgeOutboundCapabilityPreflight(b.ChannelType, b.AccountID); err != nil {
+		response.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
 	if err := ctrl.svc.Create(c.Request.Context(), b); err != nil {
 		replyChannelBindingError(c, err, "创建绑定失败")
 		return
@@ -662,6 +666,10 @@ func (ctrl *ChannelAgentBindingController) Update(c *gin.Context) {
 	}
 	if req.Enabled != nil {
 		existing.Enabled = req.Enabled
+	}
+	if err := service.ValidateBridgeOutboundCapabilityPreflight(existing.ChannelType, existing.AccountID); err != nil {
+		response.Error(c, http.StatusBadRequest, err.Error())
+		return
 	}
 	if err := ctrl.svc.Update(c.Request.Context(), existing); err != nil {
 		replyChannelBindingError(c, err, "更新绑定失败")

@@ -494,10 +494,45 @@ cd ../user-web/bridge && npx vitest run
 | S7 | 出站路由与下发 | ✅ | outbox claim/推送；bridge HTTP/WS/SSE；SageX/平台 sender 适配层 | embed 出站仍直写 `session_messages`，未走 outbox claim/ack |
 | S8 | 发送状态与 ack 闭环 | ⚠️→已接线 | 服务端 `fence` + `claimed_at` 栅栏；客户端 `constants.js`/`http-ingest.js`/`downlink.js` 已回传三终态与栅栏值 | 待 bridge vitest 复跑确认；`unknown` 终态需对账入口 |
 | S9 | 统一收件箱与查询 API | ✅ | `inbox_conversations` + message_hub 三态；统一 API | 无 |
-| S10 | 失败回收与重投 | ❌ | outbox pending/重试/push_attempts 字段具备 | `NewOutboundReclaimTask` 零生产调用，`main.go:179` 报 disabled；`IngestExtraDroppedKeys` 未导出 metrics |
+| S10 | 失败回收与重投 | ✅（本轮接线） | `cmd/api/outbound_reclaim_wiring.go` 以 `ChannelAccount.identify_code` 取租户、每 2 分钟 `RunOnce`；`main.go` 不再报 disabled | `IngestExtraDroppedKeys` 仍未导出 metrics（P2） |
 | S11 | 旧路径兼容破坏面 | 🔴→已清理（源码层） | 旧路由、旧 schema、渠道级旧码热链均删；scripts/e2e/注释已改 canonical；SageX 仓客户端同步 canonical | bridge dist/已装扩展未重建重发（发布链 B/C）；管理面 `/api/bridge/token` 等非总线路径按职责保留 |
 
 ### 13.1 生命周期结论
 
-按"完整业务生命周期"看，**S1/S2/S3/S6/S9 已闭环可复用；S4/S5/S8 部分闭环；S10 未闭环**。本轮按用户指示删除了我方可控范围内的旧路径兼容（路由、schema、鉴权旧码候选），并把 S8 栅栏从服务端延伸到客户端源码。剩余 ❌（S5 写侧、S10 回收）与 🔴（dist 重发）不在本轮擅自改动 AI/调度/发布链，明确列为后续 P1/P2，不写成"已完成"。
+按"完整业务生命周期"看，**S1/S2/S3/S6/S9/S10 已闭环可复用；S4/S5/S8 部分闭环**。本轮按用户指示删除了我方可控范围内的旧路径兼容（路由、schema、鉴权旧码候选），并把 S8 栅栏从服务端延伸到客户端源码。剩余 ❌（S5 写侧）与 🔴（dist 重发）不在本轮擅自改动 AI/调度/发布链，明确列为后续 P1/P2，不写成"已完成"。
+
+---
+
+## 14. 生产实证驱动的四项整改（A1 / A4 / T1 / T5）
+
+### 14.1 生产实证锚点（ego-browser 线上读取，2026-11-27）
+
+| 锚点 | 真实证据 | 推断的问题 |
+|---|---|---|
+| 微信消息 66346（trace `tr-49240c2c6e3927882030be737aa9f9f2ea6d1388`） | `ingest`/`inbox_sync` 正常；`retrieval_rerank` 空 `product_id` → failed；`agent_turn` LLM `deepseek-v4-flash` empty response；`ai_result` `send_failed` + `capability_submit_denied: capability_mapping_missing` | 能力映射缺格在**运行期**才暴露且不可重试；AI 触发无观测节点，失败原因只能靠 trace 猜 |
+| 抖音会话 `conv:做点吃的也不是很难啊`（trace `tr-60dc0d3d6c0d9d5c50011473aa21a9b45b193b67`） | 16 条滞留 1099 分钟，trace 只有 `ingest` + `inbox_sync` 两个 Span，无 AI/出站 Span | AI 未触发无节点记录；出站无回收任务，pending 永久滞留 |
+| 业务健康概览 | pending=16、oldest_pending_min≈1100、outbound_rate=0、delivered=0、failed=0、stuck_reachable=16、abnormal_count=3390、total_traces=26017 | 上述两类问题在线上是常态而非偶发 |
+
+### 14.2 四项整改
+
+| 编号 | 整改 | 代码位置 | 效果 |
+|---|---|---|---|
+| A1 | 能力映射配置期前置校验 | `service/outbound_capability.go` 新增 `ValidateBridgeOutboundCapabilityPreflight`；`controller/ai_agent.go` Create/Update 写入前调用 | 微信等无静态发送格的渠道在建绑定时即 400，不再等到 `ai_result` 不可重试失败 |
+| A4 | AI 触发决策观测节点 | `pkg/tracing` 新增 `node_ai_trigger_decision`；`service/inbox_ingress.go` 在四早退点与成功点 `recordAITriggerDecision` | 抖音"只入站不触发 AI"在 trace 中显式出现 `skipped` 节点与原因 |
+| T1 | 生产 trace 生命周期清单 | `monitor/lifecycle_checklist.go`；`TraceTreeData.Checklist` 经 `/api/monitor/trace-tree` 透出 | 一眼看出缺失阶段（`missing=[ai_trigger_decision]`）与节点异常 |
+| T5 | OutboundReclaim 生产接线 | `cmd/api/outbound_reclaim_wiring.go`；`main.go` 替换 disabled 告警 | 每 2 分钟按租户回收 claim 超时出站，解决永久 pending |
+
+### 14.3 验证证据
+
+- `go build ./...`、`go vet ./...` 通过。
+- `go test ./internal/service -run TestValidateBridgeOutboundCapabilityPreflight -count=1` → ok
+- `go test ./internal/pkg/tracing -run TestAITriggerDecisionNodeRegistered -count=1` → ok
+- `go test ./internal/monitor -run TestCheckLifecycleStagesProductionFixtures -count=1` → ok
+- `go test ./cmd/api -run TestRunOutboundReclaimForTenantsNilTask -count=1` → ok
+- 生产页面 `https://work.xapptool.cn/#/system/trace` 逐元素读取，证据见 §14.1（ego-browser space 114 已 finish）。
+
+### 14.4 未写成本轮成果的残留
+
+- `retrieval_rerank` 空 `product_id` 与 LLM `empty response` 属上游模型/检索问题，未在本次四项整改范围内。
+- S5 `AppendHistory` 写侧、S4 `webhook_dedup` fail-open、bridge dist 重发仍未动，保持 §13 口径。
 

@@ -2,16 +2,37 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"time"
 
 	"hivemtk-user/internal/aiagent/agent/portcontract"
 	"hivemtk-user/internal/capregistry"
+	bizerr "hivemtk-user/internal/domain/errors"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 )
+
+// ValidateBridgeOutboundCapabilityPreflight 在「渠道-智能体绑定」配置期就校验该渠道是否登记了
+// 桥接出站能力格（message.text.send/bridge）。否则线上 ai_result 才拿到
+// capability_submit_denied: capability_mapping_missing，且这是 non-retryable 失败，消息会永久
+// 卡在 pending（生产 16 条抖音滞留 1099 分钟即此形态）。配置期 fail fast 把失败前移到可修复点。
+func ValidateBridgeOutboundCapabilityPreflight(channel, accountID string) error {
+	normalized := NormalizeChannelType(channel)
+	if normalized == "" {
+		return bizerr.New(bizerr.CodeParamInvalid, "渠道不能为空，无法校验桥接出站能力")
+	}
+	for _, cell := range capregistry.CellDefinitions() {
+		if cell.Product == normalized && cell.Action == "message.text.send" && cell.Carrier == capregistry.ModeBridge {
+			return nil
+		}
+	}
+	return bizerr.New(bizerr.CodeParamInvalid, fmt.Sprintf(
+		"渠道 %s（归一为 %s，账号 %s）未登记桥接出站能力 message.text.send/bridge，不能绑定智能体自动回复；请先在能力矩阵登记该渠道的发送能力格",
+		channel, normalized, accountID))
+}
 
 // BridgeCapabilityAuthorizer is an explicitly composed, local authorization strategy.
 // When omitted, production uses the persistent evidence reader.
