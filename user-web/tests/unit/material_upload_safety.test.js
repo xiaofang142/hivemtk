@@ -3,8 +3,8 @@ import { mount } from '@vue/test-utils'
 import ElementPlus, { ElMessage } from 'element-plus'
 import { createPinia } from 'pinia'
 import { settle } from './settle-helper'
-const api = vi.hoisted(() => ({ upload: vi.fn(), list: vi.fn(), categories: vi.fn() }))
-vi.mock('@/api/material', () => ({ getMaterialList: api.list, getMaterialCategories: api.categories, uploadMaterial: api.upload, deleteMaterial: vi.fn(), createMaterialCategory: vi.fn(), updateMaterialCategory: vi.fn(), deleteMaterialCategory: vi.fn() }))
+const api = vi.hoisted(() => ({ upload: vi.fn(), list: vi.fn(), categories: vi.fn(), create: vi.fn(), update: vi.fn() }))
+vi.mock('@/api/material', () => ({ getMaterialList: api.list, getMaterialCategories: api.categories, uploadMaterial: api.upload, deleteMaterial: vi.fn(), createMaterialCategory: api.create, updateMaterialCategory: api.update, deleteMaterialCategory: vi.fn() }))
 import Material from '@/views/system/MaterialLibrary.vue'
 import i18n from '@/i18n'
 let wrapper
@@ -46,5 +46,27 @@ describe('素材手工上传', () => {
     await wrapper.vm.handleUploadSubmit()
     expect(api.upload).toHaveBeenCalledTimes(1)
     resolve({ id: 1 }); await first
+  })
+})
+
+
+describe('素材分类保存', () => {
+  it('新建分类补齐后端要求的默认素材类型', async () => {
+    await page()
+    api.create.mockResolvedValue({ id: 'cat-1', name: 'AI数智学堂', type: 'image' })
+    wrapper.vm.handleAddCategory()
+    wrapper.vm.categoryForm.name = 'AI数智学堂'
+    await wrapper.vm.handleSaveCategory()
+    expect(api.create).toHaveBeenCalledWith({ id: null, name: 'AI数智学堂', type: 'image' })
+    expect(api.update).not.toHaveBeenCalled()
+  })
+
+  it('编辑分类不擅自覆盖既有素材类型', async () => {
+    await page()
+    api.update.mockResolvedValue({ id: 'video-cat', name: '视频资料', type: 'video' })
+    wrapper.vm.handleEditCategory({ id: 'video-cat', name: '视频资料', type: 'video' })
+    await wrapper.vm.handleSaveCategory()
+    expect(api.update).toHaveBeenCalledWith('video-cat', { id: 'video-cat', name: '视频资料' })
+    expect(api.create).not.toHaveBeenCalled()
   })
 })

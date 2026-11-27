@@ -588,7 +588,9 @@ const handleSaveCategory = async () => {
       await updateMaterialCategory(categoryForm.id, categoryForm)
       ElMessage.success(i18n.global.t('更新成功'))
     } else {
-      await createMaterialCategory(categoryForm)
+      // 后端创建契约要求素材类型；此页分类可混合存放素材，沿用既有图片分类默认值。
+      // 只在创建时补默认值，编辑请求保持原字段集，避免覆盖既有分类类型。
+      await createMaterialCategory({ ...categoryForm, type: 'image' })
       ElMessage.success(i18n.global.t('创建成功'))
     }
     
