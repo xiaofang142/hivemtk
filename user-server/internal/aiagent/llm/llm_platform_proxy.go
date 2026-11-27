@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
+	"strings"
 
 	"hivemtk-user/internal/pkg/tracing"
 	"hivemtk-user/internal/platform"
@@ -51,6 +53,24 @@ func IsPlatformProxyConfigured() bool {
 	return platformProxyCaller().Available()
 }
 
+// platformProxyContextV2Enabled 控制是否向平台发送 llm-context-v2 上下文头并使用 v2 签名。
+// 默认关闭：平台侧未确认升级到 v2 时强制 v1，避免平台垫资调用整体 401。
+func platformProxyContextVersion() string {
+	if platformProxyContextV2Enabled() {
+		return platform.LLMProxyContractVersion
+	}
+	return ""
+}
+
+func platformProxyContextV2Enabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("LLM_PROXY_CONTEXT_V2_ENABLED"))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
 // callPlatformProxy 走平台代理发起一次调用
 func (s *LLMService) callPlatformProxy(ctx context.Context, config *LLMConfig, body []byte) (*chatResponse, error) {
 	client := platformProxyCaller()
@@ -63,7 +83,7 @@ func (s *LLMService) callPlatformProxy(ctx context.Context, config *LLMConfig, b
 		TraceID:             config.TraceID,
 		AgentID:             config.AgentID,
 		UserID:              config.UserID,
-		ContractVersion:     platform.LLMProxyContractVersion,
+		ContractVersion:     platformProxyContextVersion(),
 		OpaqueSessionKey:    config.LLMSessionRef,
 		ExecutionScenarioID: config.ExecutionScenarioID,
 		IdempotencyKey:      config.RequestIdempotencyKey,
@@ -94,6 +114,7 @@ func (s *LLMService) callPlatformProxy(ctx context.Context, config *LLMConfig, b
 		if resp.OutcomeUnknown {
 			return nil, fmt.Errorf("平台代理返回未确定结果（outcome_unknown），请用同一幂等键对账")
 		}
+		applyNormalizedProviderUsage(parsed, resp.Body, config)
 		return parsed, nil
 
 	case http.StatusPaymentRequired:

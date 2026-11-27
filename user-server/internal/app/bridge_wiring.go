@@ -21,6 +21,16 @@ import (
 //
 // ingressSvc 由 router.Setup 的唯一生产构造点显式传入：本函数不构造
 // InboxIngressService，也不依赖 Router 初始化副作用。
+// NewOutboxAckDispositionApplier 装配「真实 outbox ACK → 逐入站消息处置」推进器。
+// 出站行反查仓储属于桥接装配层（router 不直接构造 MessageHub 仓储，见
+// router/message_routes_assembly_test.go 的源形状守卫）；dispositions 由调用方
+// 传入，与 AI 投递出口共用同一租户隔离口径的处置存储。
+func NewOutboxAckDispositionApplier(gormDB *gorm.DB, dispositions service.ConversationDispositionStore) service.OutboxAckDisposition {
+	return service.NewOutboxAckDispositionApplier(
+		repository.NewMessageHubRepositoryWithDB(gormDB), dispositions,
+	)
+}
+
 func WireBridgeGlobals(gormDB *gorm.DB, ingressSvc *service.InboxIngressService) *bridge.BridgeIngestHandler {
 	SetBridgeIngressSvc(ingressSvc)
 	bridgeHandler := bridge.NewBridgeIngestHandler(ingressSvc)

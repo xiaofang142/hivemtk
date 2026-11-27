@@ -51,6 +51,14 @@ type LLMConfig struct {
 	UserID   string
 	TraceID  string
 
+	// RouteMode 由 ResolveRouteMode 按 provider 能力解析：direct 直连厂商，
+	// proxy 瞬时经平台代理；Source=platform 无论本字段如何都强制 proxy。
+	RouteMode string
+
+	// ProviderContinuationRef 是 provider adapter 从真实响应归一出的续接引用；
+	// 默认 store=false 时只用于本地关联，不向厂商声明原生会话。
+	ProviderContinuationRef string
+
 	// ExecutionScenarioID 隔离执行链；DispatchScenario 仅路由/计费。
 	ExecutionScenarioID   string
 	LLMSessionRef         string
@@ -401,6 +409,9 @@ func (s *LLMService) GenerateWithTools(ctx context.Context, config *LLMConfig, p
 		ProviderRequestID:    resp.ID,
 		ProviderContinuation: resp.ID,
 	}
+	if continuation := strings.TrimSpace(config.ProviderContinuationRef); continuation != "" {
+		result.ProviderContinuation = continuation
+	}
 	if len(choice.Message.ToolCalls) > 0 {
 		result.ToolCalls = make([]ToolCall, 0, len(choice.Message.ToolCalls))
 		for _, tc := range choice.Message.ToolCalls {
@@ -474,10 +485,16 @@ func (s *LLMService) GenerateStructured(ctx context.Context, config *LLMConfig, 
 	return result, nil
 }
 
+// shouldUsePlatformProxy 决定单笔调用是否走平台代理：
+// Source=platform 无本地 Key 时强制代理；显式 RouteMode=proxy 是部署主动放行。
+func shouldUsePlatformProxy(config *LLMConfig) bool {
+	return config != nil && (config.Source == LLMProviderSourcePlatform || strings.TrimSpace(config.RouteMode) == RouteModeProxy)
+}
+
 func (s *LLMService) callProvider(ctx context.Context, config *LLMConfig, body []byte) (*chatResponse, error) {
 	// 平台垫资 provider：不直连厂商，改走平台代理（Key 只在平台侧，扣费在平台侧）。
 	// 这一层是整条链路的唯一分叉点，见 llm_platform_proxy.go 的文件头。
-	if config.Source == LLMProviderSourcePlatform {
+	if shouldUsePlatformProxy(config) {
 		return s.callPlatformProxy(ctx, config, body)
 	}
 
@@ -577,11 +594,42 @@ func (s *LLMService) callProvider(ctx context.Context, config *LLMConfig, body [
 		if chatResp.Error != nil {
 			return nil, fmt.Errorf("LLM API error: %s", chatResp.Error.Message)
 		}
+		applyNormalizedProviderUsage(&chatResp, respBody, config)
 
 		return &chatResp, nil
 	}
 
 	return nil, fmt.Errorf("LLM request failed after %d attempts: %w", maxRetries, lastErr)
+}
+
+// applyNormalizedProviderUsage 用统一 provider adapter 解析真实响应里的
+// cached/create tokens、request ID 与 continuation ref；不替换 chatResp 的正文与工具调用，
+// 避免把 OpenAI 兼容结构误改成 provider 特有结构。解析失败不影响原有兼容路径。
+func applyNormalizedProviderUsage(resp *chatResponse, raw []byte, config *LLMConfig) {
+	if resp == nil || len(raw) == 0 {
+		return
+	}
+	parsed, err := ParseProviderResponse(raw)
+	if err != nil {
+		return
+	}
+	if parsed.Usage.PromptTokens > 0 || parsed.Usage.CompletionTokens > 0 || parsed.Usage.TotalTokens > 0 {
+		resp.Usage.PromptTokens = parsed.Usage.PromptTokens
+		resp.Usage.CompletionTokens = parsed.Usage.CompletionTokens
+		resp.Usage.TotalTokens = parsed.Usage.TotalTokens
+	}
+	if parsed.Usage.CachedInputTokens > 0 {
+		resp.Usage.CachedInputTokens = parsed.Usage.CachedInputTokens
+	}
+	if parsed.Usage.CacheCreationTokens > 0 {
+		resp.Usage.CacheCreationTokens = parsed.Usage.CacheCreationTokens
+	}
+	if parsed.RequestID != "" {
+		resp.ID = parsed.RequestID
+	}
+	if config != nil && parsed.ContinuationRef != "" {
+		config.ProviderContinuationRef = parsed.ContinuationRef
+	}
 }
 
 // ValidateConfig 验证配置

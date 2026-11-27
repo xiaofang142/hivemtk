@@ -428,6 +428,30 @@ func (s *Service) buildLeadJudgeContext(ctx context.Context, hub *model.MessageH
 		channelAccountID = scope.accountID
 	}
 	jctx.ChannelAccountID = channelAccountID
+
+	// H6：用权威 MessageHub 元数据构建与回复链同构的不可变 ContextView。
+	// 账号优先用已冻结作用域解析出的数值渠道账号（hub.AccountID 可能是识别码），
+	// 解析失败时保持原引用，由 provider 自行 fail-closed。
+	// provider 缺失或构建失败时保持既有 nil 降级行为，不阻塞判定主链。
+	if provider := s.leadContextViewProvider(); provider != nil {
+		accountRef := hub.AccountID
+		if channelAccountID > 0 {
+			accountRef = strconv.FormatUint(uint64(channelAccountID), 10)
+		}
+		view, scope, cerr := provider(ctx, hub.Platform, accountRef, hub.ConversationID, hub.GroupID, hub.SenderID, hub.MsgID, hub.IsGroup)
+		if cerr != nil {
+			logger.Ctx(ctx).Warn().Err(cerr).Msg("[lead-mining] 统一 ContextView 构建失败，降级到既有有限历史路径")
+		} else if view != nil {
+			jctx.ContextView = view
+			if scope != nil {
+				jctx.Scope = scope
+			} else {
+				copied := view.Scope
+				jctx.Scope = &copied
+			}
+		}
+	}
+
 	// 规则只读账号/渠道两级；解析失败不再合成 global 规则、也不拿 legacy 配置兜底。
 	// jctx.Rule 留空 ⇒ 三路检测器按「规则为空」标记证据不完整（fail-visible）。
 	rule, err := s.resolveProcessRule(ctx, hub)
@@ -504,7 +528,12 @@ func (s *Service) buildLeadJudgeContext(ctx context.Context, hub *model.MessageH
 
 	// 用富化后的 jctx.Messages 跑三路检测，保证关键词/语义/LLM 检测器
 	// 与二次判定看到同一份带 [角色:发送者] 的群聊上下文。
-	detection := DetectionInput{Rule: rule, Messages: jctx.Messages, JudgementID: judgementID}
+	// 三路检测与二次判定共用同一份不可变快照：audience/visibility 过滤与
+	// canonical session 绑定才有一致口径（provider 缺失时字段保持 nil）。
+	detection := DetectionInput{
+		Rule: rule, Messages: jctx.Messages, JudgementID: judgementID,
+		Scope: jctx.Scope, ContextView: jctx.ContextView,
+	}
 	var hits []model.LeadMiningHit
 	var derr error
 	if s.hitsProvider != nil {

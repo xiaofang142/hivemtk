@@ -148,23 +148,33 @@ func (d *Dispatcher) callProvider(ctx context.Context, provider *ProviderConfig,
 		logger.Warnf("[LLM] WARN: provider %s APIKey empty (local model is fine; cloud will 401)", provider.Name)
 	}
 
-	if route.MaxLatency > 0 {
+	if route != nil && route.MaxLatency > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, time.Duration(route.MaxLatency)*time.Millisecond)
 		defer cancel()
 	}
 
+	routeMode, err := ResolveRouteMode(provider)
+	if err != nil {
+		return nil, err
+	}
+
 	maxTokens := req.MaxTokens
 	if maxTokens <= 0 {
-
 		maxTokens = 2048
 	}
+	budget, err := NewContextBudget(*provider, maxTokens)
+	if err != nil {
+		return nil, err
+	}
+	maxTokens = budget.ClampOutput(maxTokens)
 	temperature := req.Temperature
 	if temperature <= 0 {
 		temperature = 0.7
 	}
 
 	config := &LLMConfig{
+		RouteMode:   routeMode,
 		APIKey:      provider.APIKey,
 		BaseURL:     provider.BaseURL,
 		APIType:     provider.APIType,

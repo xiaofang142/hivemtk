@@ -16,6 +16,7 @@ import (
 	"hivemtk-user/internal/pkg/utils/logger"
 
 	agent_runtime "hivemtk-user/internal/aiagent/agent/runtime"
+	agentcontext "hivemtk-user/internal/aiagent/context"
 	"hivemtk-user/internal/pkg/trace"
 	"hivemtk-user/internal/pkg/tracing"
 )
@@ -420,21 +421,33 @@ func newInboundHubMessage(channel, accountID, conversationID, customerID, conten
 			extra["group_name"] = meta.GroupName
 		}
 	}
+	visibility := model.VisibilityPublic
+	var audience model.JSONStrings
+	evidence := model.JSONMap{"source": "channel_ingress"}
+	if meta.IsGroup {
+		visibility = model.VisibilityMember
+		audience = model.JSONStrings{meta.GroupID}
+		evidence["is_group"] = true
+		evidence["group_id"] = meta.GroupID
+	}
 	return &model.MessageHub{
-		MsgID:          msgID,
-		Platform:       channel,
-		AccountID:      accountID,
-		ConversationID: convID,
-		SenderID:       customerID,
-		SenderName:     meta.SenderName,
-		Content:        content,
-		Direction:      direction,
-		IsGroup:        meta.IsGroup,
-		GroupID:        meta.GroupID,
-		PlatformMsgID:  meta.PlatformMsgID,
-		IsRead:         true,
-		SentAt:         meta.EffectiveSentAt(time.Now()),
-		Extra:          extra,
+		MsgID:              msgID,
+		Platform:           channel,
+		AccountID:          accountID,
+		ConversationID:     convID,
+		SenderID:           customerID,
+		SenderName:         meta.SenderName,
+		Content:            content,
+		Direction:          direction,
+		IsGroup:            meta.IsGroup,
+		GroupID:            meta.GroupID,
+		PlatformMsgID:      meta.PlatformMsgID,
+		IsRead:             true,
+		SentAt:             meta.EffectiveSentAt(time.Now()),
+		Visibility:         visibility,
+		AudienceJSON:       audience,
+		VisibilityEvidence: evidence,
+		Extra:              extra,
 	}
 }
 
@@ -466,6 +479,8 @@ func newIncomingContext(channel WebhookChannel, accountID string, p *ParsedPaylo
 	in.IsGroup = hubMsg.IsGroup
 	in.GroupID = hubMsg.GroupID
 	in.GroupName = groupNameFromHub(hubMsg)
+	in.Visibility = agentcontext.Visibility(hubMsg.Visibility)
+	in.Audience = append([]string{}, hubMsg.AudienceJSON...)
 	if hubMsg.Extra != nil {
 		if v, ok := hubMsg.Extra["llm_session_id"].(string); ok {
 			in.BusLLMSessionID = v

@@ -43,6 +43,10 @@ type SmartCSOrchestrator struct {
 	// nil 时保持原有有限历史路径（单测/未启用新链路的部署）。
 	contextBuilder *ConversationContextBuilder
 
+	// contextFactProvider 装配后为统一上下文提供客户/线索/共享备注/长期摘要/群成员；
+	// nil 时仍可构造只含权威历史与可见性的视图，但不注入业务事实。
+	contextFactProvider ContextFactProvider
+
 	// dispositionSvc 装配后逐条入站消息登记处置台账，供迟到消息与回复水位判定。
 	dispositionSvc *ConversationDispositionService
 
@@ -111,6 +115,13 @@ func (o *SmartCSOrchestrator) SetSuggestionRepo(repo *repository.AISuggestionRep
 func (o *SmartCSOrchestrator) SetContextBuilder(builder *ConversationContextBuilder) {
 	if o != nil {
 		o.contextBuilder = builder
+	}
+}
+
+// SetContextFactProvider 注入统一上下文事实 provider；未注入时视图不含业务事实。
+func (o *SmartCSOrchestrator) SetContextFactProvider(p ContextFactProvider) {
+	if o != nil {
+		o.contextFactProvider = p
 	}
 }
 
@@ -268,6 +279,11 @@ type IncomingContext struct {
 	// 下游必须能安全降级到原有的有限历史路径。
 	ContextView *agentcontext.AgentConversationContext
 
+	// Visibility/Audience 来自权威 MessageHub 行（由 webhook 入站写入），
+	// 供统一上下文证明群聊 audience；未知来源不得自行声明可见性。
+	Visibility agentcontext.Visibility
+	Audience   []string
+
 	// NoFastpath 禁用 FAQ fastpath 直答（2026-11-14 生产实证）：同会话已投递过相同
 	// 标准答案时编排器置位重跑，走完整 LLM 结合对话历史生成针对追问的新回答。
 	NoFastpath bool
@@ -391,7 +407,7 @@ func (o *SmartCSOrchestrator) HandleIncomingWithAgent(ctx context.Context, in *I
 	// 统一上下文快照在编排器入口构建一次；下游意图/情感/销售/群聊硬门共享同一份
 	// 不可变视图，避免各自拼装导致的范围漂移。构建失败时只记日志并保留 nil，
 	// 由各消费方降级到原有有限历史路径；群聊硬门会因缺证明而 fail-closed。
-	view, viewErr := buildIncomingContextView(ctx, in, session.SessionID, o.contextBuilder, time.Now())
+	view, viewErr := buildIncomingContextView(ctx, in, session.SessionID, o.contextBuilder, time.Now(), o.contextFactProvider)
 	if viewErr != nil {
 		logger.Ctx(ctx).Warn().Err(viewErr).
 			Str("session_id", session.SessionID).

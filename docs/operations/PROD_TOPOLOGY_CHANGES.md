@@ -12,6 +12,8 @@
 - 供应商 prompt cache 与最终答案缓存严格分离；cached tokens 单独计量。平台代理缓存折扣默认不透传，在计价契约完成前不宣称代理路径缓存成本收益。
 - 平台代理不持久化响应正文或用户会话数据；无法由 provider 原生幂等保证的重试返回 `outcome_unknown`，由 user-server 加密 ledger 对账。
 - `AGENT_CONTEXT_STOP_LEGACY_HISTORY=false`（默认）：保留 `conversation_contexts.messages` 双写兼容旧消费者；MessageHub/UnifiedMessageReader 全量接管并验证后再置 `true` 停写原始历史。
+- `LLM_PROXY_CONTEXT_V2_ENABLED=false`（默认）：平台代理保持 v1 签名/无上下文字段；只有平台侧确认部署 v2 契约后才显式开启，避免签名双方不一致导致平台调用失败。
+- 生产库已于 2026-11-27 备份后按序应用 `migrations/101/102/103`，并登记新模型到 GORM AutoMigrate；固定了 `conversation_message_dispositions` 等 6 张新表缺失问题。离线 SQL 的 CHECK/部分唯一索引已生效，GORM AutoMigrate 负责常规表结构兜底。
 ## 2026-11-27 · SageX 高可用链路修复与授权加固正式发布（链 A）
 
 - **范围/源码**：本轮 HEAD `9da5bab23`（用户端仓），自上次发布基线 `ba0a99e1e` 起共 8 个 `user-server/` 提交上线，含本轮 `03d0d8a97 fix(sagex): set channel_msg_id to avoid content-window dedup loss`（SageX 上报事件写顶层 `channel_msg_id`，跳过 ingress 同发送者同内容窗口去重，仅靠带安装维度的 `msg_id` 幂等）与 `9da5bab23 chore(user-server): sanitize tenant names in fixtures and docs`（其余 6 个为并行会话已推送提交）。两端远端 `gitee-upstream/master` + `upstream/master` 均已包含 HEAD。

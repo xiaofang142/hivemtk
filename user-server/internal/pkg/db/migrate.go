@@ -200,6 +200,14 @@ func allModels() []any {
 		&model.LeadMiningRule{},
 		&model.LeadMiningHit{},
 		&model.ConversationContext{},
+		// 028 Agent Context/Session：统一上下文与 LLM 续接账本。
+		// 线上只跑本 allModels() 的 AutoMigrate，漏登记即无表（生产曾因此失败）。
+		&model.ConversationMembership{},
+		&model.ConversationMessageDisposition{},
+		&model.MessageTombstone{},
+		&model.LLMSessionState{},
+		&model.ScenarioTranscript{},
+		&model.ToolInvocation{},
 		&model.CustomerTag{},
 		&model.CustomerTagAssignment{},
 		&model.CustomerDoNotContact{},

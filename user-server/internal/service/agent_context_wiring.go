@@ -20,6 +20,7 @@ func buildIncomingContextView(
 	sessionID string,
 	builder *ConversationContextBuilder,
 	now time.Time,
+	providers ...ContextFactProvider,
 ) (*agentcontext.AgentConversationContext, error) {
 	if builder == nil {
 		return nil, nil
@@ -43,6 +44,14 @@ func buildIncomingContextView(
 	if sentAt.IsZero() {
 		sentAt = now
 	}
+	visibility := in.Visibility
+	if visibility == "" {
+		visibility = agentcontext.VisibilityPublic
+		if in.IsGroup {
+			// 群聊缺权威可见性证明时 fail-closed，不能默认为公开。
+			visibility = agentcontext.VisibilityUnknown
+		}
+	}
 	current := agentcontext.ContextMessage{
 		MessageID:     strings.TrimSpace(in.MessageID),
 		Origin:        agentcontext.OriginMessageHub,
@@ -53,10 +62,24 @@ func buildIncomingContextView(
 		SenderName:    strings.TrimSpace(in.SenderName),
 		Content:       in.Content,
 		SentAt:        sentAt,
-		Visibility:    agentcontext.VisibilityPublic,
+		Visibility:    visibility,
+		Audience:      append([]string{}, in.Audience...),
+		CorrelationID: strings.TrimSpace(in.CorrelationID),
+		SourceMetadata: map[string]string{
+			"platform_msg_id": strings.TrimSpace(in.PlatformMsgID),
+			"bus_session_id":  strings.TrimSpace(in.BusSessionID),
+		},
 	}
 	if current.MessageID == "" {
 		return nil, errors.New("当前消息缺少真实 ID，无法构建上下文")
+	}
+	var facts *AgentContextFacts
+	if len(providers) > 0 && providers[0] != nil {
+		var err error
+		facts, err = providers[0].Load(ctx, in, sessionID, now)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return builder.Build(ctx, AgentContextBuilderInput{
 		Scope: agentcontext.ConversationScope{
@@ -71,7 +94,37 @@ func buildIncomingContextView(
 			IsGroup:          in.IsGroup,
 			GroupID:          in.GroupID,
 		},
-		Current:       current,
+		Current: current,
+		Customer: func() *agentcontext.CustomerContext {
+			if facts == nil {
+				return nil
+			}
+			return facts.Customer
+		}(),
+		Lead: func() *agentcontext.LeadContext {
+			if facts == nil {
+				return nil
+			}
+			return facts.Lead
+		}(),
+		SharedBusiness: func() []agentcontext.BusinessFact {
+			if facts == nil {
+				return nil
+			}
+			return facts.SharedBusiness
+		}(),
+		OlderSummary: func() *agentcontext.MemorySummary {
+			if facts == nil {
+				return nil
+			}
+			return facts.OlderSummary
+		}(),
+		Participants: func() []agentcontext.Participant {
+			if facts == nil {
+				return nil
+			}
+			return facts.Participants
+		}(),
 		PromptVersion: "reply-chain-v1",
 		PolicyKind:    string(policyKind),
 		InputBudget: agentcontext.ContextBudget{

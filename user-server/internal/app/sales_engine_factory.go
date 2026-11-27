@@ -164,6 +164,18 @@ func BuildSmartOrchestrator(engine *service.SalesEngine, kbRepo *repository.Know
 		repository.NewConversationDispositionRepositoryWithDB(gormDB),
 	))
 
+	// 生产事实注入：画像/线索/共享备注/长期摘要/群成员均来自带租户范围的仓储；
+	// 任意读取失败由 provider 分级降级，绝不把模型建议升级为既成事实。
+	if gormDB != nil {
+		o.SetContextFactProvider(service.NewAgentContextFactsProvider(
+			service.NewCustomerLookupAdapter(repository.NewCustomerRepository()),
+			repository.NewDialogueMemoryRepositoryWithDB(gormDB),
+			repository.NewConversationContextRepositoryWithDB(gormDB),
+			repository.NewLeadMiningJudgementRepositoryWithDB(gormDB),
+		))
+		logger.Info("[agent] ✅ 统一上下文事实 provider 已注入（客户/线索/共享备注/摘要/群成员）")
+	}
+
 	o.SetConfidenceAggregator(engine.ConfidenceAggregator())
 
 	if gormDB != nil {

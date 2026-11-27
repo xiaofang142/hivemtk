@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"hivemtk-user/internal/aiagent/agent/tooluse"
 	"hivemtk-user/internal/aiagent/llm"
 	"hivemtk-user/internal/model"
 )
@@ -295,7 +296,8 @@ func runLeadReactLoop(ctx context.Context, task LeadReactTask, tools []LeadReact
 				return outcome
 			}
 		}
-		observation, err := tool.Run(loopCtx, task, query)
+		toolCtx := tooluse.WithToolExecutionControl(loopCtx, AgentToolExecutionControl(&entry))
+		observation, err := tool.Run(toolCtx, task, query)
 		if err != nil {
 			if task.Ledger != nil {
 				_ = task.Ledger.Settle(loopCtx, &entry, model.ToolInvocationUnknown, "")

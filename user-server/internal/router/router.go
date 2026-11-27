@@ -421,6 +421,23 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 	// 发掘服务创建后立刻装配通知出口与 ReAct 判定器：worker 在此刻已开始消费，
 	// 若等到 Bridge 装配块才注入，embed 消息在窗口期内命中会丢负责人通知。
 	miningSvc.SetNotifier(app.GetLeadNotifyService())
+	// H6：线索判定链统一上下文接线——与回复链共享同一份事实 provider 与构建器，
+	// 让 lead_detect / lead_judge 消费经分级的结构化业务事实（画像/线索/共享备注/
+	// 摘要/群成员），而不是各自拼有限历史窗口。gormDB 为 nil 时不注入，
+	// 保持既有降级行为（判定仍走有限历史路径）。
+	if gormDB != nil {
+		factProvider := service.NewAgentContextFactsProvider(
+			service.NewCustomerLookupAdapter(repository.NewCustomerRepository()),
+			repository.NewDialogueMemoryRepositoryWithDB(gormDB),
+			repository.NewConversationContextRepositoryWithDB(gormDB),
+			repository.NewLeadMiningJudgementRepositoryWithDB(gormDB),
+		)
+		builder := service.NewConversationContextBuilder(service.NewUnifiedMessageReader(
+			repository.NewMessageHubRepositoryWithDB(gormDB),
+			repository.NewSessionMessageRepositoryWithDB(gormDB),
+		))
+		miningSvc.SetContextViewProvider(service.NewLeadContextViewProvider(builder, factProvider))
+	}
 	if err := installLeadMiningReAct(gormDB); err != nil {
 		logger.Errorf("[LeadMining] ReAct dispatcher 装配失败：%v", err)
 	}
@@ -844,13 +861,20 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 			service.NewBridgeExtensionService(platform.NewPlatformAPIClient()),
 		).RegisterRoutes(auth)
 
+		// 逐消息处置台账：AI 投递出口只推进到 processing；真实 outbox ACK 到达后
+		// 才由同一个 store 推进到 replied。两个注入点共用同一实例，避免读写分裂。
+		conversationDispositionStore := repository.NewConversationDispositionRepositoryWithDB(gormDB)
+		conversationDispositionSvc := service.NewConversationDispositionService(conversationDispositionStore)
 		if bridgeIngressSvc != nil && webhookSvc != nil {
 			bridgeIngressSvc.SetAITrigger(webhookSvc)
 			webhookSvc.SetIngressSvc(bridgeIngressSvc)
-			webhookSvc.SetConversationDispositionService(service.NewConversationDispositionService(
-				repository.NewConversationDispositionRepositoryWithDB(gormDB),
-			))
+			webhookSvc.SetConversationDispositionService(conversationDispositionSvc)
 			logger.Infof("[Bridge] bridge AITrigger 已注入（抖音/小红书/TikTok 网页私信 AI 链路已连通）")
+		}
+		// H5：channelbus outbox ACK / bridge ACK 的后半段接线。未装配时 ACK 端点
+		// 保持原有行为；装配后只有 delivered ACK 才会把 processing 推进到 replied。
+		if bridgeHandler != nil {
+			bridgeHandler.SetOutboxAckDisposition(app.NewOutboxAckDispositionApplier(gormDB, conversationDispositionStore))
 		}
 		if bridgeIngressSvc != nil {
 			bridgeIngressSvc.SetInboxService(service.NewInboxService())

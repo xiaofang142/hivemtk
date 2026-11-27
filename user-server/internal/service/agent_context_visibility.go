@@ -74,13 +74,18 @@ func groupMessageVisible(
 	case agentcontext.VisibilityPublic:
 		return "", true
 	case agentcontext.VisibilityPrivate:
-		if audienceContains(message.Audience, memberID) {
+		if audienceContains(message.Audience, memberID) || audienceContains(message.Audience, scope.GroupID) {
 			return "", true
 		}
 		return "audience_denied", false
 	case agentcontext.VisibilityMember:
-		if audienceContains(message.Audience, memberID) {
+		if audienceContains(message.Audience, memberID) || audienceContains(message.Audience, scope.GroupID) {
 			return "", true
+		}
+		// 显式 audience 只对列出的主体授权：不能因为当前成员在群内就绕过它，
+		// 否则"仅对某人可见"会被成员区间证明反向升级成全员可见。
+		if audienceDenies(message.Audience, memberID, scope.GroupID) {
+			return "audience_denied", false
 		}
 		start, end, ok := messageVisibilityInterval(message)
 		if !ok {
@@ -146,6 +151,23 @@ func audienceContains(audience []string, memberID string) bool {
 		}
 	}
 	return false
+}
+
+// audienceDenies 判断 audience 是否构成显式限制且不包含当前成员或群 audience。
+// 空 audience 不构成限制，可见性继续由成员区间证明；非空但未命中则一律 fail-closed。
+func audienceDenies(audience []string, memberID, groupID string) bool {
+	restricted := false
+	for _, candidate := range audience {
+		principal := strings.TrimSpace(candidate)
+		if principal == "" {
+			continue
+		}
+		restricted = true
+		if principal == memberID || principal == groupID {
+			return false
+		}
+	}
+	return restricted
 }
 
 func omitAllMessages(result *VisibilityFilterResult, messages []agentcontext.ContextMessage, reason string) {

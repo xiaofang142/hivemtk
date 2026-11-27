@@ -16,6 +16,7 @@ func TestHumanizeContextAwareDispatchRequest(t *testing.T) {
 			TenantID:         7,
 			Platform:         "wecom",
 			ChannelAccountID: 11,
+			ConversationID:   "conv-humanize",
 			BusLLMSessionID:  "llmsess_abc",
 		},
 		Current: agentcontext.ContextMessage{MessageID: "hub:9", Content: "这个还来得及吗"},

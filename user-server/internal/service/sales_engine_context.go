@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"strings"
 
 	agentcontext "hivemtk-user/internal/aiagent/context"
@@ -16,7 +17,7 @@ func salesGenerateDispatchCallContext(req *SalesRequest, step string) (sessionRe
 	sessionRef = strings.TrimSpace(req.BusLLMSessionID)
 	messageID := strings.TrimSpace(req.MessageID)
 	if view := req.ContextView; view != nil {
-		if key := strings.TrimSpace(view.Scope.BusLLMSessionID); key != "" {
+		if key := validatedLLMSessionRef(view, view.Scope.BusLLMSessionID); key != "" {
 			sessionRef = key
 		}
 		if id := strings.TrimSpace(view.Current.MessageID); id != "" {
@@ -76,6 +77,29 @@ func salesGenerateHistoryMessages(view *agentcontext.AgentConversationContext) [
 
 // salesGeneratePlainDispatchRequest 构造无工具销售回复请求。
 // 有个性化上下文/总线 session 时禁止走最终答案缓存，只复用输入前缀缓存能力。
+// allowRawSessionHistory 决定是否允许回退到未经过统一上下文过滤的 SessionMessage 历史。
+// 只有完全没有 ContextView 的存量调用才允许；群聊或已装配统一上下文时一律禁止，
+// 防止绕过 audience/visibility 过滤把其他成员私有消息送进模型。
+func allowRawSessionHistory(req *SalesRequest) bool {
+	return req != nil && req.ContextView == nil
+}
+
+// renderContextHistoryForPrompt 把已过滤的统一上下文历史渲染成提示词文本。
+// 真实 MessageID 与发送者一并写入，便于证据归属；不引入任何未证明可见的消息。
+func renderContextHistoryForPrompt(view *agentcontext.AgentConversationContext) string {
+	messages := salesGenerateHistoryMessages(view)
+	if len(messages) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("\n【对话历史（按时间顺序，共 %d 条）】\n", len(messages)))
+	for _, msg := range messages {
+		sb.WriteString(msg.Content)
+		sb.WriteString("\n")
+	}
+	return sb.String()
+}
+
 func salesGeneratePlainDispatchRequest(req *SalesRequest, scenario llm.DispatchScenario, prompt, systemPrompt string) llm.DispatchRequest {
 	result := llm.DispatchRequest{
 		Scenario:     scenario,

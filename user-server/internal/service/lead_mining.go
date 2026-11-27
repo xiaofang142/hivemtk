@@ -116,6 +116,11 @@ type Service struct {
 
 	// LM-07：一次分析冻结一份有效配置快照。nil 时保持 legacy 判据（单测兼容）。
 	configResolver *LeadMiningConfigResolver
+
+	// H6：统一 ContextView 提供方（由装配点注入）；nil 时线索链保持既有有限历史路径。
+	// 装配期写一次、worker 期只读，用 RWMutex 防并发读写竞态。
+	contextViewProviderMu sync.RWMutex
+	contextViewProvider   LeadContextViewProvider
 }
 
 // leadTailCandidate 水位对应的最新待判消息与序号；迟到旧任务不得覆盖新水位。

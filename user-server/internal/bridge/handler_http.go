@@ -165,6 +165,9 @@ type BridgeIngestHandler struct {
 	outboxFetcher *outboxDBFetcher
 	// inboundDispatcher 三路归一化投递收口（T015）；nil 时跳过，不改变既有行为。
 	inboundDispatcher service.InboundDispatcher
+	// ackDisposition 把真实 outbox ACK 推进逐入站消息处置台账；nil 时跳过，
+	// 不改变既有 ACK 行为（未装配的部署不会凭空把 processing 标成 replied）。
+	ackDisposition service.OutboxAckDisposition
 }
 
 // NewBridgeIngestHandler 构造 HTTP ingest 处理器
@@ -221,6 +224,12 @@ func (f *outboxDBFetcher) SetQuerier(q OutboxQuerier) {
 // SetOwedQuerier 注入未交付查询器；未注入时 FetchOutboxSince 退回游标旧语义（由装配处 Warn 留痕）。
 func (f *outboxDBFetcher) SetOwedQuerier(q OutboxOwedQuerier) {
 	f.owed = q
+}
+
+// SetOutboxAckDisposition 注入「真实 ACK → 逐入站消息处置」推进器（由 router 装配一次）。
+// nil 视为不注入；未注入时 ACK 端点保持原有行为，不会推进 replied。
+func (h *BridgeIngestHandler) SetOutboxAckDisposition(d service.OutboxAckDisposition) {
+	h.ackDisposition = d
 }
 
 // SetOutboxQuerier 注入 OutboxQuerier（由 router 在装配完成后调用一次）。
@@ -1215,6 +1224,9 @@ func (h *BridgeIngestHandler) AckBridgeOutbox(c *gin.Context) {
 		}
 		bm.OutboxAcked.WithLabel(channel, item.Status).Inc()
 	}
+	// 真实 delivered ACK 才推进逐入站消息处置台账；推进失败只记日志，
+	// 已确认的 outbox ACK 回执不受影响（两者是不同维度的事实）。
+	h.applyAckDispositions(ctx, channel, accountID, &req, ackResult)
 	bm.AckDuration.WithLabel(channel).Observe(float64(time.Since(start).Milliseconds()))
 	c.JSON(http.StatusOK, BridgeOutboxAckResponse{
 		Status:            "ok",
@@ -1227,6 +1239,62 @@ func (h *BridgeIngestHandler) AckBridgeOutbox(c *gin.Context) {
 		NotInScopeCount:   ackResult.NotInScopeCount,
 		Items:             ackResult.Items,
 	})
+}
+
+// applyAckDispositions 把请求里的真实 delivered ACK 交给处置推进器。
+// 只转交 (msg_id, conversation_id, status) 这类定位元数据，不转交正文；
+// 日志只记 ID/计数与 scope，不落消息内容（无原始 PII）。
+func (h *BridgeIngestHandler) applyAckDispositions(
+	ctx context.Context,
+	channel, accountID string,
+	req *BridgeOutboxAckRequest,
+	ack *service.AckOutboundResult,
+) {
+	if h == nil || h.ackDisposition == nil || req == nil || ack == nil {
+		return
+	}
+	inputs := make([]service.OutboxAckDispositionInput, 0, len(req.Items)+len(req.MsgIDs))
+	if len(req.Items) > 0 {
+		for _, it := range req.Items {
+			st := it.Status
+			if st == "" {
+				st = model.BridgeAckStatusDelivered
+			}
+			if st != model.BridgeAckStatusDelivered {
+				continue
+			}
+			inputs = append(inputs, service.OutboxAckDispositionInput{
+				MsgID: it.MsgID, ConversationID: it.ConversationID, Status: st,
+			})
+		}
+	} else {
+		st := req.Status
+		if st == "" {
+			st = model.BridgeAckStatusDelivered
+		}
+		if st == model.BridgeAckStatusDelivered {
+			for _, id := range req.MsgIDs {
+				inputs = append(inputs, service.OutboxAckDispositionInput{MsgID: id, Status: st})
+			}
+		}
+	}
+	if len(inputs) == 0 {
+		return
+	}
+	applied, err := h.ackDisposition.Apply(ctx, channel, accountID, inputs)
+	if err != nil {
+		logger.Ctx(ctx).Warn().Err(err).Str("module", "bridge").
+			Str("channel", channel).Str("account_id", accountID).
+			Int("applied", applied).Int("acked_inputs", len(inputs)).
+			Msg("[Bridge] ACK 推进逐消息处置失败；不影响已确认的 outbox ACK 结果")
+		return
+	}
+	if applied > 0 {
+		logger.Ctx(ctx).Info().Str("module", "bridge").
+			Str("channel", channel).Str("account_id", accountID).
+			Int("applied", applied).Int("acked_inputs", len(inputs)).
+			Msg("[Bridge] 真实 ACK 已推进逐入站消息处置到 replied")
+	}
 }
 
 func (h *BridgeIngestHandler) callHandleIngressBatch(ctx context.Context, events []*model.MessageEvent) (*service.InboxIngressBatchResult, error) {

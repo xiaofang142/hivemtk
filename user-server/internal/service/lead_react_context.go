@@ -23,7 +23,7 @@ const (
 func leadReactDispatchRequest(task LeadReactTask, system string, messages []llm.ChatMessage, step string) llm.DispatchRequest {
 	sessionRef, idempotencyKey := intentDispatchCallContext(task.ContextView, string(agentcontext.ExecutionScenarioLeadReact), step)
 	if sessionRef == "" && task.ContextView == nil && task.Scope != nil {
-		sessionRef = strings.TrimSpace(task.Scope.BusLLMSessionID)
+		sessionRef = validatedLLMSessionRef(task.ContextView, task.Scope.BusLLMSessionID)
 	}
 	if idempotencyKey == "" && task.CurrentMessage != "" {
 		idempotencyKey = llm.BuildRequestIdempotencyKey(task.CurrentMessage, string(agentcontext.ExecutionScenarioLeadReact), step)

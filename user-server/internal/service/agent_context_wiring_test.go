@@ -56,6 +56,7 @@ func TestBuildIncomingContextViewGroupUsesGroupRootAndAudienceProof(t *testing.T
 		Platform: model.Platform("telegram"), AccountID: "42", SenderID: "member-1",
 		Content: "在群里问一下", MessageID: "hub:21", IsGroup: true, GroupID: "group-1",
 		ConversationID: "thread-9", OriginalSentAt: time.Unix(200, 0),
+		Visibility: agentcontext.VisibilityMember, Audience: []string{"group-1"},
 	}
 	view, err := buildIncomingContextView(ctx, in, "session-2", builder, time.Unix(300, 0))
 	if err != nil {

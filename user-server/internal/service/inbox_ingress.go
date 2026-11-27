@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"hivemtk-user/internal/cache"
@@ -953,12 +954,21 @@ func (s *InboxIngressService) triggerAIForEvent(ctx context.Context, event *mode
 		// event.MsgType 已被上游（InboundHubMsgType/桥端词表）归一为中台词表类型；
 		// 文本消息此调用逐字节等价于旧口径 event.Content。
 		aiContent := AppendMediaContextToContent(event.Content, event.MsgType, event.MediaURL)
-		// LEAD-04：把共享上下文里对方刚写的标签/备注/摘要送入真实回复模型请求（用户消息输入）。
-		// 提供方由装配点注入；缺失时保持既有行为。建议属性在 PromptBlock 中显式标注，
-		// 不得被当作已发生事实。
+		// H4：另一智能体写入的标签/备注/摘要只能作为结构化事实进入统一 ContextView，
+		// 不得拼进 TriggerInboundAI 的 content——那是“用户本轮原话”，混入会让模型把
+		// 别的智能体的判断当成客户刚说的话。这里只消费数量与摘要指纹，不记原文。
 		if s.sharedBusinessForEvent != nil {
 			if shared := s.sharedBusinessForEvent(ctx, event); !shared.empty() {
-				aiContent = aiContent + "\n" + shared.PromptBlock()
+				noteCount := len(shared.Notes) + len(shared.Tags)
+				if strings.TrimSpace(shared.Summary) != "" {
+					noteCount++
+				}
+				logger.Ctx(ctx).Debug().
+					Str("channel", event.Channel).
+					Str("conv_id", event.ConversationID).
+					Int("shared_business_count", noteCount).
+					Str("shared_business_digest", fmt.Sprintf("%x", sha256.Sum256([]byte(shared.PromptBlock())))[:12]).
+					Msg("[Inbox] 共享业务信息仅作结构化事实出口，不进入用户当前消息")
 			}
 		}
 		logger.Ctx(ctx).Info().

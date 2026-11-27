@@ -100,9 +100,11 @@ func (r *sharedContextRepoStub) List(_ context.Context, _ uint, _ int) ([]model.
 	return nil, nil
 }
 
-// 回复侧：入站编排把共享备注/标签写进实际 TriggerInboundAI 的 content（用户消息输入），
-// 用假 trigger 捕获真实模型请求入参作为消费证据。
-func TestInboxTrigger_CarriesOtherSideNoteIntoAIContent(t *testing.T) {
+// 回复侧（H4）：另一智能体写入的备注/标签/摘要只能作为结构化事实进入统一
+// ContextView，绝不能拼进 TriggerInboundAI 的 content——那是"用户当前消息"，
+// 把别人的备注塞进去等于让模型把另一智能体的判断当成客户刚说的话。
+// 用假 trigger 捕获真实模型请求入参作为证据。
+func TestInboxTrigger_DoesNotAppendOtherSideNoteIntoAIContent(t *testing.T) {
 	t.Setenv("AI_DEBOUNCE_SECONDS", "0")
 	svc := NewInboxIngressService()
 	tr := &fakeAITrigger{}
@@ -115,7 +117,9 @@ func TestInboxTrigger_CarriesOtherSideNoteIntoAIContent(t *testing.T) {
 		},
 		Summary: "双方已交换名片",
 	}
+	providerCalls := 0
 	svc.SetSharedBusinessProvider(func(_ context.Context, _ *model.MessageEvent) SharedBusinessInput {
+		providerCalls++
 		return SharedBusinessInputFromContext(sharedConv, ContextNoteNamespaceAutoReply, sharedBusinessInputBudget)
 	})
 	ev := &model.MessageEvent{
@@ -128,12 +132,17 @@ func TestInboxTrigger_CarriesOtherSideNoteIntoAIContent(t *testing.T) {
 	if tr.called != 1 {
 		t.Fatalf("期望触发 AI 一次，实际 %d", tr.called)
 	}
-	for _, want := range []string{"线索侧刚判定为采购需求", "重点客户", "双方已交换名片"} {
-		if !strings.Contains(tr.lastContent, want) {
-			t.Fatalf("回复侧模型输入未消费对方信息 %q: %s", want, tr.lastContent)
+	// 当前用户消息只能是客户原文（媒体上下文如有则是正文的一部分），不含任何共享备注。
+	if tr.lastContent != "你好" {
+		t.Fatalf("用户当前消息不得拼接共享业务提示: %q", tr.lastContent)
+	}
+	for _, forbidden := range []string{"线索侧刚判定为采购需求", "重点客户", "双方已交换名片", "非已发生事实"} {
+		if strings.Contains(tr.lastContent, forbidden) {
+			t.Fatalf("共享备注不得进入用户当前消息 %q: %s", forbidden, tr.lastContent)
 		}
 	}
-	if strings.Contains(tr.lastContent, "自己刚写的建议") {
-		t.Fatal("回复侧不得把自己写的备注当对方信息再消费")
+	// 提供方保留：供统一 ContextFactProvider / 结构化出口消费，只记数量/摘要，不进用户消息。
+	if providerCalls == 0 {
+		t.Fatal("共享业务提供方应保留可调用（结构化事实出口），不得直接删除")
 	}
 }

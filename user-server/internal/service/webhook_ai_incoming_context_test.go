@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	agentcontext "hivemtk-user/internal/aiagent/context"
 	"hivemtk-user/internal/model"
 )
 
@@ -58,6 +59,15 @@ func TestNewInboundHubMessagePreservesAuthoritativeMetadata(t *testing.T) {
 	if !got.IsGroup || got.GroupID != "group-1" || got.Extra["group_name"] != "客户群" {
 		t.Fatalf("群聊元数据应保留, got is_group=%v group_id=%q extra=%v", got.IsGroup, got.GroupID, got.Extra)
 	}
+	if got.Visibility != model.VisibilityMember {
+		t.Fatalf("群入站必须带成员级可见性证明, got %q", got.Visibility)
+	}
+	if len(got.AudienceJSON) != 1 || got.AudienceJSON[0] != "group-1" {
+		t.Fatalf("群入站 audience 必须包含 group_id, got %v", got.AudienceJSON)
+	}
+	if got.VisibilityEvidence["source"] != "channel_ingress" {
+		t.Fatalf("可见性证据应记录来源, got %v", got.VisibilityEvidence)
+	}
 }
 
 func TestNewInboundHubMessageFallbackWithoutMeta(t *testing.T) {
@@ -84,6 +94,8 @@ func TestNewIncomingContextPreservesSourceMetadata(t *testing.T) {
 		Direction:      "inbound",
 		IsGroup:        true,
 		GroupID:        "group-1",
+		Visibility:     model.VisibilityMember,
+		AudienceJSON:   model.JSONStrings{"group-1"},
 		PlatformMsgID:  "platform-1",
 		SentAt:         time.Date(2026, 11, 27, 9, 0, 0, 0, time.UTC),
 		Extra: model.JSONMap{
@@ -111,5 +123,8 @@ func TestNewIncomingContextPreservesSourceMetadata(t *testing.T) {
 	}
 	if !in.IsGroup || in.GroupID != "group-1" || in.GroupName != "客户群" {
 		t.Fatalf("群聊元数据应保留, got %+v", in)
+	}
+	if in.Visibility != agentcontext.VisibilityMember || len(in.Audience) != 1 || in.Audience[0] != "group-1" {
+		t.Fatalf("权威可见性/audience 未映射到入站上下文: visibility=%q audience=%v", in.Visibility, in.Audience)
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	agentcontext "hivemtk-user/internal/aiagent/context"
+	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
 )
 
@@ -24,12 +25,16 @@ type AgentContextBuilderInput struct {
 	SharedBusiness []agentcontext.BusinessFact
 	OlderSummary   *agentcontext.MemorySummary
 	Participants   []agentcontext.Participant
-	PromptVersion  string
-	PolicyKind     string
-	InputBudget    agentcontext.ContextBudget
-	OutputBudget   agentcontext.OutputBudget
-	Limit          int
-	Now            time.Time
+	// Memberships 是当前发言者在群内的成员关系证据；群聊历史过滤时交给
+	// FilterVisibleGroupMessages 做 fail-closed 判定。缺省时 member 可见性
+	// 只能靠消息显式 audience 证明。
+	Memberships   []model.ConversationMembership
+	PromptVersion string
+	PolicyKind    string
+	InputBudget   agentcontext.ContextBudget
+	OutputBudget  agentcontext.OutputBudget
+	Limit         int
+	Now           time.Time
 }
 
 type ConversationContextBuilder struct {
@@ -56,7 +61,7 @@ func (b *ConversationContextBuilder) Build(ctx context.Context, input AgentConte
 	if err != nil {
 		return nil, err
 	}
-	history := builderVisibleHistory(rows, input.Current.SenderID)
+	history := builderVisibleHistory(rows, input.Current.SenderID, input.Scope, input.Memberships)
 	customer := builderFilterCustomer(input.Customer, input.Current.SenderID)
 	lead := builderFilterLead(input.Lead, input.Current.SenderID)
 	shared := builderFilterFacts(input.SharedBusiness, input.Current.SenderID)
@@ -134,11 +139,23 @@ func builderMessageQuery(input AgentContextBuilderInput) (UnifiedMessageQuery, e
 	}, nil
 }
 
-func builderVisibleHistory(rows []UnifiedMessage, currentSenderID string) []agentcontext.ContextMessage {
-	out := make([]agentcontext.ContextMessage, 0, len(rows))
+func builderVisibleHistory(rows []UnifiedMessage, currentSenderID string, scope agentcontext.ConversationScope, memberships []model.ConversationMembership) []agentcontext.ContextMessage {
+	messages := make([]agentcontext.ContextMessage, 0, len(rows))
 	for _, row := range rows {
-		if builderCanSee(row.ContextMessage, currentSenderID) {
-			out = append(out, row.ContextMessage)
+		messages = append(messages, row.ContextMessage)
+	}
+	var out []agentcontext.ContextMessage
+	if scope.IsGroup {
+		// 群聊历史统一走 fail-closed 过滤器：public 放行；member 必须有显式
+		// audience 或可证明的成员区间；private 必须显式 audience；未知可见性
+		// 永不授权。单聊仍沿用原有 audience/发言者口径。
+		out = FilterVisibleGroupMessages(messages, memberships, scope, currentSenderID).Visible
+	} else {
+		out = make([]agentcontext.ContextMessage, 0, len(rows))
+		for _, msg := range messages {
+			if builderCanSee(msg, currentSenderID) {
+				out = append(out, msg)
+			}
 		}
 	}
 	sort.SliceStable(out, func(i, j int) bool {

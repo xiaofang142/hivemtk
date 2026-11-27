@@ -166,7 +166,7 @@ func (e *SalesEngine) runAgentLoop(
 	})
 
 	historyMsgs := salesGenerateHistoryMessages(req.ContextView)
-	if len(historyMsgs) == 0 && e.sessionMsgRepo != nil && req.SessionID != "" {
+	if len(historyMsgs) == 0 && allowRawSessionHistory(req) && e.sessionMsgRepo != nil && req.SessionID != "" {
 		// 无统一上下文时保留既有 SessionMessage 回退，避免升级期丢失历史。
 		if hist, herr := e.sessionMsgRepo.ListRecentDescBySessionID(ctx, req.SessionID, agentLoopHistoryMaxCandidates()); herr == nil {
 			hist = excludeSystemHistoryNotices(hist)
@@ -902,7 +902,14 @@ func (e *SalesEngine) buildPrompt(
 		sb.WriteString("\n")
 	}
 
-	if e.sessionMsgRepo != nil && req.SessionID != "" {
+	if req.ContextView != nil {
+		// 统一上下文已装配：只使用经过 audience/visibility 过滤的历史。
+		if block := renderContextHistoryForPrompt(req.ContextView); block != "" {
+			sb.WriteString(block)
+		}
+	} else if allowRawSessionHistory(req) && e.sessionMsgRepo != nil && req.SessionID != "" {
+		// 仅存量无 ContextView 的调用保留原始 SessionMessage 回退；
+		// 群聊或新链路禁止走该分支，防止绕过隐私过滤。
 		hist := e.fetchHistoryWithinTokenBudget(req.SessionID, req.UserMessage)
 		if len(hist) > 0 {
 			var hb strings.Builder

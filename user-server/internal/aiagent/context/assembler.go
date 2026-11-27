@@ -111,7 +111,11 @@ func AssembleAgentContext(input ContextAssemblerInput) (*AgentConversationContex
 	visibilityProof := "scope_verified"
 	switch input.Policy.Kind {
 	case SourcePolicyGroup:
-		visibilityProof = "group_audienceVerified"
+		if groupAudienceProven(input, kept) {
+			visibilityProof = "group_audienceVerified"
+		} else {
+			visibilityProof = "visibility_unproven"
+		}
 	case SourcePolicyUnproven:
 		visibilityProof = "visibility_unproven"
 	}
@@ -153,6 +157,40 @@ func AssembleAgentContext(input ContextAssemblerInput) (*AgentConversationContex
 			SnapshotAt:           snapshotAt,
 		},
 	}, nil
+}
+
+// groupAudienceProven 只在实际消息元数据能证明可见性时授予群 audience 证明。
+// 不能仅凭 SourcePolicyGroup（来自 is_group 标志）就认为可见性已被验证。
+func groupAudienceProven(input ContextAssemblerInput, kept []ContextMessage) bool {
+	if strings.TrimSpace(input.Scope.GroupID) == "" {
+		return false
+	}
+	if !input.Current.Visibility.IsProven() {
+		return false
+	}
+	if !messageVisibleToGroup(input.Current, input.Scope.GroupID) {
+		return false
+	}
+	for _, msg := range kept {
+		if !msg.Visibility.IsProven() || !messageVisibleToGroup(msg, input.Scope.GroupID) {
+			return false
+		}
+	}
+	return true
+}
+
+func messageVisibleToGroup(msg ContextMessage, groupID string) bool {
+	switch msg.Visibility {
+	case VisibilityPublic:
+		return true
+	case VisibilityMember, VisibilityPrivate:
+		for _, audience := range msg.Audience {
+			if strings.TrimSpace(audience) == groupID {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func validateAssemblerInput(input ContextAssemblerInput) error {

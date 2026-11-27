@@ -242,7 +242,7 @@ func intentDispatchCallContext(view *agentcontext.AgentConversationContext, exec
 	if view == nil {
 		return "", ""
 	}
-	sessionRef = strings.TrimSpace(view.Scope.BusLLMSessionID)
+	sessionRef = validatedLLMSessionRef(view, view.Scope.BusLLMSessionID)
 	messageID := view.Current.MessageID
 	if messageID == "" {
 		messageID = view.SnapshotID
