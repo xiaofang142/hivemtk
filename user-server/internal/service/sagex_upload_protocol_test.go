@@ -6,8 +6,8 @@ import (
 	"testing"
 )
 
-// TestSageXUnifiedProtocolVersion 闸 12（G-04）：SageX 上报必须接受统一协议标识
-// hivemtk.channel.v1，并保留 schema_version=1.0 别名；未知版本仍 fail-closed。
+// TestSageXUnifiedProtocolVersion 闸 12：SageX 上报只接受统一协议标识
+// hivemtk.channel.v1；schema_version=1.0 与缺省值一律拒绝，未知版本 fail-closed。
 func TestSageXUnifiedProtocolVersion(t *testing.T) {
 	s := &SageXUploadService{}
 	base := func() *SageXUploadRequest {
@@ -15,10 +15,10 @@ func TestSageXUnifiedProtocolVersion(t *testing.T) {
 	}
 
 	legacy := base()
-	legacy.SchemaVersion = SageXSchemaVersion
+	legacy.SchemaVersion = "1.0"
 	_, err := s.HandleUpload(context.Background(), "", legacy, 0)
-	if !errors.Is(err, ErrSageXUnauthorized) {
-		t.Errorf("旧 schema_version 应被接受（走到鉴权阶段），实际 err=%v", err)
+	if !errors.Is(err, ErrSageXUnsupportedSchema) {
+		t.Errorf("旧 schema_version=1.0 必须被拒绝，实际 err=%v", err)
 	}
 
 	canonical := base()
@@ -26,6 +26,13 @@ func TestSageXUnifiedProtocolVersion(t *testing.T) {
 	_, err = s.HandleUpload(context.Background(), "", canonical, 0)
 	if !errors.Is(err, ErrSageXUnauthorized) {
 		t.Errorf("统一 protocol_version 应被接受（走到鉴权阶段），实际 err=%v", err)
+	}
+
+	canonicalSchema := base()
+	canonicalSchema.SchemaVersion = SageXProtocolVersion
+	_, err = s.HandleUpload(context.Background(), "", canonicalSchema, 0)
+	if !errors.Is(err, ErrSageXUnauthorized) {
+		t.Errorf("同值 schema_version 别名应被接受（走到鉴权阶段），实际 err=%v", err)
 	}
 
 	unknown := base()

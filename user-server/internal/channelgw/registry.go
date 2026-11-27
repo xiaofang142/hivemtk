@@ -14,7 +14,7 @@ import (
 // 同源自本注册表（bridge 包 SetBridgeChannels 装配）。
 const (
 	// OutboundPathBridgeOutbox 桥接出库队列：AI 回复落 message_hub(status=pending)，
-	// 由浏览器扩展/桌面伴生经 GET /api/bridge/outbox（或 WS outbound_reply 帧）领取投递。
+	// 由浏览器扩展/桌面伴生经 GET /api/channelbus/outbox（或 WS outbound_reply 帧）领取投递。
 	OutboundPathBridgeOutbox = "bridge_outbox"
 	// OutboundPathNone 无服务端出站路径（只入站/暂不出站的渠道预留）。
 	OutboundPathNone = "none"
@@ -212,9 +212,9 @@ func (r *Registry) Names() []string {
 // OutboundPath 能力集合与 webhook_outbound 桥接分支的恒等亦由 registry_parity_test.go
 // 双向钉住（registry 有能力但出站不认 = 红；出站认但 registry 无能力 = 红）。
 //
-// HTTP 传输：bridge 扩展三通道（POST /api/bridge/ingest、GET /api/bridge/outbox、
-// POST /api/bridge/outbox/ack）。
-// WebSocket 传输：GET /api/ws/channel（register → inbound → ack；出站推帧）。
+// HTTP 传输：bridge 扩展三通道（POST /api/channelbus/ingest、GET /api/channelbus/outbox、
+// POST /api/channelbus/outbox/ack）。
+// WebSocket 传输：GET /api/channelbus/ws（register → inbound → ack；出站推帧）。
 var Default = NewRegistry()
 
 func init() {
@@ -242,7 +242,7 @@ func init() {
 		{Name: model.ChannelPDD, Transports: []Transport{TransportHTTP, TransportWebSocket}, Label: "拼多多", Experimental: true, OutboundPath: OutboundPathBridgeOutbox, MineMode: MineModeBridge},
 		// 2026-11-18 电商店铺网页桥五渠道骨架（CH-15/18/19/28/35）：服务端全链注册 +
 		// 桥侧 fail-closed 适配器（无真机校准选择器=拒启/拒发），一律 Experimental。
-		// 入站只走浏览器桥 POST /api/bridge/ingest，出站走 bridge_outbox 能力位。
+		// 入站只走浏览器桥 POST /api/channelbus/ingest，出站走 bridge_outbox 能力位。
 		{Name: model.ChannelTaobao, Transports: []Transport{TransportHTTP, TransportWebSocket}, Label: "淘宝/天猫(千牛)", Experimental: true, OutboundPath: OutboundPathBridgeOutbox, MineMode: MineModeBridge},
 		{Name: model.ChannelDouyinShop, Transports: []Transport{TransportHTTP, TransportWebSocket}, Label: "抖店飞鸽", Experimental: true, OutboundPath: OutboundPathBridgeOutbox, MineMode: MineModeBridge},
 		{Name: model.ChannelKuaishouShop, Transports: []Transport{TransportHTTP, TransportWebSocket}, Label: "快手小店(快语)", Experimental: true, OutboundPath: OutboundPathBridgeOutbox, MineMode: MineModeBridge},

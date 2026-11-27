@@ -138,11 +138,11 @@ api POST /api/clue/import '[]'
 ##############################################
 echo "--- 7. 桥接端点 ---"
 # 7.1 ingest 无 token（设计公开）
-out=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H 'Content-Type: application/json' -d '{}' "$BASE/api/bridge/ingest")
+out=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H 'Content-Type: application/json' -d '{}' "$BASE/api/channelbus/ingest")
 [ "$out" = "400" ] || [ "$out" = "200" ] && pass "bridge/ingest 公开 HTTP=$out" || fail "bridge/ingest 异常 $out"
 
 # 7.2 outbox 无 token
-out=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/api/bridge/outbox")
+out=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/api/channelbus/outbox")
 [ "$out" = "401" ] || [ "$out" = "400" ] && pass "bridge/outbox 需 token HTTP=$out" || fail "bridge/outbox 异常 $out"
 
 ##############################################

@@ -8,17 +8,17 @@
 // 然后用 curl 模拟扩展端请求：
 //
 //	# 1. 短请求（无 expect_reply）：立即返回，无 outbound_replies
-//	curl -X POST 'http://localhost:18080/api/bridge/ingest?channel=xiaohongshu&account_id=xhs_001&conversation_id=conv1' \
+//	curl -X POST 'http://localhost:18080/api/channelbus/ingest?channel=xiaohongshu&account_id=xhs_001&conversation_id=conv1' \
 //	  -H 'Content-Type: application/json' \
 //	  -d '{"channel":"xiaohongshu","account_id":"xhs_001","messages":[{"event_id":"e1","content":"你好","sender_id":"u1","sender_type":"customer","msg_type":"text","conversation_id":"conv1","timestamp":1700000000000}]}'
 //
 //	# 2. 长轮询：AI 模拟 1.5s 后入 reply，扩展端阻塞到 reply 出现
-//	curl -X POST 'http://localhost:18080/api/bridge/ingest?channel=xiaohongshu&account_id=xhs_002&conversation_id=conv2' \
+//	curl -X POST 'http://localhost:18080/api/channelbus/ingest?channel=xiaohongshu&account_id=xhs_002&conversation_id=conv2' \
 //	  -H 'Content-Type: application/json' \
 //	  -d '{"channel":"xiaohongshu","account_id":"xhs_002","messages":[{"event_id":"e2","content":"在吗","sender_id":"u2","sender_type":"customer","msg_type":"text","conversation_id":"conv2","timestamp":1700000000000}],"expect_reply":true,"timeout_ms":5000}'
 //
 //	# 3. 5min 内容去重：相同 content 第二次返回 duplicate
-//	curl -X POST 'http://localhost:18080/api/bridge/ingest?channel=tiktok&account_id=tt_001&conversation_id=conv4' \
+//	curl -X POST 'http://localhost:18080/api/channelbus/ingest?channel=tiktok&account_id=tt_001&conversation_id=conv4' \
 //	  -H 'Content-Type: application/json' \
 //	  -d '{"channel":"tiktok","account_id":"tt_001","messages":[{"event_id":"e_dup","content":"重复消息","sender_id":"u4","sender_type":"customer","msg_type":"text","conversation_id":"conv4","timestamp":1700000000000}]}'
 //
@@ -162,7 +162,7 @@ func main() {
 
 	m := newMockInbox(aiDelay, aiReply)
 	h := bridge.NewBridgeIngestHandlerWithMock(m.mockHandle, m.mockPersist)
-	r.POST("/api/bridge/ingest", h.HandleHTTPIngest)
+	r.POST("/api/channelbus/ingest", h.HandleHTTPIngest)
 
 	r.GET("/healthz", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok", "ai_delay_ms": aiDelay.Milliseconds()})
@@ -187,7 +187,7 @@ func main() {
 		log.Printf("  AI delay: %v  |  default reply: %q", aiDelay, aiReply)
 		log.Printf("============================================================")
 		log.Printf("Endpoints:")
-		log.Printf("  POST /api/bridge/ingest   (HTTP long-poll ingest)")
+		log.Printf("  POST /api/channelbus/ingest   (HTTP long-poll ingest)")
 		log.Printf("  GET  /healthz              (liveness)")
 		log.Printf("  GET  /mock/state           (mock state inspection)")
 		log.Printf("")

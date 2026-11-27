@@ -76,17 +76,14 @@ var subscriptionAllowExact = []string{
 
 // subscriptionCustomerFacing 客户面显式不锁（②，产品裁决写入 spec）。
 //
-// widget/chat public、chat WebSocket、bridge ingress/outbox、wechat webhook
+// widget/chat public、chat WebSocket、总线 ingress/outbox、wechat webhook
 // 在 expired 时保持可用 —— 商户存量客户的 AI 应答不断线；锁的是员工工作台业务面。
 // 模式语义与 module_gate 相同：`*` 吃掉恰好一段；前缀以 `/*` 结尾表示整棵子树。
 var subscriptionCustomerFacing = []string{
-	"/api/chat/public/*", // widget 对话面
-	"/api/ws/visitor",    // 访客 WebSocket
-	"/api/bridge/ingest", // bridge ingress（扩展端上报）
-	"/api/bridge/outbox", // bridge outbox（含 /ack /sse 子路径见下）
-	"/api/bridge/outbox/*",
-	"/api/channelbus/ingest", // canonical 线路：与旧 bridge 路径同构
-	"/api/channelbus/outbox",
+	"/api/chat/public/*",     // widget 对话面
+	"/api/ws/visitor",        // 访客 WebSocket
+	"/api/channelbus/ingest", // 消息总线 ingress（扩展端上报）
+	"/api/channelbus/outbox", // 消息总线 outbox（含 /ack /sse 子路径见下）
 	"/api/channelbus/outbox/*",
 	"/api/webhook/wechat/*", // wechat webhook
 }

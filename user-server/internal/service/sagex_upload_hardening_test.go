@@ -152,7 +152,7 @@ func (i *hardeningIngress) HandleIngressMessage(context.Context, *model.MessageE
 
 func hardeningUploadRequest(installationID string) *SageXUploadRequest {
 	return &SageXUploadRequest{
-		SchemaVersion:  SageXSchemaVersion,
+		SchemaVersion:  SageXProtocolVersion,
 		BatchID:        "batch-hardening",
 		InstallationID: installationID,
 		Events: []SageXEventItem{{

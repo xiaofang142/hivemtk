@@ -320,11 +320,15 @@ export const BRIDGE_PROTOCOL_V2 = Object.freeze({
     CONVERSATION_ID: 'conversation_id',
     ERROR: 'error',
     MSG_ID: 'msg_id',
+    CLAIMED_AT: 'claimed_at',
+    PUSH_ATTEMPTS: 'push_attempts',
+    FENCE: 'fence',
   }),
-  // ack 请求终态（P0-3）
+  // ack 请求终态（P0-3）；unknown 是"已提交但结果不明"的真终态，服务端据此对账。
   TERMINAL: Object.freeze({
     DELIVERED: 'delivered',
     FAILED: 'failed',
+    UNKNOWN: 'unknown',
   }),
   // ack 响应 items[].status（P3-D）
   RESPONSE_STATUS: Object.freeze({

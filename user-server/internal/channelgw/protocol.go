@@ -204,7 +204,7 @@ func applyIngestExtra(ev *model.MessageEvent, extra map[string]any) {
 // IngestRequest HTTP 上报请求体（与扩展端 http-ingest.js 严格对齐）。
 //
 // ExpectReply / TimeoutMs 目前**服务端不消费**：ingest 恒立即返回，回复由扩展经
-// SSE 推送或 `/api/bridge/outbox` 轮询取回。扩展仍会带 timeout_ms（uplink.js），
+// SSE 推送或 `/api/channelbus/outbox` 轮询取回。扩展仍会带 timeout_ms（uplink.js），
 // 它只是一个被忽略的字段 —— 别把它当成"这次请求会阻塞到回复或超时"。
 type IngestRequest struct {
 	V              int              `json:"v,omitempty"`
@@ -288,6 +288,10 @@ type OutboxMessage struct {
 	IsAIReply      bool           `json:"is_ai_reply"`
 	CreatedAt      time.Time      `json:"created_at"`
 	Extra          map[string]any `json:"extra,omitempty"`
+
+	// 认领栅栏锚点：客户端 ack 时原样回传 claimed_at，服务端据此拒绝陈旧认领的翻转。
+	ClaimedAt    *time.Time `json:"claimed_at,omitempty"`
+	PushAttempts int        `json:"push_attempts,omitempty"`
 }
 
 // Frame 通用帧（WS 传输线路格式；HTTP 传输使用 IngestRequest/Response）。

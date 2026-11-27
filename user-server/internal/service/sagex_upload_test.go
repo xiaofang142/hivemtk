@@ -186,7 +186,7 @@ func newSageXUploadTestService(
 func TestSageXUpload_Unauthorized(t *testing.T) {
 	svc := newSageXUploadTestService(&fakeSageXInstRepo{}, &fakeSageXReceiptRepo{}, &fakeSageXIngress{})
 	_, err := svc.HandleUpload(context.Background(), "bad", &SageXUploadRequest{
-		SchemaVersion: SageXSchemaVersion, BatchID: "b1", InstallationID: "i1",
+		SchemaVersion: SageXProtocolVersion, BatchID: "b1", InstallationID: "i1",
 		Events: []SageXEventItem{{EventID: "e1", EventType: "notification.posted"}},
 	}, 10)
 	if !errors.Is(err, ErrSageXUnauthorized) {
@@ -201,7 +201,7 @@ func TestSageXUpload_SchemaAndBatchValidation(t *testing.T) {
 	if !errors.Is(err, ErrSageXUnsupportedSchema) {
 		t.Fatalf("expected schema error, got %v", err)
 	}
-	_, err = svc.HandleUpload(context.Background(), sageXUploadIdentifyCode, &SageXUploadRequest{SchemaVersion: SageXSchemaVersion, BatchID: "", InstallationID: "i1", Events: []SageXEventItem{{EventID: "e1"}}}, 10)
+	_, err = svc.HandleUpload(context.Background(), sageXUploadIdentifyCode, &SageXUploadRequest{SchemaVersion: SageXProtocolVersion, BatchID: "", InstallationID: "i1", Events: []SageXEventItem{{EventID: "e1"}}}, 10)
 	if !errors.Is(err, ErrSageXInvalidEnvelope) {
 		t.Fatalf("expected invalid envelope, got %v", err)
 	}
@@ -212,7 +212,7 @@ func TestSageXUpload_DuplicateInBatchNotAcked(t *testing.T) {
 	ingress := &fakeSageXIngress{}
 	svc := newSageXUploadTestService(instRepo, &fakeSageXReceiptRepo{}, ingress)
 	resp, err := svc.HandleUpload(context.Background(), sageXUploadIdentifyCode, &SageXUploadRequest{
-		SchemaVersion: SageXSchemaVersion, BatchID: "b1", InstallationID: "i1",
+		SchemaVersion: SageXProtocolVersion, BatchID: "b1", InstallationID: "i1",
 		Events: []SageXEventItem{
 			{EventID: "e1", EventType: "notification.posted", Source: SageXSource{Platform: "android", Package: "com.tencent.mobileqq"}, Conversation: SageXConversation{Type: "private", Title: "Alice"}, Message: SageXMessage{Text: "hi"}},
 			{EventID: "e1", EventType: "notification.posted", Source: SageXSource{Platform: "android", Package: "com.tencent.mobileqq"}, Conversation: SageXConversation{Type: "private", Title: "Alice"}, Message: SageXMessage{Text: "hi"}},
@@ -238,7 +238,7 @@ func TestSageXUpload_IdempotentReceiptReturnsDuplicate(t *testing.T) {
 	ingress := &fakeSageXIngress{}
 	svc := newSageXUploadTestService(instRepo, receiptRepo, ingress)
 	resp, err := svc.HandleUpload(context.Background(), sageXUploadIdentifyCode, &SageXUploadRequest{
-		SchemaVersion: SageXSchemaVersion, BatchID: "b2", InstallationID: "i1",
+		SchemaVersion: SageXProtocolVersion, BatchID: "b2", InstallationID: "i1",
 		Events: []SageXEventItem{{EventID: "e1", EventType: "notification.posted", Source: SageXSource{Package: "com.tencent.mobileqq"}, Conversation: SageXConversation{Type: "private", Title: "A"}, Message: SageXMessage{Text: "x"}}},
 	}, 10)
 	if err != nil {
@@ -257,7 +257,7 @@ func TestSageXUpload_MapsQQAndWeChat(t *testing.T) {
 	ingress := &fakeSageXIngress{}
 	svc := newSageXUploadTestService(instRepo, &fakeSageXReceiptRepo{}, ingress)
 	resp, err := svc.HandleUpload(context.Background(), sageXUploadIdentifyCode, &SageXUploadRequest{
-		SchemaVersion: SageXSchemaVersion, BatchID: "b1", InstallationID: "i1",
+		SchemaVersion: SageXProtocolVersion, BatchID: "b1", InstallationID: "i1",
 		Events: []SageXEventItem{
 			{EventID: "e1", EventType: "notification.posted", Source: SageXSource{Platform: "android", Package: "com.tencent.mobileqq"}, Conversation: SageXConversation{Type: "direct", Title: "Alice"}, Message: SageXMessage{Sender: "Alice", Text: "hi", NotificationPostedAt: 1795435200000}, CapturedAt: "2026-11-23T10:00:01Z"},
 			{EventID: "e2", EventType: "notification.posted", Source: SageXSource{Platform: "android", Package: "com.tencent.mm"}, Conversation: SageXConversation{Type: "group", Title: "G"}, Message: SageXMessage{Sender: "Bob", Text: "yo"}},
@@ -302,13 +302,13 @@ func TestSageXUpload_NonTextNotificationsRejected(t *testing.T) {
 			ingress := &fakeSageXIngress{}
 			svc := newSageXUploadTestService(instRepo, receiptRepo, ingress)
 			resp, err := svc.HandleUpload(context.Background(), sageXUploadIdentifyCode, &SageXUploadRequest{
-				SchemaVersion: SageXSchemaVersion, BatchID: "b1", InstallationID: "i1",
+				SchemaVersion: SageXProtocolVersion, BatchID: "b1", InstallationID: "i1",
 				Events: []SageXEventItem{{
 					EventID: "e1", EventType: "notification.posted", CapturedAt: "2026-11-23T10:00:00Z",
-					Source: SageXSource{Platform: "android", Package: "com.tencent.mobileqq"},
-					ParseStatus: tc.parseStatus,
+					Source:       SageXSource{Platform: "android", Package: "com.tencent.mobileqq"},
+					ParseStatus:  tc.parseStatus,
 					Conversation: SageXConversation{Type: "group", Title: "项目群"},
-					Message: SageXMessage{Sender: "张三", Text: tc.text},
+					Message:      SageXMessage{Sender: "张三", Text: tc.text},
 				}},
 			}, 10)
 			if err != nil {
@@ -333,7 +333,7 @@ func TestSageXUpload_UnknownParseStatusWithEmptyTextNotIngested(t *testing.T) {
 	ingress := &fakeSageXIngress{}
 	svc := newSageXUploadTestService(instRepo, &fakeSageXReceiptRepo{}, ingress)
 	resp, err := svc.HandleUpload(context.Background(), sageXUploadIdentifyCode, &SageXUploadRequest{
-		SchemaVersion: SageXSchemaVersion, BatchID: "b1", InstallationID: "i1",
+		SchemaVersion: SageXProtocolVersion, BatchID: "b1", InstallationID: "i1",
 		Events: []SageXEventItem{{
 			EventID: "e1", EventType: "notification.posted", Source: SageXSource{Package: "com.tencent.mm"},
 			ParseStatus: "some-future-status", Message: SageXMessage{Text: "  "},
@@ -354,7 +354,7 @@ func TestSageXUpload_UnsupportedPackageRejected(t *testing.T) {
 	instRepo := &fakeSageXInstRepo{byToken: map[string]*model.SageXInstallation{"tok": {TenantID: 1, ID: 1, InstallationID: "i1", Token: "tok", Status: 1}}}
 	svc := newSageXUploadTestService(instRepo, &fakeSageXReceiptRepo{}, &fakeSageXIngress{})
 	resp, err := svc.HandleUpload(context.Background(), sageXUploadIdentifyCode, &SageXUploadRequest{
-		SchemaVersion: SageXSchemaVersion, BatchID: "b1", InstallationID: "i1",
+		SchemaVersion: SageXProtocolVersion, BatchID: "b1", InstallationID: "i1",
 		Events: []SageXEventItem{{EventID: "e1", EventType: "notification.posted", Source: SageXSource{Package: "com.unknown.app"}, Conversation: SageXConversation{Type: "private", Title: "A"}, Message: SageXMessage{Text: "x"}}},
 	}, 10)
 	if err != nil {

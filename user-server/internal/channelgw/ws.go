@@ -111,7 +111,7 @@ func NewWSTransport(pipeline IngressPipeline, registry *Registry) *WSTransport {
 	}
 }
 
-// HandleWS gin 处理器：GET /api/ws/channel。
+// HandleWS gin 处理器：GET /api/channelbus/ws。
 // 握手（register）通过后进入双泵循环，连接断开才返回。
 func (t *WSTransport) HandleWS(c *gin.Context) {
 	conn, err := t.upgrader.Upgrade(c.Writer, c.Request, nil)

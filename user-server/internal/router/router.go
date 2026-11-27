@@ -282,9 +282,7 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		BucketSize: service.GlobalConfigParam().GetInt(context.Background(), "ratelimit", "global_bucket", 20000),
 		Enabled:    true,
 		ExemptPaths: []string{
-			"/api/bridge/ingest",
-			"/api/ws/channel",
-			// canonical 端点与旧路径必须同构：迁移后批量上报不能被全局桶 429。
+			// 只保留 canonical 总线端点：批量上报与 WS 不能被全局桶 429。
 			"/api/channelbus/ingest",
 			"/api/channelbus/ws",
 		},
@@ -773,45 +771,28 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 
 		bridgeIngressSvc.SetBridgeLeadProcessor(bridgeIngressSvc.ProcessBridgeLead)
 
-		bridgeWS := r.Group("/api")
-		bridgeWS.Use(middleware.InitGuard())
-
-		bridgeWS.Use(middleware.BridgeIngressGuard())
-
-		bridgeWS.POST("/bridge/ingest", bridgeHandler.HandleHTTPIngest)
-		bridgeWS.GET("/bridge/outbox", bridgeHandler.GetBridgeOutbox)
-		bridgeWS.POST("/bridge/outbox/ack", bridgeHandler.AckBridgeOutbox)
-		// 统一渠道网关（identify_code only）：同一地址上报/下发/ack
-		bridgeWS.POST("/bridge/gateway", bridgeHandler.HandleGateway)
-		bridgeWS.GET("/bridge/gateway", bridgeHandler.GetBridgeOutbox)
-
-		// B1-a：选择器健康上报。挂在桥接组里（只认实例级桥接凭证），与读判定结果
-		// 的 GET 分开——见 controller.BridgeSelectorHealthController 文件头。
-		selectorHealthCtrl := controller.NewBridgeSelectorHealthController(
-			service.NewSelectorHealthService(repository.NewBridgeSelectorHealthRepository(gormDB)))
-		bridgeWS.POST("/bridge/selector-health", selectorHealthCtrl.Ingest)
-
-		bridgeWS.GET("/bridge/outbox/sse", bridgeHandler.HandleOutboxSSE)
-		bridgeWS.GET("/bridge/outbox/wake", controller.NewBridgeOutboxWakeController(service.GlobalBridgeOutboxWake).Stream)
-
-		bridgeWS.GET("/bridge/capabilities", controller.NewBridgeCapabilitiesController().GetCapabilities)
-
-		// 统一线路协议（canonical）端点：与 /api/bridge/* 共用完全相同的 handler，
-		// 只是路径归一到 /api/channelbus/*。旧路径继续保留，已发布扩展无需立即升级；
-		// 新接入方一律使用本组，避免"每接一个渠道新增一套 URL"。
-		// 鉴权与旧组严格同构：InitGuard + BridgeIngressGuard（识别码只走头/query）。
+		// 统一渠道消息总线：**唯一**桥接线路端点组 /api/channelbus/*。
+		// 旧 /api/bridge/* 与 /api/ws/channel 已删除，不再保留兼容别名；
+		// 鉴权：InitGuard + BridgeIngressGuard（识别码只走头/query）。
 		busWS := r.Group("/api/channelbus")
 		busWS.Use(middleware.InitGuard())
 		busWS.Use(middleware.BridgeIngressGuard())
 		busWS.POST("/ingest", bridgeHandler.HandleHTTPIngest)
 		busWS.GET("/outbox", bridgeHandler.GetBridgeOutbox)
 		busWS.POST("/outbox/ack", bridgeHandler.AckBridgeOutbox)
+		// 统一网关（identify_code only）：同一地址上报/下发/ack
 		busWS.POST("/gateway", bridgeHandler.HandleGateway)
 		busWS.GET("/gateway", bridgeHandler.GetBridgeOutbox)
+
+		// B1-a：选择器健康上报。挂在桥接组里（只认实例级桥接凭证），与读判定结果
+		// 的 GET 分开——见 controller.BridgeSelectorHealthController 文件头。
+		selectorHealthCtrl := controller.NewBridgeSelectorHealthController(
+			service.NewSelectorHealthService(repository.NewBridgeSelectorHealthRepository(gormDB)))
+		busWS.POST("/selector-health", selectorHealthCtrl.Ingest)
+
 		busWS.GET("/outbox/sse", bridgeHandler.HandleOutboxSSE)
 		busWS.GET("/outbox/wake", controller.NewBridgeOutboxWakeController(service.GlobalBridgeOutboxWake).Stream)
 		busWS.GET("/capabilities", controller.NewBridgeCapabilitiesController().GetCapabilities)
-		busWS.POST("/selector-health", selectorHealthCtrl.Ingest)
 
 		sagexUploadSvc := service.NewSageXUploadService(
 			repository.NewSageXInstallationRepository(),
@@ -844,8 +825,7 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		// 渠道 WS 的归属只能由 register 帧的 (channel, account_id) 自证；解析函数住在
 		// bridge 包，而 bridge 已经 import channelgw——反向依赖会成环，所以在这里接线。
 		channelWSTransport.TenantBinder = bridge.BridgeTenantForRequest
-		bridgeWS.GET("/ws/channel", channelWSTransport.HandleWS)
-		// canonical 路径别名：WS 帧格式与 /api/ws/channel 完全一致，新接入方统一走这里。
+		// 总线 WS 唯一入口；register 帧携带识别码，连接级绑定租户。
 		busWS.GET("/ws", channelWSTransport.HandleWS)
 
 		tracing.Init(gormDB)
@@ -854,7 +834,7 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		bridgeAccountCtrl := controller.NewBridgeAccountController()
 		bridgeAccountCtrl.RegisterRoutes(auth)
 
-		// B1-a 读侧：运营面看判定结果（登录态）。与上面 bridgeWS 里的 POST 上报口
+		// B1-a 读侧：运营面看判定结果（登录态）。与上面 busWS 里的 POST 上报口
 		// 刻意挂在不同组：扩展凭证不该读得到「全渠道健康度」这张运营表。
 		auth.GET("/bridge/selector-health", selectorHealthCtrl.List)
 

@@ -421,23 +421,35 @@ async function ackOutbox({ serverUrl, channel, accountId, token, tenantCode }, m
   const url = applyTenantCode(u.toString(), tenantCode);
   const label = opts.label || '[HTTP outbox-ack]';
   const V2 = BRIDGE_PROTOCOL_V2;
-  // 终态：默认 delivered；目标会话确认不存在时调用方传 failed（服务端据此停止重推）。
-  const terminalStatus = opts.status === V2.TERMINAL.FAILED ? V2.TERMINAL.FAILED : V2.TERMINAL.DELIVERED;
+  // 终态：默认 delivered；确认不存在传 failed；已提交但结果不明传 unknown（服务端真终态，走对账）。
+  const terminalStatus = Object.values(V2.TERMINAL).includes(opts.status)
+    ? opts.status
+    : V2.TERMINAL.DELIVERED;
   let items = null;
   if (Array.isArray(opts.items) && opts.items.length
       && opts.items.every((it) => it && it[V2.FIELD.MSG_ID] && it[V2.FIELD.CONVERSATION_ID])) {
     // 服务端对 items[] 逐条校验 msg_id+conversation_id 非空，缺失会整单 400——前置自检。
-    items = opts.items.map((it) => ({
-      [V2.FIELD.MSG_ID]: it[V2.FIELD.MSG_ID],
-      [V2.FIELD.CONVERSATION_ID]: it[V2.FIELD.CONVERSATION_ID],
-    }));
+    // claimed_at 原样回传认领锚点；服务端据此做栅栏校验，拒绝陈旧认领的翻转。
+    items = opts.items.map((it) => {
+      const row = {
+        [V2.FIELD.MSG_ID]: it[V2.FIELD.MSG_ID],
+        [V2.FIELD.CONVERSATION_ID]: it[V2.FIELD.CONVERSATION_ID],
+      };
+      if (it[V2.FIELD.CLAIMED_AT]) row[V2.FIELD.CLAIMED_AT] = it[V2.FIELD.CLAIMED_AT];
+      if (Number.isInteger(it[V2.FIELD.PUSH_ATTEMPTS])) row[V2.FIELD.PUSH_ATTEMPTS] = it[V2.FIELD.PUSH_ATTEMPTS];
+      return row;
+    });
   } else if (opts.conversationId && opts.conversationId !== '_unknown_'
       && Array.isArray(msgIds) && msgIds.length && msgIds.every((id) => !!id)) {
     items = msgIds.map((id) => ({ [V2.FIELD.MSG_ID]: id, [V2.FIELD.CONVERSATION_ID]: opts.conversationId }));
   }
   const body = items
     ? { v: V2.VERSION, [V2.FIELD.ITEMS]: items, [V2.FIELD.STATUS]: terminalStatus }
-    : { [V2.FIELD.MSG_IDS]: msgIds, [V2.FIELD.STATUS]: terminalStatus };
+    : {
+        [V2.FIELD.MSG_IDS]: msgIds,
+        [V2.FIELD.STATUS]: terminalStatus,
+        ...(opts.fence && typeof opts.fence === 'object' ? { [V2.FIELD.FENCE]: opts.fence } : {}),
+      };
   const timeoutMs = opts.timeoutMs ?? HTTP_INGEST_DEFAULTS.requestTimeoutMs;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);

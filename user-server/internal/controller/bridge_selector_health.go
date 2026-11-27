@@ -14,8 +14,8 @@ import (
 
 // BridgeSelectorHealthController 桥接选择器健康度（B1-a）。
 //
-//	POST /api/bridge/selector-health  —— 扩展上报「试了几次 / 命中几次」（桥接凭证鉴权）
-//	GET  /api/bridge/selector-health  —— 运营面读判定结果（JWT 鉴权，登录态）
+//	POST /api/channelbus/selector-health  —— 扩展上报「试了几次 / 命中几次」（桥接凭证鉴权）
+//	GET  /api/channelbus/selector-health  —— 运营面读判定结果（JWT 鉴权，登录态）
 //
 // 两条路由挂在两个不同的组上，这不是笔误：上报只认实例级桥接凭证（用户机器上的扩展
 // 没有登录态），读的是一张给运营看的表。把 GET 也挂进桥接组，等于让任意一台装有扩展的
@@ -32,8 +32,8 @@ func NewBridgeSelectorHealthController(svc *service.SelectorHealthService) *Brid
 
 // @Summary      上报桥接选择器健康数据（扩展侧打点）
 // @Tags      bridge-selector-health
-// @Router    /api/bridge/selector-health [post]
-// Ingest POST /api/bridge/selector-health
+// @Router    /api/channelbus/selector-health [post]
+// Ingest POST /api/channelbus/selector-health
 //
 // 响应体刻意保持扁平稳定（扩展侧直接读它打日志，不经过 response 包装层的 i18n）：
 //
@@ -92,8 +92,8 @@ func (c *BridgeSelectorHealthController) Ingest(ctx *gin.Context) {
 
 // @Summary      查询桥接选择器健康读数（按渠道+字段）
 // @Tags      bridge-selector-health
-// @Router    /api/bridge/selector-health [get]
-// List GET /api/bridge/selector-health
+// @Router    /api/channelbus/selector-health [get]
+// List GET /api/channelbus/selector-health
 //
 // 运营面读数：按渠道 + 字段逐行给判定。`threshold` 一并返回，便于运营知道
 // 「这条为什么被判 degraded」——只给状态不给口径时，运维面对一片黄只能猜。

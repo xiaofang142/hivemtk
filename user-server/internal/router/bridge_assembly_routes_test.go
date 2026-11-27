@@ -26,16 +26,9 @@ func TestSetup_SelectedBridgeRoutesRegisteredExactlyOnce(t *testing.T) {
 		method string
 		path   string
 	}{
-		{"POST", "/api/bridge/ingest"},
-		{"GET", "/api/bridge/outbox"},
-		{"POST", "/api/bridge/outbox/ack"},
-		{"GET", "/api/bridge/outbox/sse"},
-		{"GET", "/api/ws/channel"},
 		{"POST", "/api/inbox/lock-human"},
 		{"POST", "/api/inbox/unlock-human/:session_id"},
-		{"POST", "/api/bridge/selector-health"},
-		{"GET", "/api/bridge/selector-health"},
-		// canonical 线路：与旧组逐条对应，共用 handler；旧路径仅作兼容别名。
+		// 总线唯一线路端点组（旧 /api/bridge/* 与 /api/ws/channel 已删除）。
 		{"POST", "/api/channelbus/ingest"},
 		{"GET", "/api/channelbus/outbox"},
 		{"POST", "/api/channelbus/outbox/ack"},
@@ -64,23 +57,32 @@ func TestSetup_SelectedBridgeRoutesRegisteredExactlyOnce(t *testing.T) {
 			t.Errorf("%s %s handler 为空", w.method, w.path)
 		}
 	}
-	// 桥接摄入口的 handler 身份不变（门链由桥接中间件与 CS-06 电池另钉，
-	// 既有 token 特例不改成一律 JWT）。
+	// 桥接摄入口的 handler 身份不变（门链由桥接中间件与 CS-06 电池另钉）。
 	for _, route := range r.Routes() {
-		if route.Method != "POST" {
-			continue
-		}
-		if route.Path == "/api/bridge/ingest" || route.Path == "/api/channelbus/ingest" {
+		if route.Method == "POST" && route.Path == "/api/channelbus/ingest" {
 			if !strings.Contains(route.Handler, "HandleHTTPIngest") {
 				t.Errorf("%s handler 身份漂移: %s", route.Path, route.Handler)
 			}
 		}
 	}
-	// canonical WS 与旧 WS 必须共用同一个 HandleWS 入口。
+	// 总线 WS 必须是唯一 HandleWS 入口。
 	for _, route := range r.Routes() {
-		if route.Method == "GET" && (route.Path == "/api/ws/channel" || route.Path == "/api/channelbus/ws") {
+		if route.Method == "GET" && route.Path == "/api/channelbus/ws" {
 			if !strings.Contains(route.Handler, "HandleWS") {
 				t.Errorf("%s handler 身份漂移: %s", route.Path, route.Handler)
+			}
+		}
+	}
+	// 旧路径必须彻底消失，不得留兼容别名。
+	retired := []string{
+		"/api/bridge/ingest", "/api/bridge/outbox", "/api/bridge/outbox/ack",
+		"/api/bridge/gateway", "/api/bridge/outbox/sse", "/api/bridge/outbox/wake",
+		"/api/bridge/capabilities", "/api/bridge/selector-health", "/api/ws/channel",
+	}
+	for _, route := range r.Routes() {
+		for _, old := range retired {
+			if route.Path == old {
+				t.Errorf("旧路径 %s 仍被注册（要求删除，不保留兼容）", old)
 			}
 		}
 	}
@@ -101,12 +103,12 @@ func TestSetup_TwoIndependentRuntimesDoNotCrossOverwrite(t *testing.T) {
 
 			count := 0
 			for _, route := range r.Routes() {
-				if route.Path == "/api/bridge/ingest" {
+				if route.Path == "/api/channelbus/ingest" {
 					count++
 				}
 			}
 			if count != 1 {
-				t.Errorf("runtime %d /api/bridge/ingest 注册 %d 次，期望 1", i, count)
+				t.Errorf("runtime %d /api/channelbus/ingest 注册 %d 次，期望 1", i, count)
 			}
 			if app.GetBridgeIngressSvc() == nil {
 				t.Errorf("runtime %d 全局桥接入站实例未注册", i)

@@ -9,7 +9,7 @@
 | 通道 | 端点 | 本次是否模拟 | 说明 |
 |------|------|------------|------|
 | **网页客服 web_embed** | `POST /api/chat/public/sessions` + `/:sid/messages` | ✅ 主入口 | 走完整 RAG+AI 链路，最贴近真实访客，无需桥接前端 |
-| 桥接三通道（xiaohongshu/douyin…） | `POST /api/bridge/ingest` | ⏸ 预留 | 需有效 bridge_account（当前库无 active 账户），且走回环去重，模拟成本高 |
+| 桥接三通道（xiaohongshu/douyin…） | `POST /api/channelbus/ingest` | ⏸ 预留 | 需有效 bridge_account（当前库无 active 账户），且走回环去重，模拟成本高 |
 | Telegram / 企微 / WS | 各渠道 webhook | ⏸ 未覆盖 | 需对应账户与回调穿透 |
 
 > 「从不同端口测试」= 覆盖**不同入口端点/渠道方案**。本工具以 web_embed 为主，
@@ -98,7 +98,7 @@ PGPASSWORD=$PW psql -h localhost -p 8232 -U admin -d user_db -tAc \
 ## 扩展：桥接通道（不同端口方案）
 
 当库中存在 active `bridge_accounts` 时，可在 `simulate.py` 中参照
-`internal/bridge/handler_http.go` 的 `POST /api/bridge/ingest` 协议
+`internal/bridge/handler_http.go` 的 `POST /api/channelbus/ingest` 协议
 （参数 `channel/account_id/conversation_id`，白名单 `xiaohongshu`/`douyin`，
 body 含 `sender{id,name,type}` + `message{content}`）追加 bridge 入口实现，
 实现「从桥接端口模拟真实用户上报」的多方案覆盖。当前因无 active 账户，默认走 web_embed。

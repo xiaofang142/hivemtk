@@ -2,7 +2,7 @@
 # deep_mcp_sse.sh - 端到端验证 MCP server + SSE 下行
 # 解决：单元测试通过但路由未注册，curl 端到端才发现。
 #
-# 本脚本此前**一个凭证都不带**，而 /api/mcp 与 /api/bridge/outbox/sse 都在鉴权组里
+# 本脚本此前**一个凭证都不带**，而 /api/mcp 与 /api/channelbus/outbox/sse 都在鉴权组里
 # （渠道识别码自 channel_identify_codes 起就是必填）。于是每条断言读到的都是 401 响应体：
 # MCP 那五条恒红，SSE 那几条恒红，第 9 条（拿 wc -c 当「Last-Event-ID 被接受」）
 # 反倒恒绿 —— 一份既报红又报绿的报告里，绿的那条恰恰是最没意义的那条。
@@ -117,7 +117,7 @@ echo "==== SSE 下行 E2E ===="
 
 sse_headers() {
   curl -s -N --max-time 2 -D - -o /dev/null "${BRIDGE_HDR[@]}" \
-    "$BASE/api/bridge/outbox/sse?channel=douyin&account_id=default" 2>&1
+    "$BASE/api/channelbus/outbox/sse?channel=douyin&account_id=default" 2>&1
 }
 
 # 下面五条 SSE 判据必须有桥接凭证才谈得上握手成功；只有 MCP 专用凭证时整段跳过并说明，
@@ -128,7 +128,7 @@ else
 
 # 6. 握手状态码：先证明这条 SSE 真的开了（后面三条头字段才有意义）
 sse_code=$(curl -s -N --max-time 2 -o /dev/null -w '%{http_code}' "${BRIDGE_HDR[@]}" \
-  "$BASE/api/bridge/outbox/sse?channel=douyin&account_id=default" 2>/dev/null)
+  "$BASE/api/channelbus/outbox/sse?channel=douyin&account_id=default" 2>/dev/null)
 if [ "$sse_code" = "200" ]; then
   pass "SSE 建连 http=200"
 else
@@ -161,7 +161,7 @@ fi
 
 # 10. 带 Last-Event-ID 重连不破坏握手（旧版拿 wc -c>0 当判据，401 响应体也能过）
 resume_code=$(curl -s -N --max-time 2 -o /dev/null -w '%{http_code}' -H "Last-Event-ID: evt-12345" \
-  "${BRIDGE_HDR[@]}" "$BASE/api/bridge/outbox/sse?channel=douyin&account_id=default" 2>/dev/null)
+  "${BRIDGE_HDR[@]}" "$BASE/api/channelbus/outbox/sse?channel=douyin&account_id=default" 2>/dev/null)
 if [ "$resume_code" = "200" ]; then
   pass "带 Last-Event-ID 的请求仍然 200（续订语义本身不在本脚本射程内）"
 else

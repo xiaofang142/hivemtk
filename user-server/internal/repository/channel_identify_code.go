@@ -127,11 +127,11 @@ func (r *channelIdentifyCodeRepo) ListByTenant(ctx context.Context, tenantID uin
 	return rows, nil
 }
 
-// ValidCodes 收集凭证闸门可接受的识别码集合。权威来源是**账号级**识别码
+// ValidCodes 收集凭证闸门可接受的识别码集合。唯一权威来源是**账号级**识别码
 // （channel_accounts.identify_code），每个账号一枚；重置在途旧码仅在
-// PrevValidUntil 落在未来时有效。历史渠道级码（channel_identify_codes）继续
-// 作为兼容候选，保证老扩展/上报端不因账号级语义调整而 401。两者窗口过后
-// 的旧码一律失效（fail-closed）。仓储运行在租户解析之前，显式系统作用域。
+// PrevValidUntil 落在未来时有效。历史渠道级码（channel_identify_codes）已彻底
+// 退出鉴权链，不再作为候选。窗口过后的旧码一律失效（fail-closed）。仓储运行
+// 在租户解析之前，显式系统作用域。
 func (r *channelIdentifyCodeRepo) ValidCodes(ctx context.Context) ([]string, error) {
 	if !r.Available() {
 		return nil, ErrChannelStoreUnavailable
@@ -162,17 +162,6 @@ func (r *channelIdentifyCodeRepo) ValidCodes(ctx context.Context) ([]string, err
 		}
 	}
 
-	// ② 历史兼容：存量渠道级当前码 + 在途旧码（无新写入，仅供老码解析）
-	var rows []model.ChannelIdentifyCode
-	if err := dbFromCtx(sysCtx).Where("code <> ''").Find(&rows).Error; err != nil {
-		return nil, err
-	}
-	for i := range rows {
-		add(rows[i].Code)
-		if rows[i].PrevValidUntil != nil && now.Before(*rows[i].PrevValidUntil) {
-			add(rows[i].PrevCode)
-		}
-	}
 	return out, nil
 }
 

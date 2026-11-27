@@ -89,7 +89,7 @@ func newSageXUploadTestController(inst *model.SageXInstallation) *gin.Engine {
 
 func sageXUploadContractBody(identifyCode string) []byte {
 	body, _ := json.Marshal(map[string]any{
-		"schema_version":  "1.0",
+		"schema_version":  "hivemtk.channel.v1",
 		"batch_id":        "contract-batch",
 		"installation_id": "i1",
 		"identify_code":   identifyCode,
@@ -120,7 +120,7 @@ func TestSageXUploadController_ReturnsProtocolAck(t *testing.T) {
 	r := newSageXUploadTestController(&model.SageXInstallation{TenantID: 1, ID: 1, InstallationID: "i1", Token: "tok", Status: 1})
 
 	body, _ := json.Marshal(map[string]any{
-		"schema_version":  "1.0",
+		"schema_version":  "hivemtk.channel.v1",
 		"batch_id":        "b1",
 		"sent_at":         "2026-11-23T10:00:00Z",
 		"installation_id": "i1",
@@ -146,7 +146,7 @@ func TestSageXUploadController_ReturnsProtocolAck(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("not json: %v body=%s", err, w.Body.String())
 	}
-	if resp.SchemaVersion != "1.0" || resp.BatchID != "b1" || len(resp.Acks) != 1 || resp.Acks[0].Status != "accepted" {
+	if resp.SchemaVersion != "hivemtk.channel.v1" || resp.BatchID != "b1" || len(resp.Acks) != 1 || resp.Acks[0].Status != "accepted" {
 		t.Fatalf("unexpected resp: %+v", resp)
 	}
 }
@@ -154,7 +154,7 @@ func TestSageXUploadController_RealV1Payload(t *testing.T) {
 	r := newSageXUploadTestController(&model.SageXInstallation{TenantID: 1, ID: 7, InstallationID: "11111111-1111-4111-8111-111111111111", Token: "tok", Status: 1, AccountID: "1"})
 
 	body := []byte(`{
-		"schema_version":"1.0",
+		"schema_version":"hivemtk.channel.v1",
 		"batch_id":"22222222-2222-4222-8222-222222222222",
 		"sent_at":"2026-11-23T08:00:00.000Z",
 		"installation_id":"11111111-1111-4111-8111-111111111111",
@@ -173,7 +173,7 @@ func TestSageXUploadController_RealV1Payload(t *testing.T) {
 	}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/integrations/sagex/upload", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
-	req.Header.Set("X-SageX-Protocol", "1.0")
+	req.Header.Set("X-SageX-Protocol", "hivemtk.channel.v1")
 	req.Header.Set("X-Installation-Id", "11111111-1111-4111-8111-111111111111")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)

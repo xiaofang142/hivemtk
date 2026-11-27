@@ -12,7 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// /api/bridge/* 整组只认 X-Channel-Identify-Code 这一枚凭证头（不认 Authorization），而浏览器发自定义头
+// /api/channelbus/* 整组只认 X-Channel-Identify-Code 这一枚凭证头（不认 Authorization），而浏览器发自定义头
 // 之前必须先过预检。预检响应里没有这枚头，请求在预检阶段就被浏览器拦下，调用方拿到的报错与
 // 「凭证不对」长得完全不同，会被当成服务端故障。这条契约只有浏览器能观察到，所以钉在装配层。
 
@@ -66,13 +66,13 @@ func setupWithBridgeRoutes(t *testing.T) *gin.Engine {
 
 	registered := false
 	for _, ri := range r.Routes() {
-		if ri.Method == http.MethodGet && ri.Path == "/api/bridge/outbox" {
+		if ri.Method == http.MethodGet && ri.Path == "/api/channelbus/outbox" {
 			registered = true
 			break
 		}
 	}
 	if !registered {
-		t.Fatal("GET /api/bridge/outbox 未注册，靶子失效（桥接路由整组没挂上，换真实存在的口再来）")
+		t.Fatal("GET /api/channelbus/outbox 未注册，靶子失效（桥接路由整组没挂上，换真实存在的口再来）")
 	}
 	return r
 }
@@ -83,7 +83,7 @@ func setupWithBridgeRoutes(t *testing.T) *gin.Engine {
 func TestCorsPreflightAdvertisesIdentifyCodeHeader(t *testing.T) {
 	r := setupWithBridgeRoutes(t)
 
-	pf := optionsProbe(t, r, "http://localhost:8204/api/bridge/outbox", "http://other.example")
+	pf := optionsProbe(t, r, "http://localhost:8204/api/channelbus/outbox", "http://other.example")
 	if pf.code != http.StatusNoContent {
 		t.Errorf("预检返回 %d，期望 204 ⇒ CORS 层没有在鉴权前接住 OPTIONS", pf.code)
 	}
@@ -158,7 +158,7 @@ func TestCorsPreflightEchoesAllowlistedOrigin(t *testing.T) {
 	allowedCORSOrigins = []string{listed}
 	t.Cleanup(func() { allowedCORSOrigins = before })
 
-	pf := optionsProbe(t, r, "http://localhost:8204/api/bridge/outbox", listed)
+	pf := optionsProbe(t, r, "http://localhost:8204/api/channelbus/outbox", listed)
 	if pf.code != http.StatusNoContent {
 		t.Fatalf("白名单来源的预检返回 %d，期望 204", pf.code)
 	}
@@ -174,7 +174,7 @@ func TestCorsPreflightEchoesAllowlistedOrigin(t *testing.T) {
 
 	// 没列进来的来源不得回显：否则「任意来源 + 允许自定义凭证头」等于把桥接口开放给任何网页。
 	// 这一腿也自证上面那枚夹具真参与了判定——同一个口，列进去的回显、没列进去的不回显。
-	unlisted := optionsProbe(t, r, "http://localhost:8204/api/bridge/outbox", "http://not-allowlisted.example")
+	unlisted := optionsProbe(t, r, "http://localhost:8204/api/channelbus/outbox", "http://not-allowlisted.example")
 	if unlisted.allowOrigin != "" {
 		t.Errorf("未列入白名单的来源被回显 Access-Control-Allow-Origin=%q", unlisted.allowOrigin)
 	}
@@ -191,7 +191,7 @@ func TestCorsSSEPreflightToleratesSameOrigin(t *testing.T) {
 	t.Cleanup(func() { allowedCORSOrigins = before })
 
 	const origin = "http://localhost:8204"
-	pf := optionsProbe(t, r, origin+"/api/bridge/outbox/sse", origin)
+	pf := optionsProbe(t, r, origin+"/api/channelbus/outbox/sse", origin)
 	if pf.code != http.StatusNoContent {
 		t.Fatalf("同源 SSE 预检返回 %d，期望 204", pf.code)
 	}

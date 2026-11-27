@@ -182,7 +182,7 @@ func (h *BridgeIngestHandler) SetLeadMiner(fn func(ctx context.Context, ev *mode
 
 // @Summary      桥接出站 SSE 长连接拉取（outbox 轮询推送）
 // @Tags      bridge-ingest-handler
-// @Router    /api/bridge/outbox/sse [get]
+// @Router    /api/channelbus/outbox/sse [get]
 func (h *BridgeIngestHandler) HandleOutboxSSE(c *gin.Context) {
 	if h.sseHandler == nil {
 		if h.outboxFetcher == nil {
@@ -362,7 +362,7 @@ func (h *BridgeIngestHandler) callPersistHistory(ctx context.Context, ev *model.
 
 // @Summary      抖音网页
 // @Tags      bridge-ingest-handler
-// @Router    /api/bridge/ingest [post]
+// @Router    /api/channelbus/ingest [post]
 func (h *BridgeIngestHandler) HandleHTTPIngest(c *gin.Context) {
 	maxBodySize := runtimeIngestMaxBodySize(c.Request.Context())
 	if maxBodySize <= 0 {
@@ -833,6 +833,8 @@ func writeOutboxJSON(c *gin.Context, hubs []*model.MessageHub) {
 			IsAIReply:      hub.IsAIReply,
 			CreatedAt:      hub.CreatedAt,
 			Extra:          hub.Extra,
+			ClaimedAt:      hub.ClaimedAt,
+			PushAttempts:   hub.PushAttempts,
 		})
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "ok", "messages": msgs})
@@ -874,7 +876,7 @@ func _bridgeOutboxHubsForLog(hubs []*model.MessageHub) []map[string]any {
 
 // @Summary      客户端活着
 // @Tags      bridge-ingest-handler
-// @Router    /api/bridge/outbox [get]
+// @Router    /api/channelbus/outbox [get]
 func (h *BridgeIngestHandler) GetBridgeOutbox(c *gin.Context) {
 	channel := NormalizeBridgeChannel(c.Query("channel"))
 	accountID := c.Query("account_id")
@@ -1001,7 +1003,7 @@ type BridgeOutboxAckResponse struct {
 
 // @Summary      欠交付
 // @Tags      bridge-ingest-handler
-// @Router    /api/bridge/outbox/ack [post]
+// @Router    /api/channelbus/outbox/ack [post]
 func (h *BridgeIngestHandler) AckBridgeOutbox(c *gin.Context) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20)
 	// 三个 HTTP 入口里只有这里曾经不归一渠道（ingest 在 httpMessageToEvent 里归一、
@@ -1282,10 +1284,6 @@ var _ = bytes.NewBuffer
 
 // =================== 统一渠道网关（路由1：identify_code 唯一凭证） ===================
 
-// legacyGatewaySchemaVersion 是 SageX 上传侧历史 schema_version=1.0 在 gateway
-// 上的兼容别名；canonical 值统一由 channelbus.SchemaVersion 提供。
-const legacyGatewaySchemaVersion = "1.0"
-
 type UnifiedChannelGatewayRequest struct {
 	Action         string                  `json:"action"` // report|ack|heartbeat
 	SchemaVersion  string                  `json:"schema_version"`
@@ -1326,11 +1324,9 @@ func (h *BridgeIngestHandler) HandleGateway(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "invalid json body"})
 		return
 	}
-	// 线路协议身份校验：旧客户端可省略 schema_version；显式传值时必须与总线
-	// canonical 值一致（1.0 为 SageX 上传侧历史别名，gateway 同样兼容）。
-	// 不校验会让 gateway 与 sagex/upload 对同一协议标识一个验一个不验。
-	if version := strings.TrimSpace(req.SchemaVersion); version != "" &&
-		version != channelbus.SchemaVersion && version != legacyGatewaySchemaVersion {
+	// 线路协议身份校验：必须显式携带 canonical 值，不保留 1.0 / 缺省别名。
+	// gateway 与 sagex/upload 对同一协议标识执行同一强校验。
+	if version := strings.TrimSpace(req.SchemaVersion); version != channelbus.SchemaVersion {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"schema_version": channelbus.SchemaVersion,
 			"status":         "error",

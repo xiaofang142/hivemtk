@@ -86,7 +86,7 @@ describe('B2 pollDownlink：ack 携带会话归属（v2 items）', () => {
     await pollDownlink('b2a', 'acc1', cfg(), { sendOutbound: async () => ({ ok: true }) });
     expect(ackOutbox).toHaveBeenCalledTimes(1);
     const opts = ackOutbox.mock.calls[0][2];
-    expect(opts.items).toEqual([{ msg_id: 'm1', conversation_id: 'c1' }]);
+    expect(opts.items).toEqual([{ msg_id: 'm1', conversation_id: 'c1', claimed_at: null, push_attempts: 0 }]);
   });
 
   it('DM 重映射（extra.dm_target=member）：发送用 receiver_id，ack 用行原始 conversation_id', async () => {
@@ -100,7 +100,7 @@ describe('B2 pollDownlink：ack 携带会话归属（v2 items）', () => {
     await pollDownlink('b2b', 'acc1', cfg(), { sendOutbound });
     expect(sendOutbound.mock.calls[0][1]).toBe('member7');
     const opts = ackOutbox.mock.calls[0][2];
-    expect(opts.items).toEqual([{ msg_id: 'dm1', conversation_id: 'group9' }]);
+    expect(opts.items).toEqual([{ msg_id: 'dm1', conversation_id: 'group9', claimed_at: null, push_attempts: 0 }]);
   });
 
   it('payload 缺 conversation_id（老服务端）→ 回退 legacy msg_ids 不发 items', async () => {

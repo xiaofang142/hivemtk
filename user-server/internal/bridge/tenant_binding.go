@@ -138,14 +138,8 @@ func resolveBridgeIdentity(rctx context.Context, channel, accountID, _codeHint, 
 		return rctx, false, nil, err
 	}
 	if err != nil || resolved == nil || resolved.TenantID == 0 {
-		// Fallback: channel-level identify code (channel_identify_codes table).
-		resolved, err = resolveBridgeIdentityByChannelCode(rctx, identifyCode, accountID)
-		if err != nil {
-			return rctx, false, nil, err
-		}
-		if resolved == nil || resolved.TenantID == 0 {
-			return rctx, false, nil, ErrBridgeTenantUnresolved
-		}
+		// 渠道级识别码已退出鉴权链：账号级解析失败即拒绝，不回落旧表。
+		return rctx, false, nil, ErrBridgeTenantUnresolved
 	}
 	// ChannelResolver 的 channel-level fallback 可能在未绑定 rctx 下读不到 ChannelCode。
 	// 身份记录已证明 tenant；这里只用内部 child ctx 补读，不改写原 rctx/request。
@@ -213,62 +207,6 @@ func resolveBridgeIdentity(rctx context.Context, channel, accountID, _codeHint, 
 		return rctx, false, id, nil
 	}
 	return bridgeResolvedTenantCtx(rctx, resolved.TenantID), true, id, nil
-}
-
-func resolveBridgeIdentityByChannelCode(rctx context.Context, identifyCode, accountID string) (*service.ResolvedChannelAccount, error) {
-	codeRepo := repository.NewChannelIdentifyCodeRepository()
-	rec, err := codeRepo.GetByCode(rctx, identifyCode)
-	if err != nil {
-		return nil, err
-	}
-	if rec == nil || rec.TenantID == 0 || rec.ChannelID == 0 {
-		return nil, ErrBridgeTenantUnresolved
-	}
-	out := &service.ResolvedChannelAccount{
-		TenantID:     rec.TenantID,
-		ChannelID:    rec.ChannelID,
-		IdentifyCode: rec.Code,
-	}
-	// 识别码记录已经证明租户归属；subordinate reads 必须在这个已解析租户的
-	// 内部 child ctx 上执行，但不能改写调用方原 rctx/request。off 模式仍只解析身份。
-	tenantCtx := bridgeResolvedTenantCtx(rctx, rec.TenantID)
-	if chRepo := repository.NewChannelRepository(); chRepo.Available() {
-		ch, chErr := chRepo.GetByID(tenantCtx, rec.TenantID, rec.ChannelID)
-		if chErr != nil {
-			return nil, chErr
-		}
-		if ch != nil {
-			out.ChannelCode = ch.Code
-		}
-	}
-	// CH-07：渠道码只证明 tenant+channel，账号必须显式消歧；多账号时禁止取首条 fallback。
-	rows, listErr := service.NewChannelAccountService().ListAccounts(tenantCtx, repository.ChannelAccountListOptions{
-		TenantID: rec.TenantID, ChannelID: rec.ChannelID, Limit: 20,
-	})
-	if listErr != nil {
-		return nil, listErr
-	}
-	if len(rows) == 0 {
-		return nil, ErrBridgeTenantUnresolved
-	}
-	// 显式账号：必须命中该渠道下的账号。
-	if strings.TrimSpace(accountID) != "" {
-		for i := range rows {
-			if strconv.FormatUint(uint64(rows[i].ID), 10) == strings.TrimSpace(accountID) {
-				out.AccountID = rows[i].ID
-				break
-			}
-		}
-		if out.AccountID == 0 {
-			return nil, ErrBridgeTenantUnresolved
-		}
-	} else if len(rows) == 1 {
-		out.AccountID = rows[0].ID
-	} else {
-		// 多账号且未提供消歧账号：拒绝，避免取首条。
-		return nil, ErrBridgeTenantUnresolved
-	}
-	return out, nil
 }
 
 // bindBridgeTenant 解析 (channel, accountID) 的归属租户并绑定进请求上下文。

@@ -23,10 +23,8 @@ import (
 )
 
 const (
-	SageXSchemaVersion = "1.0"
-	// SageXProtocolVersion 是统一消息总线的线路协议标识（G-04）。
-	// 旧 schema_version=1.0 继续作为请求/响应别名字段保留，避免破坏已装 SageX 伴生；
-	// protocol_version 才是跨渠道一致的协议名，与 /bridge/gateway 的 schema_version 同值。
+	// SageXProtocolVersion 是统一消息总线的线路协议标识。
+	// 已删除 schema_version=1.0 历史别名：请求/响应只认 canonical 值。
 	SageXProtocolVersion = channelbus.SchemaVersion
 	SageXMaxEvents       = 50
 	SageXMaxRequestBytes = 1_048_576
@@ -54,7 +52,7 @@ const SageXMaxInstallationIDLength = 100
 
 type SageXUploadRequest struct {
 	SchemaVersion string `json:"schema_version"`
-	// ProtocolVersion 是统一消息总线协议标识；与旧 SchemaVersion 二者取其一即可。
+	// ProtocolVersion 是统一消息总线协议标识；SchemaVersion 是同值的 JSON 别名。
 	ProtocolVersion string `json:"protocol_version,omitempty"`
 	BatchID         string `json:"batch_id"`
 	SentAt          string `json:"sent_at"`
@@ -225,13 +223,13 @@ func (s *SageXUploadService) HandleUpload(ctx context.Context, identifyCode stri
 	if rawBodySize > SageXMaxRequestBytes {
 		return nil, ErrSageXInvalidEnvelope
 	}
-	// G-04：统一协议标识 protocol_version 与旧 schema_version 双入口，
-	// 两者都接受；旧客户端零改动，新客户端可迁移到 canonical 值。
+	// 统一协议标识：protocol_version / schema_version 两个 JSON 字段名都接受，
+	// 但值必须是 canonical；1.0 与缺省值一律拒绝。
 	version := strings.TrimSpace(req.ProtocolVersion)
 	if version == "" {
 		version = strings.TrimSpace(req.SchemaVersion)
 	}
-	if version != SageXSchemaVersion && version != SageXProtocolVersion {
+	if version != SageXProtocolVersion {
 		return nil, ErrSageXUnsupportedSchema
 	}
 	if strings.TrimSpace(req.BatchID) == "" {
@@ -353,7 +351,7 @@ func (s *SageXUploadService) HandleUpload(ctx context.Context, identifyCode stri
 
 	return &SageXUploadAckResponse{
 		ProtocolVersion: SageXProtocolVersion,
-		SchemaVersion:   SageXSchemaVersion,
+		SchemaVersion:   SageXProtocolVersion,
 		BatchID:         req.BatchID,
 		Acks:            acks,
 	}, nil

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================
-# bridge /api/bridge/ingest 极限测试脚本
+# bridge /api/channelbus/ingest 极限测试脚本
 #
 # 参考数据：小红书会话 1783（conversation_id=63bd52380000000027029f4d）
 #   - 39 条 outbound（AI 回复）
@@ -28,7 +28,7 @@
 set -euo pipefail
 
 BASE_URL="http://localhost:8204"
-INGEST_URL="${BASE_URL}/api/bridge/ingest"
+INGEST_URL="${BASE_URL}/api/channelbus/ingest"
 PASS=0
 FAIL=0
 SKIP=0
@@ -125,7 +125,7 @@ assert_contains() {
 }
 
 echo "========================================"
-echo "bridge /api/bridge/ingest 极限测试"
+echo "bridge /api/channelbus/ingest 极限测试"
 echo "服务地址: $BASE_URL"
 echo "参考会话: $XHS_CONV (小红书 1783)"
 echo "时间: $(date '+%Y-%m-%d %H:%M:%S')"

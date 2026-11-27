@@ -87,7 +87,7 @@ const pushStaleExpiredError = "outbound_stale_expired"
 // ReclaimOutboundSweep 全局出站回收巡检（2026-11-19 SSE 租约缺口修复，自立项巡检轮）。
 //
 // 为什么需要它：超时回收原本只活在 ClaimPendingOutbound（拉取路径）里——桥接扩展切
-// SSE 下发后不再调 GET /api/bridge/outbox，认领超时的行没有任何调用点会回收，
+// SSE 下发后不再调 GET /api/channelbus/outbox，认领超时的行没有任何调用点会回收，
 // 永久 inflight（生产实证：租户 18 xiaohongshu 4 行 inflight 43 分钟无人回收、
 // douyin 7 行自 10-22 挂起；38 条 pending 最早 10-22 至今无人触达）。
 // 认领必须有租约回收，无论下行走哪条通道——本方法做三步**纯回收**（不返回行、

@@ -83,7 +83,7 @@ func (c *SageXUploadController) Upload(ctx *gin.Context) {
 		sagexWriteError(ctx, http.StatusInternalServerError, "internal_error")
 		return
 	}
-	ctx.Header("X-Compat-Route", "sagex-upload; prefer /api/bridge/gateway")
+	ctx.Header("X-Compat-Route", "sagex-upload; prefer /api/channelbus/gateway")
 	response.Protocol(ctx, http.StatusOK, "application/json; charset=utf-8", body)
 }
 
@@ -248,7 +248,7 @@ func sagexBootstrapError(ctx *gin.Context, status int, reason, message string) {
 
 func sagexWriteError(ctx *gin.Context, status int, code string) {
 	body, _ := json.Marshal(map[string]any{
-		"schema_version": service.SageXSchemaVersion,
+		"schema_version": service.SageXProtocolVersion,
 		"error":          code,
 	})
 	response.Protocol(ctx, status, "application/json; charset=utf-8", body)

@@ -78,7 +78,7 @@ func newCtrlHardeningController(repo *ctrlHardeningInstRepo) *gin.Engine {
 
 func ctrlHardeningBody(installationID string) []byte {
 	body, _ := json.Marshal(map[string]any{
-		"schema_version":  "1.0",
+		"schema_version":  "hivemtk.channel.v1",
 		"batch_id":        "batch-hardening",
 		"installation_id": installationID,
 		"identify_code":   sageXUploadIdentifyCode,

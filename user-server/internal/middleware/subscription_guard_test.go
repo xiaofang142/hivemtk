@@ -138,12 +138,12 @@ func TestSubscriptionGateAllowsCustomerFacing(t *testing.T) {
 	allowed := []string{
 		"/api/chat/public/sessions/tok123", // widget 对话面
 		"/api/chat/public/sessions/tok123/messages",
-		"/ws/chat",           // chat WebSocket（引擎级）
-		"/api/ws/visitor",    // 访客 WebSocket
-		"/api/bridge/ingest", // bridge ingress（扩展端上报）
-		"/api/bridge/outbox", // bridge outbox
-		"/api/bridge/outbox/ack",
-		"/api/bridge/outbox/sse",
+		"/ws/chat",               // chat WebSocket（引擎级）
+		"/api/ws/visitor",        // 访客 WebSocket
+		"/api/channelbus/ingest", // 总线 ingress（扩展端上报）
+		"/api/channelbus/outbox", // 总线 outbox
+		"/api/channelbus/outbox/ack",
+		"/api/channelbus/outbox/sse",
 		"/api/webhook/wechat/account1", // wechat webhook
 		"/api/webhook/wechat/account1/msg",
 	}
@@ -206,9 +206,9 @@ func TestSubscriptionWhitelistCoversRenewalSurface(t *testing.T) {
 		// "/ws/chat" 已随 D-7 删除（2026-10-23）：端点与死代码一起移除，白名单行同步撤下；
 		// 客户面不再有该路径，未来上真坐席 WS 时按 /api/ws/visitor 的口径重新登记。
 		"/api/ws/visitor",
-		"/api/bridge/ingest",
-		"/api/bridge/outbox",
-		"/api/bridge/outbox/sse",
+		"/api/channelbus/ingest",
+		"/api/channelbus/outbox",
+		"/api/channelbus/outbox/sse",
 		"/api/webhook/wechat/a1",
 	}
 	for _, p := range customerFacing {

@@ -62,7 +62,7 @@ describe('批24：下发外层超时预算必须覆盖回查切片', () => {
     const sendOutbound = vi.fn(async () => { await sleep(700); return { ok: true, sendVerified: true }; });
     await pollDownlink('b24a', 'acc1', cfg(), { sendOutbound, sendOutboundTimeoutMs: 50 });
     expect(ackOutbox).toHaveBeenCalledTimes(1);
-    expect(ackOutbox.mock.calls[0][2].items).toEqual([{ msg_id: 'm1', conversation_id: 'c1' }]);
+    expect(ackOutbox.mock.calls[0][2].items).toEqual([{ msg_id: 'm1', conversation_id: 'c1', claimed_at: null, push_attempts: 0 }]);
   });
 
   it('预算仍是上界：永远不回包的发送要在「sendText 预算 + 回查切片」内被切掉并留 pending', async () => {

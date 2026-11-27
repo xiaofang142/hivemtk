@@ -34,8 +34,8 @@ func NewBridgeCapabilitiesController() *BridgeCapabilitiesController {
 
 // @Summary      查询桥接通道能力清单（向后兼容形状）
 // @Tags      bridge-capabilities
-// @Router    /api/bridge/capabilities [get]
-// GetCapabilities GET /api/bridge/capabilities。
+// @Router    /api/channelbus/capabilities [get]
+// GetCapabilities GET /api/channelbus/capabilities。
 //
 // 响应体保持向后兼容（新增 key 只增不改）：
 //

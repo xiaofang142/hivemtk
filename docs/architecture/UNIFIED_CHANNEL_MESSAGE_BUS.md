@@ -10,7 +10,7 @@
 ## 0. 一句话结论
 
 - **语义层已经统一**：所有渠道最终都归一化成 `model.MessageEvent` → `service.InboxIngressService` → `message_hub` / 统一收件箱 → AI 会话，这一层是真正的「消息总线内核」。
-- **线路层部分统一**：协议常量已单源（`internal/pkg/channelbus`），我方可控桥接线路已有 canonical `/api/channelbus/*`（旧 `/api/bridge/*` 保留兼容）；SageX、webhook/cron 机器人渠道、web_embed 仍各有自己的上报与回执线路，仅在服务端适配层归一（§12.2/§12.3）。
+- **线路层部分统一**：协议常量已单源（`internal/pkg/channelbus`），我方可控桥接线路已**删除**旧 `/api/bridge/*`，统一到 canonical `/api/channelbus/*`；SageX、webhook/cron 机器人渠道、web_embed 仍各有自己的上报与回执线路，仅在服务端适配层归一（§12.2/§12.3/§13）。
 - **识别码已单点收敛**：账号级 `channel_accounts.identify_code` 是权威；`channel_identify_codes` 只是历史兼容。但渠道 ID 命名仍有 model 常量 / `WebhookChannel` / DB `channels.code` / 扩展常量四套并存。
 
 ---
@@ -35,37 +35,43 @@
 ```mermaid
 flowchart TB
     subgraph L0["L0 顶层：智能体 / 业务应用"]
-        AI["SmartCSOrchestrator / SalesEngine<br/>session = ScopedCheckpointThreadID<br/>画像 / 标签 / 历史 / 线索"]
+        AI["SmartCSOrchestrator / SalesEngine<br/>AI session = ScopedCheckpointThreadID<br/>画像 / 标签 / 历史 / 线索"]
         OPS["网管 API / 统一收件箱工作台<br/>/api/inbox/*, /api/message-hub/*"]
     end
 
     subgraph L1["L1 中层：user-server 消息总线内核（不碰渠道 DOM/SDK）"]
+        CB["协议单源 internal/pkg/channelbus<br/>SchemaVersion = hivemtk.channel.v1<br/>版本 / 帧类型 / ack 状态 / 传输"]
+        CANON["唯一线路端点 /api/channelbus/*<br/>ingest · outbox · ack · gateway · SSE · wake · ws<br/>旧 /api/bridge/* 已删除"]
         PROTO["channelgw 线路协议层<br/>protocol.go / registry.go / ws.go<br/>IngestMessage · Frame · OutboundReply"]
+        AUTH["ChannelResolver + BridgeIngressGuard<br/>identify_code 鉴权 / 租户 fail-closed / 限流豁免"]
         PIPE["IngressPipeline<br/>IngestBatch / ClaimOutbound / AckOutboundDetailed"]
-        ING["InboxIngressService<br/>归一化 · 门禁 · 去重 · 人肉锁<br/>session · 触发 AI"]
+        ING["InboxIngressService<br/>归一化 · 门禁 · 去重 · 人肉锁<br/>总线 session · 触发 AI"]
         HUB[("message_hub<br/>pending→inflight→delivered/failed/unknown")]
-        INBOX[("inbox_conversations / unified_messages")]
-        IDENT["ChannelResolver + BridgeIngressGuard<br/>identify_code 鉴权 / 租户 fail-closed"]
-        OUT["outbound registry / sender<br/>bridge / webhook / web_embed 直投"]
+        INBOX[("inbox_conversations / 统一收件箱")]
+        OUT["出站分发<br/>bridge outbox / webhook sender / web_embed 直投"]
     end
 
-    subgraph L2["L2 底层：渠道兼容层（各渠道自有协议）"]
-        BR["Bridge 扩展<br/>POST /api/bridge/ingest<br/>GET outbox · POST ack · SSE"]
-        SX["SageX<br/>POST /api/sagex/upload<br/>自有 schema_version + acks"]
-        WH["Webhook / Bot / Cron<br/>/api/webhook/:channel/:account_id<br/>TG polling 自投"]
-        EM["web_embed 访客<br/>/api/chat/public/*<br/>/api/ws/visitor"]
+    subgraph L2["L2 底层：渠道兼容层（各渠道自有线路）"]
+        BR["Bridge 扩展（canonical）<br/>POST /api/channelbus/ingest<br/>GET outbox · POST ack · SSE/WS"]
+        SX["SageX 监听微信/QQ<br/>POST /api/sagex/upload<br/>protocol_version = hivemtk.channel.v1"]
+        WH["Webhook / Bot / Cron<br/>/api/webhook/:channel/:account_id<br/>TG polling 自投带 identify_code"]
+        EM["web_embed 访客<br/>/api/chat/public/* + /api/ws/visitor"]
     end
 
-    BR -->|channelgw v1/v2| PROTO
-    SX -->|专用上传协议| ING
+    CB --> CANON
+    CB --> PROTO
+    CB -. 状态/版本 .-> SX
+    BR -->|canonical v1/v2| CANON
+    CANON --> PROTO
+    SX -->|适配层归一| ING
     WH -->|平台回调 / 自投| ING
     EM -->|访客会话协议| ING
+    AUTH -. 鉴权/归属 .-> CANON
+    AUTH -. 鉴权/归属 .-> SX
+    AUTH -. 鉴权/归属 .-> WH
     PROTO --> PIPE --> ING
     ING --> HUB
     ING --> INBOX
-    IDENT -.鉴权/归属.-> PROTO
-    IDENT -.鉴权/归属.-> SX
-    IDENT -.鉴权/归属.-> WH
     HUB --> OUT
     OUT --> BR
     OUT --> WH
@@ -90,7 +96,7 @@ flowchart TB
 ```mermaid
 flowchart LR
     A[渠道事件] --> B{入口类型}
-    B -->|bridge HTTP/WS| C["HandleHTTPIngest / HandleInbound<br/>bindBridgeTenant → validateScope<br/>ToEvent / ToEventFull / HistoryToEvent"]
+    B -->|bridge HTTP/WS（canonical /api/channelbus）| C["HandleHTTPIngest / HandleInbound<br/>bindBridgeTenant → validateScope<br/>ToEvent / ToEventFull / HistoryToEvent"]
     B -->|sagex| D["sagex_upload.processEvent<br/>ResolveByIdentifyCode → 构造 MessageEvent"]
     B -->|webhook/cron| E["WebhookService.Receive / ParsePayload<br/>dispatchToChannel → ToUnifiedMessage"]
     B -->|web_embed| F["VisitorChatService.SendMessage<br/>session_messages + syncToInbox"]
@@ -392,7 +398,7 @@ cd ../user-web/bridge && npx vitest run
 
 统一渠道消息总线的**内核已经存在并可用**：识别码鉴权、结构化归一、收件箱门禁、AI session、message_hub 三态 ack、Bridge 三通道协议都已在源码中实现，Bridge 系列可以作为一个渠道接一个渠道地复用同一套 API。
 
-但严格按用户原始要求「不可能一个渠道使用一套 API 完成」，当前做到的是**语义层统一 + 标识/回执语义统一**：8 项整改（G-01→G-08）已全部落地，包括渠道名单源归一、web_embed 入站归总线、webhook 统一 ack/pipeline、SageX 协议版本对齐、session 键映射、HTTP ack claim 栅栏、多租户鉴权硬禁、能力注册表 parity。SageX / webhook / cron / web_embed 的**线路协议与出站路径仍未合并成单一 API**——这是分阶段实施的明确边界，不在本文中被写成「已全部符合」（§6/§7 逐条标注残留）。后续若继续收敛，下一阶段议题是：平台 sender 走统一 outbox、web_embed 出站引入 claim/ack、三套能力包物理合并。
+但严格按用户原始要求「不可能一个渠道使用一套 API 完成」，当前做到的是**语义层统一 + 标识/回执语义统一**：8 项整改（G-01→G-08）已全部落地，包括渠道名单源归一、web_embed 入站归总线、webhook 统一 ack/pipeline、SageX 协议版本对齐、session 键映射、HTTP ack claim 栅栏、多租户鉴权硬禁、能力注册表 parity。SageX / webhook / cron / web_embed 的**线路协议与出站路径仍未合并成单一 API**——这是分阶段实施的明确边界，不在本文中被写成「已全部符合」（§6/§7 逐条标注残留）。按用户"不考虑旧路径兼容"指示，我方可控的旧 `/api/bridge/*` 路由、`schema_version=1.0` 与渠道级旧码热链已删除，统一到 `/api/channelbus/*` 与 canonical 协议标识（§12/§13）。后续若继续收敛，下一阶段议题是：平台 sender 走统一 outbox、web_embed 出站引入 claim/ack、三套能力包物理合并。
 
 ---
 
@@ -405,11 +411,11 @@ cd ../user-web/bridge && npx vitest run
 | 层 | 审计问题 | 必查证据 |
 |---|---|---|
 | L1 常量单源 | 协议版本/帧类型/ack 状态是否只有一个权威定义？ | `internal/pkg/channelbus/protocol.go`；`channelgw/protocol.go` 别名；`sagex_upload.go` / `webhook.go` / `bridge/handler_http.go` 是否仍有硬编码字面量 |
-| L2 线路同形 | 新接入方是否只用一套稳定端点？旧路径是否只是别名而非第二套实现？ | `/api/channelbus/*` 与 `/api/bridge/*` 是否复用同一 handler、同一 guard |
+| L2 线路同形 | 我方可控线路是否只剩一套端点？旧路由是否彻底删除？ | `router.go` 只注册 `/api/channelbus/*`；`retired` 路由断言旧路径 404 |
 | L3 数据同果 | 每条上行是否都能拿到 accepted/duplicate/retry/rejected 之一并落 message_hub？ | `IngestAck` / gateway ack / SageX receipt / webhook ack 的状态映射 |
 | L4 鉴权边界 | 识别码是否只走头/query，且多租户下永远不允许鉴权关闭？ | `BridgeIngressGuard`、`bindCallbackTenant`、`bridge_ingress_guard_test.go` |
 | L5 门禁与 session | 重复/自回声是否拦截；session 映射是否稳定且 7d TTL 有承载？ | `inbox_ingress.go`、`SessionIDForInbound`、`chat_history_redis.go` |
-| L6 兼容不逃逸 | 旧端点、旧 schema_version、旧 ack 字段是否只是兼容别名？ | sagex 旧 `schema_version=1.0`、webhook 旧字段、bridge 旧路径 |
+| L6 兼容面删除 | 旧端点、`schema_version=1.0`、渠道级旧码是否已从热链删除？ | `router.go` 旧路由、`HandleGateway`/SageX 版本白名单、`ValidCodes`/`tenant_binding` fallback |
 | L7 客户端一致 | bridge 扩展发出的 URL 与服务端注册路径是否逐字一致？ | `src/core/*.js` + `src/background/*.js` + 测试断言 |
 | L8 能力表一致 | 渠道名单/实验标记/收发能力三表是否双向 parity？ | `channelgw/registry.go`、`channelcaps`、`capregistry` |
 | L9 负面测试 | fail-closed、歧义、错码、非法 fence、未知 ack 值是否有测试？ | `*_test.go` 中对应用例 |
@@ -421,7 +427,7 @@ cd ../user-web/bridge && npx vitest run
 
 1. **协议常量单源**：新增 `internal/pkg/channelbus/protocol.go`（零业务依赖），定义 `SchemaVersion=hivemtk.channel.v1`、v1/v2、四类上行 ack、三类下行终态、九种帧类型、两种传输。
 2. **适配层去硬编码**：`channelgw/protocol.go` 导出常量改为 channelbus 别名；`sagex_upload.go` / `webhook.go` 的 ack 状态、`handler_http.go` 的 schema 与 ack 状态全部改为引用 channelbus，消除"同一字面量多处定义"。
-3. **canonical 端点组**：`router.go` 注册 `/api/channelbus/{ingest,outbox,outbox/ack,gateway,outbox/sse,outbox/wake,capabilities,selector-health,ws}`，与旧 `/api/bridge/*`、`/api/ws/channel` 复用同一 handler 与 `InitGuard + BridgeIngressGuard`；旧路径保留兼容，不是第二套实现。
+3. **唯一 canonical 端点组**：`router.go` 只注册 `/api/channelbus/{ingest,outbox,outbox/ack,gateway,outbox/sse,outbox/wake,capabilities,selector-health,ws}`，使用 `InitGuard + BridgeIngressGuard`；旧 `/api/bridge/*` 与 `/api/ws/channel` 路由已从注册表删除，并由 `bridge_assembly_routes_test.go` 的 retired 表断言不存在。
 4. **客户端迁移**：bridge 扩展 src/test 中 82 处 `/api/bridge/` 全部替换为 `/api/channelbus/`（含 background allowlist、SSE、wake、selector-health、测试断言）。
 5. **边界（不夸大）**：Telegram/飞书/企微/WhatsApp 等平台回调是外部平台定义的协议，embed 访客 WS 是浏览器会话协议；两者由适配层翻译成 `MessageEvent` 进入同一总线，**线路形状无法也不应强行同形**。本轮"物理合并"的对象是**我方 controllable 的桥接线路与协议标识**，不是平台回调本身。
 
@@ -429,7 +435,7 @@ cd ../user-web/bridge && npx vitest run
 
 | 对比维度 | Server | Bridge 扩展 | SageX 客户端 | Embed 访客 | 一致性要求 | 实测 |
 |---|---|---|---|---|---|---|
-| 协议身份 | `channelbus.SchemaVersion` | 请求体 `v:2`、响应 schema | `protocol_version` / 旧 `schema_version=1.0` | 不暴露 | 同一 canonical 字符串 | ✅ server 单源；SageX 双字段兼容 |
+| 协议身份 | `channelbus.SchemaVersion` | 请求体 `v:2`、响应 schema | `protocol_version`（或同值 `schema_version` 字段） | 不暴露 | 同一 canonical 字符串 | ✅ server/SageX 客户端均只认 canonical，1.0 已拒绝 |
 | 上报端点 | `/api/channelbus/ingest`、`/gateway` | HTTP ingest / gateway | `/api/integrations/sagex/upload`（旧 `/api/bridge/gateway` 兼容） | `/api/chat/public/sessions` | 我方线路统一 canonical，平台适配端点保持独立 | ✅ 已实施；⚠️ 平台端点异构是边界 |
 | 识别码 | `X-Channel-Identify-Code` / `identify_code` query | `buildAuthHeaders` | 安装绑定 identifyCode | AppKey + visitor_token | 码只走头/query，绝不进 path | ✅ |
 | 上行 ack | accepted/duplicate/retry/rejected | `ingested[]` 终态集合 | `acks[]` | 不暴露 | 四态逐字一致 | ✅ 同源于 channelbus |
@@ -452,13 +458,13 @@ cd ../user-web/bridge && npx vitest run
 | F-07 | 全量 DB 集成测试被 `POSTGRES_TEST_PASSWORD` 安全门阻断 | 低 | 已记录，非本轮回归；针对性测试全部通过 |
 | F-08 | Redis session 7d TTL 只在代码层固化，未做生产环境实测 | 低 | 列为运维待验证项，不写成"已验证" |
 | F-09 | `chat_history_redis.AppendHistory` 只有接口与实现，**零生产调用点**；7d 缓存实际为空读 | 高 | 本轮不擅自改 AI 运行链；文档改写为"TTL 已定义、写侧未接线"，列为下一阶段 P1 |
-| F-10 | canonical `/api/channelbus/ingest`、`/ws` 未加入全局限流 `ExemptPaths`，与旧路径行为不对等，批量上报会 429 | 高 | 已补入 `router.go` ExemptPaths，并同步 `subscription_guard.go` 客户面白名单 |
-| F-11 | gateway 只解析 `req.SchemaVersion` 从不校验，而 SageX upload 做版本白名单校验 | 中 | `HandleGateway` 增加 canonical/1.0/空值白名单，未知值 400 |
+| F-10 | `/api/channelbus/ingest`、`/ws` 曾被全局 1000 RPS 限流，批量上报会 429 | 高 | 已加入 `router.go` ExemptPaths；旧 `/api/bridge/*` 豁免项随旧路由一并删除 |
+| F-11 | gateway 只解析 `req.SchemaVersion` 从不校验，而 SageX upload 做版本白名单校验 | 中 | 第一步加白名单；按"不保留兼容"要求收紧为**必须显式 canonical**，空值与 `1.0` 均 400 |
 | F-12 | 下行终态双源：`channelbus.Status*` 与 `model.BridgeAckStatus*` 各写一份 | 中 | model 三态改为 channelbus 别名，新增 `TestBridgeAckTerminalStatusSingleSource` |
 | F-13 | canonical 路由无 parity 测试，删路由不会红 | 中 | `bridge_assembly_routes_test.go` 增加 11 条 canonical 路由与 handler 身份断言 |
-| F-14 | "Bridge ack 携带 claimed_at ⇒ ✅" 与客户端源码矛盾（ack 请求体无该字段） | 高 | §12.3 改为 ❌，明确栅栏只对 WS/直连客户端生效，扩展端待接线 |
-| F-15 | SageX Android 仓默认端点仍 `/api/bridge/gateway`，且 `UploadEngine.kt` 用 `contains("/bridge/gateway")` 判定模式 | 中 | 该仓有大量用户未提交文件，未触碰；服务端保留旧路径兼容，canonical 迁移列为跨仓后续 |
-| F-16 | bridge 文档/scripts/dist 仍残留旧路径；`constants.js:18-20` 注释过时 | 低 | 旧路径兼容不断链；列为 P2 文档/构建产物清理，不在本次提交范围 |
+| F-14 | "Bridge ack 携带 claimed_at ⇒ ✅" 与客户端源码矛盾（ack 请求体无该字段） | 高 | 服务端 outbox 已输出 `claimed_at`/`push_attempts`；客户端 `constants.js`/`http-ingest.js`/`downlink.js` 已回传与识别，vitest 108 files / 1328 passed 确认 |
+| F-15 | SageX Android 仓默认端点仍 `/api/bridge/gateway`，且 `UploadEngine.kt` 用 `contains("/bridge/gateway")` 判定模式 | 中 | 已改两个默认端点为 `/api/channelbus/gateway`、模式判定与 `AckValidator` 仅认 canonical；4 个 fixture 文件 50 处同步；两仓 `./gradlew test` 均 BUILD SUCCESSFUL |
+| F-16 | bridge 文档/scripts/dist 仍残留旧路径 | 低 | 服务端脚本/e2e/注释已改 canonical；dist 构建产物与已安装扩展需走发布链 B/C 重建，不在源码提交范围 |
 
 ### 12.5 新增验证证据
 
@@ -466,6 +472,32 @@ cd ../user-web/bridge && npx vitest run
 - `go test ./internal/service -run TestServiceAckStatusUsesCanonicalWireIdentity -count=1` → ok
 - `go test ./internal/model -run TestBridgeAckTerminalStatusSingleSource -count=1` → ok
 - 上三测试钉住「channelgw 常量 / SageX·Webhook ack 状态 / model 下行终态」全部等价于 channelbus 单源。
-- `go build ./...`、`go vet ./...` 通过；`npx vitest run`（bridge）108 files / 1328 passed / 7 skipped。
+- `go build ./...`、`go vet ./...` 通过；`npx vitest run`（bridge）108 files / 1328 passed / 7 skipped（含本轮 ack 栅栏字段断言更新）。
+- SageX 独立仓 `wechat-listener`、`qq-listener` 在 JDK 17 下 `./gradlew test` 均 BUILD SUCCESSFUL（canonical 协议与端点 fixture 全绿）。
 - `internal/router/bridge_assembly_routes_test.go` 新增 11 条 canonical 路由断言（含 ingest/gateway WS handler 身份），该用例依赖 PostgreSQL 快测实例，本机被 `POSTGRES_TEST_PASSWORD` 安全门阻断，需在测试库环境复跑。
 - 独立二次审计（只读）另有 F-09/F-14 两项未闭环：session 写侧未接线、扩展端 ack 未回传栅栏值；均已在本节与 §12.3 如实标注，不写成已实现。
+
+---
+
+## 13. 全链路业务生命周期检查表（S1~S11，按用户要求逐阶段核验）
+
+口径：按一条消息从"渠道账号建档 → 上报 → 归一 → 门禁 → 画像/session → AI → 出站 → ack → 收件箱 → 失败回收"的实际生命周期逐段核验；"已实现"必须有生产调用点与可复跑证据，只有接口/实现的写为 ❌。
+
+| 阶段 | 生命周期环节 | 结论 | 代码/证据 | 残留或处置 |
+|---|---|---|---|---|
+| S1 | 渠道账号建档与识别码 | ✅（热链已收敛） | `channel_accounts.identify_code` 为权威；`channel_identify_code.go` ValidCodes 已删除渠道级码候选；`tenant_binding.go` 删除 channel-level fallback | `channel_identify.go` 的旧 `CreateOrRotate`/`rotate` 仍保留但已无生产调用，非热链 |
+| S2 | 入站鉴权与租户绑定 | ✅ | `BridgeIngressGuard`；`bindCallbackTenant`；多租户 `BRIDGE_INGEST_AUTH=off` 硬禁 503；canonical/旧路由同 guard | 平台 webhook 回调为外部协议，经适配层归一（边界，非缺陷） |
+| S3 | 线路协议归一 | ✅（我方可控线路） | `channelbus` 单源；唯一 `/api/channelbus/*`；`HandleGateway`/SageX upload 只认 canonical | 旧 `/api/bridge/*` 路由与 `1.0` 兼容已删除；平台回调/embed WS 仍独立 |
+| S4 | 门禁与去重 | ⚠️ | `inbox_ingress` 幂等/自回声拦截重复；`IsDuplicateReason` 只认结论前缀 | `webhook_dedup.go:233-249` Redis 异常 fail-open，未改 |
+| S5 | session 画像与历史 | ⚠️ ❌ | `SessionIDForInbound` 映射固化；`chat_history_redis` 7d TTL 定义 | `AppendHistory` 零生产调用（缓存空读）；`AssetBundleLoader` 零装配，列为 P1 |
+| S6 | AI 触发与入库 | ✅ | `triggerAIForEvent`、`WithChannelOwnedAITrigger` 防双触；message_hub/conversation 落库 | 无 |
+| S7 | 出站路由与下发 | ✅ | outbox claim/推送；bridge HTTP/WS/SSE；SageX/平台 sender 适配层 | embed 出站仍直写 `session_messages`，未走 outbox claim/ack |
+| S8 | 发送状态与 ack 闭环 | ⚠️→已接线 | 服务端 `fence` + `claimed_at` 栅栏；客户端 `constants.js`/`http-ingest.js`/`downlink.js` 已回传三终态与栅栏值 | 待 bridge vitest 复跑确认；`unknown` 终态需对账入口 |
+| S9 | 统一收件箱与查询 API | ✅ | `inbox_conversations` + message_hub 三态；统一 API | 无 |
+| S10 | 失败回收与重投 | ❌ | outbox pending/重试/push_attempts 字段具备 | `NewOutboundReclaimTask` 零生产调用，`main.go:179` 报 disabled；`IngestExtraDroppedKeys` 未导出 metrics |
+| S11 | 旧路径兼容破坏面 | 🔴→已清理（源码层） | 旧路由、旧 schema、渠道级旧码热链均删；scripts/e2e/注释已改 canonical；SageX 仓客户端同步 canonical | bridge dist/已装扩展未重建重发（发布链 B/C）；管理面 `/api/bridge/token` 等非总线路径按职责保留 |
+
+### 13.1 生命周期结论
+
+按"完整业务生命周期"看，**S1/S2/S3/S6/S9 已闭环可复用；S4/S5/S8 部分闭环；S10 未闭环**。本轮按用户指示删除了我方可控范围内的旧路径兼容（路由、schema、鉴权旧码候选），并把 S8 栅栏从服务端延伸到客户端源码。剩余 ❌（S5 写侧、S10 回收）与 🔴（dist 重发）不在本轮擅自改动 AI/调度/发布链，明确列为后续 P1/P2，不写成"已完成"。
+

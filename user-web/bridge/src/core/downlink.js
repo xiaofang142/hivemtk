@@ -470,7 +470,12 @@ export async function pollDownlink(channel, accountId, getConfig, options = {}) 
     const sentEntries = [];
     const recordSent = (msg) => {
       sentIds.push(msg.msg_id);
-      sentEntries.push({ msg_id: msg.msg_id, conversation_id: msg.conversation_id || '' });
+      sentEntries.push({
+        msg_id: msg.msg_id,
+        conversation_id: msg.conversation_id || '',
+        claimed_at: msg.claimed_at || null,
+        push_attempts: msg.push_attempts || 0,
+      });
     };
     for (const { msg, sanitized, mediaOpts } of group) {
       // 跨标签页：同一渠道可能同时开着多个聊天页，两边都会看到同一条 outbox。

@@ -739,10 +739,10 @@ user	GET	/share/xianyu/:id
 user	GET	/health
 user	GET	/healthz
 user	GET	/readyz
-user	POST	/api/bridge/ingest
-user	GET	/api/bridge/outbox
-user	POST	/api/bridge/outbox/ack
-user	GET	/api/ws/channel
+user	POST	/api/channelbus/ingest
+user	GET	/api/channelbus/outbox
+user	POST	/api/channelbus/outbox/ack
+user	GET	/api/channelbus/ws
 user	POST	/api/monitor/trace-eval/trigger
 user	GET	/api/monitor/trace-eval/logs
 user	GET	/api/monitor/knowledge-weights
