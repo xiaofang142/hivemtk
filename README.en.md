@@ -26,30 +26,6 @@ One workspace for every social channel. One AI agent for every customer conversa
 
 ---
 
-<!-- Sponsored: IPWO residential proxies. No funding, no paywall — this slot pays the server bill. -->
-<div align="center">
-
-### We compromised with life.
-
-<sub>Fully open source, no funding, no paywall — but servers and API calls still cost money.<br>So we took one sponsor slot. Nothing removed, nothing locked, still AGPL-3.0.</sub>
-
-<br>
-
-<a href="https://www.ipwo.net/?ref=githubhivemt" target="_blank">
-  <img src="docs/ads/ipwo-github-banner.jpg" width="100%" alt="IPWO Residential Proxies · 195+ regions · Rotating / Static / Unlimited">
-</a>
-
-**IPWO Residential Proxies** — residential IP resources across **195+ countries and regions** for overseas social media operations and cross-border marketing.<br>
-Rotating, static and unlimited plans, multi-protocol ready: multi-region access, market research and overseas business scenarios.
-
-Free trial on rotating proxies · static proxies from **¥9.9 / month / IP** · promo code **`0200`**
-
-<a href="https://www.ipwo.net/?ref=githubhivemt" target="_blank"><b>→ Explore IPWO residential proxies</b></a>
-
-</div>
-
----
-
 ## At a Glance
 
 | | | | |
@@ -300,5 +276,29 @@ Proactive outreach (SMS / email / social DM / Telegram / WhatsApp) is a core sen
 **All Channels · True AI Autonomy · Zero Data Egress**
 
 Made with ❤️ by HiveMtk Team
+
+</div>
+
+---
+
+<!-- Sponsored: IPWO residential proxies. No funding, no paywall — this slot pays the server bill. -->
+<div align="center">
+
+### We compromised with life.
+
+<sub>Fully open source, no funding, no paywall — but servers and API calls still cost money.<br>So we took one sponsor slot. Nothing removed, nothing locked, still AGPL-3.0.</sub>
+
+<br>
+
+<a href="https://www.ipwo.net/?ref=githubhivemt" target="_blank">
+  <img src="docs/ads/ipwo-github-banner.jpg" width="100%" alt="IPWO Residential Proxies · 195+ regions · Rotating / Static / Unlimited">
+</a>
+
+**IPWO Residential Proxies** — residential IP resources across **195+ countries and regions** for overseas social media operations and cross-border marketing.<br>
+Rotating, static and unlimited plans, multi-protocol ready: multi-region access, market research and overseas business scenarios.
+
+Free trial on rotating proxies · static proxies from **¥9.9 / month / IP** · promo code **`0200`**
+
+<a href="https://www.ipwo.net/?ref=githubhivemt" target="_blank"><b>→ Explore IPWO residential proxies</b></a>
 
 </div>

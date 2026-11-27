@@ -20,30 +20,6 @@
 
 ---
 
-<!-- 广告位 / Sponsored：IPWO 住宅代理。项目无融资、无付费墙，服务器与 API 账单由该广告位支撑。 -->
-<div align="center">
-
-### 兄弟们,向生活妥协了
-
-<sub>纯开源、没融资、也没加付费墙 —— 服务器和 API 账单总得有人付,于是接了这个广告位。<br>不喜欢可以划走:功能一行没少,代码一行没锁,协议仍是 AGPL-3.0。</sub>
-
-<br>
-
-<a href="https://www.ipwo.net/?ref=githubhivemt" target="_blank">
-  <img src="docs/ads/ipwo-github-banner.jpg" width="100%" alt="IPWO 住宅代理 · 覆盖 195+ 国家和地区 · 动态 / 静态 / 不限量">
-</a>
-
-**IPWO 住宅代理** —— 面向海外社媒运营与跨境营销,提供覆盖 **195+ 国家和地区**的住宅代理资源,<br>
-支持**动态、静态及不限量**代理,多协议适配,满足多地区网络访问、市场调研与海外业务场景。
-
-动态代理支持 **免费测试** · 静态代理低至 **9.9 元/月/条** · 优惠折扣码:**`0200`**
-
-<a href="https://www.ipwo.net/?ref=githubhivemt" target="_blank"><b>→ 点击了解 IPWO 住宅代理</b></a>
-
-</div>
-
----
-
 ## 数字一览
 
 | | | | |
@@ -308,5 +284,29 @@ hivemtk/                        # 用户端仓库
 **多端打透 · AI 真自主 · 数据封死在域内**
 
 Made with ❤️ by HiveMtk Team
+
+</div>
+
+---
+
+<!-- 广告位 / Sponsored：IPWO 住宅代理。项目无融资、无付费墙，服务器与 API 账单由该广告位支撑。 -->
+<div align="center">
+
+### 兄弟们,向生活妥协了
+
+<sub>纯开源、没融资、也没加付费墙 —— 服务器和 API 账单总得有人付,于是接了这个广告位。<br>不喜欢可以划走:功能一行没少,代码一行没锁,协议仍是 AGPL-3.0。</sub>
+
+<br>
+
+<a href="https://www.ipwo.net/?ref=githubhivemt" target="_blank">
+  <img src="docs/ads/ipwo-github-banner.jpg" width="100%" alt="IPWO 住宅代理 · 覆盖 195+ 国家和地区 · 动态 / 静态 / 不限量">
+</a>
+
+**IPWO 住宅代理** —— 面向海外社媒运营与跨境营销,提供覆盖 **195+ 国家和地区**的住宅代理资源,<br>
+支持**动态、静态及不限量**代理,多协议适配,满足多地区网络访问、市场调研与海外业务场景。
+
+动态代理支持 **免费测试** · 静态代理低至 **9.9 元/月/条** · 优惠折扣码:**`0200`**
+
+<a href="https://www.ipwo.net/?ref=githubhivemt" target="_blank"><b>→ 点击了解 IPWO 住宅代理</b></a>
 
 </div>
