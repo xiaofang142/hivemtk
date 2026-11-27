@@ -792,3 +792,19 @@ trace `tr-6ad4f19888e34b623824538916af6bfd450c78fa`，personal_wx / account 10 /
 | `/api/monitor/health` | inbound=30.72/min、outbound=0、pending=16、abnormal=4077 | 入口与观测正常，出站仍被能力/上游阻断 |
 
 结论：三项质疑中①已代码修复并线上验证，③已证伪并纠正文档，②确认属上游 provider 配置/额度，代码层保留降级护栏是正确的，不做伪修复。未删除任何生产数据。
+
+### 19.6 线上 UI 回归质检（space 124，2026-11-27 15:08+08）
+
+全部为 ego-browser 逐元素显式操作（筛选 → 点击 → 读快照），未用自动枚举/循环点击。
+
+| 回归页面 | 元素操作与真实页面证据 | 判定 |
+|---|---|---|
+| 消息中台列表 `#/messageHub/list` | 展开「消息类型」下拉选 `image` → 搜索 → 首行 id=69414（微信/蜜语-微信/图片/`[表情]`/「相侵相碍一家人」） | 归一后类型可被 UI 筛选命中 ✅ |
+| 消息详情 | 点该行「详情」→ 弹窗 ID=69414、消息 ID=`fe5f85c1-87a1-4c2e-afaa-74709c6a7374`、类型=image、扩展字段含 `placeholder_normalized=image` + `source_placeholder=[表情]`、入库 15:08:20 | 服务端归一在 UI 可见、审计字段完整 ✅ |
+| 链路追踪 `#/system/trace` | 用该消息 turn_id `ae53cc15…` 查询 → Span `ingest(正常4ms)` / `ai_trigger_decision(异常 skipped:middleware_intercepted)` / `inbox_sync(正常)`；接口 checklist `missing=null,complete=true`，决策 `abnormal=true` 为具体原因 | 观测闭环正确，complete 不掩盖 skipped ✅ |
+| 业务健康概览 tab | 入站 30.37/min、出站 0、待发 16、最早滞留 1232 分、已送达 0、异常节点 4125，并提示「存在链路卡住或数据缺口」 | 健康口径如实暴露断点 ✅ |
+| 异常 tab →「卡住（可直接送达）」 | 16 行全为 `conv:做点吃的也不是很难啊` / 抖音 / 1232 分 | 测试污染仍被明确标识，未误当业务故障 ✅ |
+| 异常 tab →「节点异常」 | 微信 `ai_result` 93.1%、`retrieval_embedding` 10.6%、`agent_turn` 71.4% | 上游 LLM/检索问题持续可见 ⚠️ |
+| 线索智能体 → 判定记录 →「回放」 | 最新判例 15:12 QQ 群降级判定，回放抽屉 Result JSON 显示 `degraded=true`、`matched_keywords=["约"]`、`react_outcome.degraded=true` | 降级可见且证据可回放；有效线索仍受上游 LLM 阻断 ⚠️ |
+
+结论：本轮发布的三项代码改动（占位符归一、线索过滤、审计标记）在真实线上 UI 全部可验证；既有的上游 LLM 空响应、发送能力缺失、测试污染数据三类问题在 UI 中也如实呈现，无回归、无掩盖。
