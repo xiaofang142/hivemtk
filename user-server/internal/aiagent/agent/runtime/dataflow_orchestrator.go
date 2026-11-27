@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/aiagent/agent/delivery"
+	"hivemtk-user/internal/aiagent/agent/portcontract"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
@@ -17,6 +18,7 @@ type CoreDataFlowOrchestrator struct {
 	escalate EscalationTrigger
 
 	assetLoader     AssetLoader
+	chatHistory     portcontract.ChatHistoryPort
 	toolRouter      ToolRouterExecutor
 	trimmer         ResponseTrimmer
 	publisher       ResponsePublisher
@@ -98,6 +100,14 @@ func (o *CoreDataFlowOrchestrator) SetAssetLoader(al AssetLoader) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.assetLoader = al
+}
+
+// SetChatHistory 注入会话历史端口（S5 写侧：AI 回复成功后 AppendHistory）。
+// nil 时跳过写入，保持旧行为（不破坏规划/执行双模）。
+func (o *CoreDataFlowOrchestrator) SetChatHistory(h portcontract.ChatHistoryPort) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.chatHistory = h
 }
 
 // SetToolRouter 注入工具路由

@@ -447,6 +447,11 @@ func (s *WeComService) GetGroupList(ctx context.Context, page, pageSize int) ([]
 type WeComSendMessageRequest struct {
 	ToUser  string `json:"to_user"`
 	ToParty string `json:"to_party"`
+	// ToType 决定走哪条官方接口：
+	//   "app"（默认）→ /cgi-bin/message/send，收件人是企业内成员 userid；
+	//   "external"   → /cgi-bin/externalcontact/message/send，收件人是外部联系人
+	//                  external_userid（需企业已开通客户联系权限）。
+	ToType  string `json:"to_type"`
 	MsgType string `json:"msg_type" binding:"required"`
 	Content string `json:"content"`
 	MediaID string `json:"media_id"`
@@ -454,6 +459,126 @@ type WeComSendMessageRequest struct {
 	Desc    string `json:"desc"`
 	URL     string `json:"url"`
 	PicURL  string `json:"pic_url"`
+}
+
+// SendAppMessage 向**企业内部成员**发送应用消息（`/cgi-bin/message/send`）。
+//
+// 与 SendMessage 的区别（勿混用）：
+//   - SendMessage 走 `externalcontact/message/send`，收件人是「外部联系人（客户）」
+//     external_userid，需要企业已开通「客户联系」权限并把应用加入可调用应用列表；
+//     企业未认证时该接口必返 48002 api forbidden。
+//   - SendAppMessage 走 `message/send`，收件人是通讯录里的成员 userid（`|` 分隔）或
+//     部门 partyid，只要应用在可见范围内即可发送，**不需要**客户联系权限。
+//     内部线索/业务通知走这条路。
+//
+// 真机验证（2026-11-27，tenant 18 / agentid 1000003）：未认证企业下
+// message/send errcode=0 成功，externalcontact/message/send errcode=48002，
+// 即「通知企业人员」只能依赖本方法。
+func (s *WeComService) SendAppMessage(ctx context.Context, account *model.WeComAccount, req *WeComSendMessageRequest) (string, error) {
+	token, err := s.GetAccessToken(ctx, account)
+	if err != nil {
+		return "", err
+	}
+
+	url := fmt.Sprintf("https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token=%s", token)
+
+	msgData := map[string]any{
+		"msgtype": req.MsgType,
+		"agentid": account.AgentID,
+	}
+	if v := strings.TrimSpace(req.ToUser); v != "" {
+		msgData["touser"] = v
+	}
+	if v := strings.TrimSpace(req.ToParty); v != "" {
+		msgData["toparty"] = v
+	}
+	if req.ToUser == "" && req.ToParty == "" {
+		// 官方语义：touser/toparty/totag 全空等于发给应用可见范围内所有人，
+		// 这里显式要求指定收件人，避免误群发全公司。
+		return "", errors.New("touser 与 toparty 至少填一个")
+	}
+
+	if err := fillWeComMsgBody(msgData, req); err != nil {
+		return "", err
+	}
+
+	bodyBytes, _ := json.Marshal(msgData)
+	resp, err := httpclient.Client.Post(url, "application/json", bytes.NewReader(bodyBytes))
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	var result struct {
+		ErrCode      int    `json:"errcode"`
+		ErrMsg       string `json:"errmsg"`
+		MsgID        string `json:"msgid"`
+		InvalidUser  string `json:"invaliduser"`
+		InvalidParty string `json:"invalidparty"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", err
+	}
+	if result.ErrCode != 0 {
+		return "", wecomAPIError("send_app", result.ErrCode, result.ErrMsg)
+	}
+
+	now := time.Now()
+	message := &model.WeComMessage{
+		AccountID: account.ID,
+		MsgID:     result.MsgID,
+		MsgType:   req.MsgType,
+		ToUser:    req.ToUser,
+		Content:   req.Content,
+		Status:    1,
+		SendTime:  &now,
+	}
+	if e := s.messageRepo.Create(ctx, message); e != nil {
+		logger.Warnf("[WeCom] 消息记录落库失败 msgID=%s: %v", result.MsgID, e)
+	}
+
+	if result.InvalidUser != "" || result.InvalidParty != "" {
+		return result.MsgID, fmt.Errorf("部分收件人无效：invaliduser=%s invalidparty=%s", result.InvalidUser, result.InvalidParty)
+	}
+	return result.MsgID, nil
+}
+
+// fillWeComMsgBody 按 msgtype 填充消息体（两种发送路径共用）。
+func fillWeComMsgBody(msgData map[string]any, req *WeComSendMessageRequest) error {
+	switch req.MsgType {
+	case "text":
+		msgData["text"] = map[string]string{"content": req.Content}
+	case "markdown":
+		msgData["markdown"] = map[string]string{"content": req.Content}
+	case "textcard":
+		card := map[string]any{
+			"title":       req.Title,
+			"description": req.Content,
+			"url":         req.URL,
+			"btntxt":      "查看详情",
+		}
+		if req.PicURL != "" {
+			card["picurl"] = req.PicURL
+		}
+		msgData["textcard"] = card
+	case "image":
+		msgData["image"] = map[string]string{"media_id": req.MediaID}
+	case "link":
+		msgData["link"] = map[string]string{
+			"title":  req.Title,
+			"desc":   req.Desc,
+			"url":    req.URL,
+			"picurl": req.PicURL,
+		}
+	default:
+		return fmt.Errorf("不支持的 msg_type: %s", req.MsgType)
+	}
+	return nil
 }
 
 // SendMessage 发送消息

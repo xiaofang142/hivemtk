@@ -1,6 +1,8 @@
 package router
 
 import (
+	agent_runtime "hivemtk-user/internal/aiagent/agent/runtime"
+	"hivemtk-user/internal/app"
 	"hivemtk-user/internal/controller"
 	"hivemtk-user/internal/middleware"
 	"hivemtk-user/internal/platform"
@@ -15,6 +17,14 @@ func setupAssetBundleRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	assetBundleRepo := repository.NewAssetBundleRepository(gormDB)
 	versionLogRepo := repository.NewAssetBundleVersionLogRepository(gormDB)
 	assetBundleSvc := service.NewAssetBundleService(assetBundleRepo, versionLogRepo)
+	// S5 读侧：装配 AssetBundleLoader（weave + history），search 可选（nil → 无 RAG），
+	// 注入推理编排器，使 chat_history 缓存可被读取（FetchHistory）。
+	if orch := app.GetInferenceOrchestrator(); orch != nil {
+		weave := service.NewAssetBundleWeavePortAdapter(assetBundleSvc)
+		history := agent_runtime.NewChatHistoryRedisAdapter(10)
+		loader := agent_runtime.NewAssetBundleLoader(weave, history, nil, agent_runtime.LoaderDefaults{})
+		orch.SetAssetLoader(loader)
+	}
 	localAssetRepo := repository.NewLocalAssetRepository(gormDB)
 	localAssetDataRepo := repository.NewLocalAssetDataRepository(gormDB)
 	localAssetSyncLogRepo := repository.NewLocalAssetSyncLogRepository(gormDB)

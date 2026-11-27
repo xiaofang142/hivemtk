@@ -109,7 +109,7 @@ fail-closed 5000**（"需要租户上下文但 ctx 未绑定"）。
     -H "Authorization: Bearer <登录后的 token>"
   ```
 
-- **注意**：`tenant_code` 是租户**短码**（`t` + 6 位低歧义字符，如 `tz3rmdj`），
+- **注意**：`tenant_code` 是租户**短码**（`t` + 6 位低歧义字符），
   不是 `tenant_id`（数据库自增 id）。后者在 JWT 里，前者只在上面这个接口里。
 - **落库口径（2026-10-22 修）**：登录响应确实带 `tenant_id`/`tenant_code`
   （MFA 第二步 `/api/auth/mfa/verify` 同样带），前端落进 `localStorage.user_info`。

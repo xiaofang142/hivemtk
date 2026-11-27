@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"hivemtk-user/internal/aiagent/agent/delivery"
+	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
@@ -275,6 +276,20 @@ func (o *CoreDataFlowOrchestrator) submitDelivery(ctx context.Context, result *O
 			result.FinalReply, result.Publishable, result.ExecutionStatus = intent.Content, true, ExecutionSucceeded
 			if record.NewConfirmed && result.ToolCallCount == 0 {
 				o.recordDirectReply()
+			}
+			// S5 写侧：AI 回复成功后追加到会话历史缓存（7 天 TTL）。
+			// 仅在 chatHistory 端口已装配时执行；失败只 warn，不阻断交付。
+			o.mu.RLock()
+			ch := o.chatHistory
+			o.mu.RUnlock()
+			if ch != nil && result.SessionID != "" && intent.Content != "" {
+				msg := model.AssetBundleMessage{
+					Role:    "assistant",
+					Content: intent.Content,
+				}
+				if err := ch.AppendHistory(ctx, result.SessionID, msg); err != nil {
+					logger.Warnf("[dataflow] append chat history failed session=%s err=%v", result.SessionID, err)
+				}
 			}
 		}
 	case delivery.Rejected:

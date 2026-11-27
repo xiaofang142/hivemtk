@@ -5,7 +5,7 @@ import { normalizeSelectValue } from '@/utils/selectValue'
 // 而 /api/channels/catalog 的账号 id 是数字 10，el-select 严格相等匹配失败会显示裸 "10"。
 describe('外键下拉选中值归一化', () => {
   it('数字选项下把字符串 id 转成数字，选中后能显示关联名称', () => {
-    const options = [{ value: 10, label: '四川同咨微信账号' }]
+    const options = [{ value: 10, label: '示例公司微信账号' }]
     expect(normalizeSelectValue('10', options)).toBe(10)
     expect(normalizeSelectValue(10, options)).toBe(10)
   })

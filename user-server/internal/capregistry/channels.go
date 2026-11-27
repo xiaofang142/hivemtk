@@ -58,24 +58,24 @@ func init() {
 	}})
 	Register(Entry{Platform: "douyin", Cap: CapLeadMine, Via: "unified-miner", Note: "关键词打分 + LLM 复核（lead.llm_refine_enabled）"})
 	Register(Entry{Platform: "xiaohongshu", Cap: CapDMReceive, Via: "bridge", Note: "同抖音桥接链路"})
-	Register(Entry{Platform: "xiaohongshu", Cap: CapDMSend, Via: "bridge", Note: "同抖音桥接链路"})
+	Register(Entry{Platform: "xiaohongshu", Cap: CapDMSend, Via: "bridge", Note: "同抖音桥接链路", Cells: []CellDefinition{{Product: "xiaohongshu", Region: "CN", Action: "message.text.send", Carrier: "bridge", ExecutionMode: ModeBridge, ContractVersion: "bridge-v1", RequiredScopes: []string{"message.text.send"}, DocumentationVersion: "design-cell-v1", Experimental: true}}})
 	Register(Entry{Platform: "xiaohongshu", Cap: CapLeadMine, Via: "unified-miner", Note: ""})
 	Register(Entry{Platform: "kuaishou", Cap: CapDMReceive, Via: "bridge", Note: ""})
-	Register(Entry{Platform: "kuaishou", Cap: CapDMSend, Via: "bridge", Note: ""})
+	Register(Entry{Platform: "kuaishou", Cap: CapDMSend, Via: "bridge", Note: "", Cells: []CellDefinition{{Product: "kuaishou", Region: "CN", Action: "message.text.send", Carrier: "bridge", ExecutionMode: ModeBridge, ContractVersion: "bridge-v1", RequiredScopes: []string{"message.text.send"}, DocumentationVersion: "design-cell-v1", Experimental: true}}})
 	Register(Entry{Platform: "tiktok", Cap: CapDMReceive, Via: "bridge", Note: "海外链路"})
-	Register(Entry{Platform: "tiktok", Cap: CapDMSend, Via: "bridge", Note: "海外链路"})
+	Register(Entry{Platform: "tiktok", Cap: CapDMSend, Via: "bridge", Note: "海外链路", Cells: []CellDefinition{{Product: "tiktok", Region: "CN", Action: "message.text.send", Carrier: "bridge", ExecutionMode: ModeBridge, ContractVersion: "bridge-v1", RequiredScopes: []string{"message.text.send"}, DocumentationVersion: "design-cell-v1", Experimental: true}}})
 	Register(Entry{Platform: "xianyu", Cap: CapDMReceive, Via: "bridge", Note: ""})
-	Register(Entry{Platform: "xianyu", Cap: CapDMSend, Via: "bridge", Note: ""})
+	Register(Entry{Platform: "xianyu", Cap: CapDMSend, Via: "bridge", Note: "", Cells: []CellDefinition{{Product: "xianyu", Region: "CN", Action: "message.text.send", Carrier: "bridge", ExecutionMode: ModeBridge, ContractVersion: "bridge-v1", RequiredScopes: []string{"message.text.send"}, DocumentationVersion: "design-cell-v1", Experimental: true}}})
 	// 2026-11 六渠道统一接待：京东/B站/微博为网页私信桥（选择器待真机校准）；
 	// personal_wx 为桌面伴生协议（服务端已就绪，伴生为外部工程）。
 	Register(Entry{Platform: "jd", Cap: CapDMReceive, Via: "bridge", Note: "京麦/咚咚网页私信；Experimental，选择器待真机"})
-	Register(Entry{Platform: "jd", Cap: CapDMSend, Via: "bridge", Note: "outbox 下发；Experimental"})
+	Register(Entry{Platform: "jd", Cap: CapDMSend, Via: "bridge", Note: "outbox 下发；Experimental", Cells: []CellDefinition{{Product: "jd", Region: "CN", Action: "message.text.send", Carrier: "bridge", ExecutionMode: ModeBridge, ContractVersion: "bridge-v1", RequiredScopes: []string{"message.text.send"}, DocumentationVersion: "design-cell-v1", Experimental: true}}})
 	Register(Entry{Platform: "bilibili", Cap: CapDMReceive, Via: "bridge", Note: "message.bilibili.com；Experimental"})
-	Register(Entry{Platform: "bilibili", Cap: CapDMSend, Via: "bridge", Note: "outbox 下发；Experimental"})
+	Register(Entry{Platform: "bilibili", Cap: CapDMSend, Via: "bridge", Note: "outbox 下发；Experimental", Cells: []CellDefinition{{Product: "bilibili", Region: "CN", Action: "message.text.send", Carrier: "bridge", ExecutionMode: ModeBridge, ContractVersion: "bridge-v1", RequiredScopes: []string{"message.text.send"}, DocumentationVersion: "design-cell-v1", Experimental: true}}})
 	Register(Entry{Platform: "weibo", Cap: CapDMReceive, Via: "bridge", Note: "weibo.com/chat；Experimental"})
-	Register(Entry{Platform: "weibo", Cap: CapDMSend, Via: "bridge", Note: "outbox 下发；Experimental"})
+	Register(Entry{Platform: "weibo", Cap: CapDMSend, Via: "bridge", Note: "outbox 下发；Experimental", Cells: []CellDefinition{{Product: "weibo", Region: "CN", Action: "message.text.send", Carrier: "bridge", ExecutionMode: ModeBridge, ContractVersion: "bridge-v1", RequiredScopes: []string{"message.text.send"}, DocumentationVersion: "design-cell-v1", Experimental: true}}})
 	Register(Entry{Platform: "personal_wx", Cap: CapDMReceive, Via: "bridge", Note: "桌面伴生上报；伴生未交付（外部工程）"})
-	Register(Entry{Platform: "personal_wx", Cap: CapDMSend, Via: "bridge", Note: "outbox 下发；伴生未交付（外部工程）"})
+	Register(Entry{Platform: "personal_wx", Cap: CapDMSend, Via: "bridge", Note: "outbox 下发；伴生未交付（外部工程）", Cells: []CellDefinition{{Product: "personal_wx", Region: "CN", Action: "message.text.send", Carrier: "bridge", ExecutionMode: ModeBridge, ContractVersion: "bridge-v1", RequiredScopes: []string{"message.text.send"}, DocumentationVersion: "design-cell-v1", Experimental: true}}})
 	// CH-16 首切片（2026-11-09，二次审核补齐）：拼多多商家网页私信，桥接收发链路与
 	// 既有网页渠道同源；Experimental（选择器为 X 级历史源码实证，本方真机未校准）。
 	// EC-16 (M16): commerce 动作格（订单改单/售后/退款 api_adapter cells）未登记；当前仅消息桥接骨架。

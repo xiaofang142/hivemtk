@@ -9,7 +9,7 @@ import { usePermissionStore } from '@/stores/permission'
 import { settle } from './settle-helper'
 
 vi.mock('@/views/channels/channel-manage.vue', () => ({ default: { template: '<div data-testid="catalog-content">渠道列表</div>' } }))
-vi.mock('@/views/channels/account-manage.vue', () => ({ default: { template: '<div data-testid="accounts-content">四川同咨客服账号</div>' } }))
+vi.mock('@/views/channels/account-manage.vue', () => ({ default: { template: '<div data-testid="accounts-content">示例公司客服账号</div>' } }))
 vi.mock('@/views/channels/identify-code-manage.vue', () => ({ default: { template: '<div data-testid="codes-content">识别码列表</div>' } }))
 
 let wrapper
@@ -33,7 +33,7 @@ describe('独立渠道模块', () => {
     const router = await openModule(['/channels/manage', '/channels/accounts', '/channels/identify-codes'], '/channels/accounts')
     expect(wrapper.get('h1').text()).toBe('渠道')
     expect(wrapper.findAll('[role="tab"]')).toHaveLength(3)
-    expect(wrapper.get('[data-testid="accounts-content"]').text()).toContain('四川同咨')
+    expect(wrapper.get('[data-testid="accounts-content"]').text()).toContain('示例公司')
     expect(wrapper.text()).toContain('SageX')
     await wrapper.get('#tab-\\/channels\\/manage').trigger('click')
     await settle(wrapper)

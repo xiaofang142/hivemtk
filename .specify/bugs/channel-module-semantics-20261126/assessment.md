@@ -1,13 +1,13 @@
 # 渠道模块与消息归属检查
 
-用户要求：渠道独立为一个模块，不显示三个导航入口；QQ、微信等渠道均可承载单聊和群聊；SageX 是接入服务，不是渠道；检查四川同咨的数据。
+用户要求：渠道独立为一个模块，不显示三个导航入口；QQ、微信等渠道均可承载单聊和群聊；SageX 是接入服务，不是渠道；检查示例公司的数据。
 
 ## 已确认问题
 
 - `SystemMenuTree` 将三个渠道入口放在系统设置/权限设置下，前端直接展示为三个菜单。
 - 渠道与账号表单固定选择 dm/group/cs；`ChannelResolver.Identify` 在消息类型缺失时使用账号 Type，上层 `IdentifySpeaker` 也会把缺失类型默认成 dm，错误地替消息推断会话类型。
 - 前端渠道常量遗漏 QQ；后端预设遗漏个人微信 personal_wx。
-- 线上 2026-11-26 只读检查：`GET /api/channels` HTTP 200/code 0，包含 id=1/name=四川同咨/code=sagex-t18；`GET /api/channel-accounts` 包含所属渠道 1 的四川同咨客服账号。该名称是租户/账号名称，编码是接入服务标识，不是 QQ/微信平台。消息中台同时存在 qq、personal_wx、sagex-t18，证明确有归属混杂。
+- 线上 2026-11-26 只读检查：`GET /api/channels` HTTP 200/code 0，包含 id=1/name=示例公司/code=sagex-t18；`GET /api/channel-accounts` 包含所属渠道 1 的示例公司客服账号。该名称是租户/账号名称，编码是接入服务标识，不是 QQ/微信平台。消息中台同时存在 qq、personal_wx、sagex-t18，证明确有归属混杂。
 - Bridge 身份解析将识别码绑定的 ChannelCode 覆盖客户端平台，历史 sagex-t18 服务绑定可能把 QQ/微信消息错误写成服务编码。SageX 专用上传入口本身已按包名识别真实平台。
 - 渠道列表 DTO 丢失备注，账号编辑未回填详情备注，存在保存覆盖风险。
 

@@ -70,7 +70,7 @@ const fillAccount = async (wrapper, { username, email, password }) => {
 }
 
 const fillRegistration = async (wrapper) => {
-  await wrapper.find('input[placeholder*="营业执照"]').setValue('四川同咨科技有限公司')
+  await wrapper.find('input[placeholder*="营业执照"]').setValue('示例科技有限公司')
   await wrapper.find('input[placeholder*="负责人/法人姓名"]').setValue('张负责人')
   await wrapper.find('input[placeholder*="手机号或固定电话"]').setValue('13800138000')
   await wrapper.find('input[placeholder*="监管问询联系"]').setValue('四川省成都市高新区天府大道 1 号')

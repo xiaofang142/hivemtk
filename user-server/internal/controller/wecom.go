@@ -7,6 +7,7 @@ import (
 	"hivemtk-user/internal/service"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -297,7 +298,15 @@ func (c *WeComController) SendMessage(ctx *gin.Context) {
 		return
 	}
 
-	msgID, err := c.wecomService.SendMessage(ctx.Request.Context(), account, &req)
+	// 按 to_type 选择官方接口（默认 app=内部成员，避免历史客户群发口径变化）：
+	//   app      → /cgi-bin/message/send（成员 userid / 部门 partyid）
+	//   external → /cgi-bin/externalcontact/message/send（外部联系人，需客户联系权限）
+	var msgID string
+	if strings.EqualFold(req.ToType, "external") {
+		msgID, err = c.wecomService.SendMessage(ctx.Request.Context(), account, &req)
+	} else {
+		msgID, err = c.wecomService.SendAppMessage(ctx.Request.Context(), account, &req)
+	}
 	if err != nil {
 		respondWeComError(ctx, err, "发送失败")
 		return

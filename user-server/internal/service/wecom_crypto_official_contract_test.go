@@ -107,7 +107,9 @@ func TestVerifyURL_OfficialEchostrHandshake(t *testing.T) {
 	aesKey := newWecomEncodingAESKey(t)
 	echostr := wecomOfficialEncrypt(t, aesKey, "call_back_echostr", "ww_corpid")
 	timestamp, nonce := "1726732800", "1372623149"
-	sig := wecomCallbackSignature(token, timestamp, nonce, "call_back_echostr")
+	// 官方口径：签名用请求收到的 echostr 原值（密文），不是解密后的明文。
+	// 见「回调配置 / 3.1 支持Http Get请求验证URL有效性」第 2 步。
+	sig := wecomCallbackSignature(token, timestamp, nonce, echostr)
 
 	got, err := VerifyURL(token, aesKey, sig, timestamp, nonce, echostr)
 	if err != nil {

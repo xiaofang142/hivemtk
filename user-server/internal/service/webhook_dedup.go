@@ -268,6 +268,31 @@ func ContentHashWithSender(channel, senderName, content string) string {
 	return fmt.Sprintf("mh:%08x", h.Sum32())
 }
 
+// webhookDedupLocalFallback 进程级内存去重兜底：Redis 后端不可用时，
+// 用本进程内 map 维持窗口期去重，避免 Redis 抖动时重复消息/AI 双触发。
+// 仅在 Redis 异常时启用；正常路径仍以 Redis 为权威（跨进程/跨实例一致）。
+var (
+	webhookDedupLocalMu   sync.Mutex
+	webhookDedupLocalSeen = make(map[string]time.Time)
+)
+
+func webhookDedupLocalHit(eventID string, ttl time.Duration) bool {
+	now := time.Now()
+	webhookDedupLocalMu.Lock()
+	defer webhookDedupLocalMu.Unlock()
+	// 惰性清理过期条目，避免 map 无限增长。
+	for k, exp := range webhookDedupLocalSeen {
+		if now.After(exp) {
+			delete(webhookDedupLocalSeen, k)
+		}
+	}
+	if exp, ok := webhookDedupLocalSeen[eventID]; ok && now.Before(exp) {
+		return true
+	}
+	webhookDedupLocalSeen[eventID] = now.Add(ttl)
+	return false
+}
+
 func (s *WebhookService) isDuplicate(ctx context.Context, eventID string) bool {
 	if eventID == "" {
 		return false
@@ -275,11 +300,14 @@ func (s *WebhookService) isDuplicate(ctx context.Context, eventID string) bool {
 	key := "mtk:webhook:dedup:" + eventID
 	set, err := cache.GetGlobalCache().SetNX(ctx, key, "1", webhookDedupTTL(ctx))
 	if err != nil {
-		logger.Ctx(ctx).Warn().Err(err).Str("event_id", eventID).Msg("[webhook] dedup 后端异常，放行")
-		return false
+		// Redis 后端异常：回落进程级内存去重（保留可用性 + 去重），而非直接放行。
+		// 仅单实例内有效；多实例部署下 Redis 恢复前可能出现跨实例重复，由 message_hub
+		// 唯一索引作为最终兜底（持久化层幂等），不阻断消息处理。
+		logger.Ctx(ctx).Warn().Err(err).Str("event_id", eventID).Msg("[webhook] dedup 后端异常，回落进程级内存去重")
+		return webhookDedupLocalHit(eventID, webhookDedupTTL(ctx))
 	}
 	if !set {
-
+ 
 		logger.Ctx(ctx).Debug().Str("event_id", eventID).Msg("[webhook] dedup hit")
 		return true
 	}

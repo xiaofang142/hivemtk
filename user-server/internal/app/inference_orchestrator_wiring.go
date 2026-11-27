@@ -50,6 +50,8 @@ func InitInferenceOrchestrator() {
 		}
 		globalInferenceOrchestrator = agent_runtime.NewCoreDataFlowOrchestrator(cycle, nil)
 		globalInferenceOrchestrator.SetDeliveryGateway(GetInferenceDeliveryService())
+		// S5 写侧：装配会话历史 Redis 适配器，AI 回复成功后 AppendHistory（7 天 TTL）。
+		globalInferenceOrchestrator.SetChatHistory(agent_runtime.NewChatHistoryRedisAdapter(10))
 		logger.Info("[inference] ✅ CoreDataFlowOrchestrator 已装配（五阶段推理及持久交付账本，默认仅规划）")
 	})
 }

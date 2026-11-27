@@ -61,7 +61,9 @@ func TestWeCom_VerifyURL_OK(t *testing.T) {
 
 	timestamp := "1700000000"
 	nonce := "abc123"
-	sig := computeWeComSignatureURL(token, timestamp, nonce, echostr)
+	// 官方口径：签名参与项是请求里的 echostr 原值（密文 encEcho），
+	// 不是解密后的明文——见「回调配置/3.1」第 2 步，真机回归勿改回。
+	sig := computeWeComSignatureURL(token, timestamp, nonce, encEcho)
 
 	plain, err := VerifyURL(token, aesKey, sig, timestamp, nonce, encEcho)
 	if err != nil {
@@ -595,7 +597,8 @@ func TestWeCom_VerifyURL_HTTP(t *testing.T) {
 	encEcho := wecomOfficialEncrypt(t, aesKey, echostr, "wx")
 	ts := "1700000001"
 	nonce := "n001"
-	sig := computeWeComSignatureURL(token, ts, nonce, echostr)
+	// 官方口径：签名参与项是 echostr 密文（encEcho），见「回调配置/3.1」第 2 步。
+	sig := computeWeComSignatureURL(token, ts, nonce, encEcho)
 
 	url := fmt.Sprintf("/api/webhook/wecom/1?msg_signature=%s&timestamp=%s&nonce=%s&echostr=%s",
 		sig, ts, nonce, url.QueryEscape(encEcho))

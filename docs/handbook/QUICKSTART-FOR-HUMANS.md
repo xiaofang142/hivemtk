@@ -785,7 +785,7 @@ npm run build        # 产物在 dist/（esbuild 逐入口 IIFE）
 |------|--------|------|
 | `serverUrl` | user-server 地址；点「线上」按钮自动填 SaaS 云端地址 | 云端地址（见 `src/core/constants.js`） |
 | `通道识别码`（表单 id 仍为 `token`，语义是识别码） | 管理员在「渠道识别码管理」页为渠道生成/重置的明文 | —（留空全部 401） |
-| `租户短码 (tenant_code)` | SaaS 多租户必填，如 `tz3rmdj`；离线单机留空 | 空 |
+| `租户短码 (tenant_code)` | SaaS 多租户必填，填写租户码；离线单机留空 | 空 |
 | `autoConnect` | 自动连接开关 | 开 |
 
 **识别码从哪来**：网页端 [系统设置 → 权限设置 → 渠道识别码]（`/channels/identify-codes`）→

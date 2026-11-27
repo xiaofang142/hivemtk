@@ -7,7 +7,7 @@
 
 ## Summary
 
-渠道收敛为一个顶级导航入口，原有三个 URL 在模块内以授权页签切换。QQ、个人微信属于渠道，SageX 属于接入服务；单聊与群聊由消息决定。四川同咨的历史接入绑定及其账号、识别码关联保留。
+渠道收敛为一个顶级导航入口，原有三个 URL 在模块内以授权页签切换。QQ、个人微信属于渠道，SageX 属于接入服务；单聊与群聊由消息决定。示例公司的历史接入绑定及其账号、识别码关联保留。
 
 ## Changes
 
@@ -32,7 +32,7 @@
 - `user-server/internal/service/channel_master_semantics_test.go`：渠道备注序列化、未传类型保留历史值、QQ／个人微信预设和接入服务不进入平台预设。
 - `user-server/internal/model/menu_wiring_test.go`：独立渠道模块及原有叶子权限、路径归属。
 - `user-server/internal/bridge/tenant_binding_test.go`：SageX 历史绑定保留真实平台，拒绝缺失或不支持的平台，保留普通绑定约束。
-- `user-web/tests/unit/{menu_navigation,channels_module,channel_semantics}.test.js`：单入口投影不改变授权树、部分授权及深链、四川同咨历史绑定可见、表单不提交固定会话类型、备注不丢失。
+- `user-web/tests/unit/{menu_navigation,channels_module,channel_semantics}.test.js`：单入口投影不改变授权树、部分授权及深链、示例公司历史绑定可见、表单不提交固定会话类型、备注不丢失。
 - `user-web/tests/unit/channel_options_new_channels.test.js`：将旧的“个人微信伴生未交付”文案断言更新为已核实的 SageX 接入与两种会话能力；公众号区分断言保留。
 
 ## Local Verification
@@ -49,9 +49,9 @@
 
 ## Manual Checks
 
-2026-11-26 使用已有登录态，只读检查生产渠道页面及接口。页面最终实际展示 11 条记录，包括 `四川同咨 / sagex-t18` 和 `QQ / qq`；账号接口存在关联四川同咨的客服账号。较早观察到的空列表未在后续页面快照持续复现，因此不把它作为已证明的独立根因。生产消息同时含 QQ、个人微信和历史服务编码，确认存在渠道语义混杂。
+2026-11-26 使用已有登录态，只读检查生产渠道页面及接口。页面最终实际展示 11 条记录，包括 `示例公司 / sagex-t18` 和 `QQ / qq`；账号接口存在关联示例公司的客服账号。较早观察到的空列表未在后续页面快照持续复现，因此不把它作为已证明的独立根因。生产消息同时含 QQ、个人微信和历史服务编码，确认存在渠道语义混杂。
 
-同日使用本地临时 Vite 预览加载隔离树的新 SFC，页面明确标注“本地验收 · 示例数据 · 不连接生产接口”。逐元素证据保存在临时目录：`channels-ui-channels.txt`、`channels-ui-qq-edit.txt`、`channels-ui-binding-edit.txt`、`channels-ui-accounts.txt`、`channels-ui-account-edit.txt`、`channels-ui-account-saved.txt`、`channels-ui-permission-tabs.txt`、`channels-ui-identify-codes.txt`。证据覆盖单一导航入口、三页签、QQ 编辑、四川同咨 SageX 绑定、账号备注保存、部分授权及识别码页；未执行重置、复制或生产写入。
+同日使用本地临时 Vite 预览加载隔离树的新 SFC，页面明确标注“本地验收 · 示例数据 · 不连接生产接口”。逐元素证据保存在临时目录：`channels-ui-channels.txt`、`channels-ui-qq-edit.txt`、`channels-ui-binding-edit.txt`、`channels-ui-accounts.txt`、`channels-ui-account-edit.txt`、`channels-ui-account-saved.txt`、`channels-ui-permission-tabs.txt`、`channels-ui-identify-codes.txt`。证据覆盖单一导航入口、三页签、QQ 编辑、示例公司 SageX 绑定、账号备注保存、部分授权及识别码页；未执行重置、复制或生产写入。
 
 生产页面仍是旧版本，这些证据用于确认现有数据与问题，不能视为新界面发布后的验收。本次没有重置或披露识别码。
 
@@ -63,4 +63,4 @@
 
 - 最终验证结果以 [test.md](test.md) 为准；在全局门禁及发布条件满足前，不能声明线上修复完成。
 - 生产历史服务编码消息是否迁移需另行核实关联后决定；本次仅修正后续消息解析与显示。
-- 发布后按实际权限逐元素验证一个导航入口、三个页签、四川同咨绑定及 QQ／个人微信单聊／群聊消息归属。
+- 发布后按实际权限逐元素验证一个导航入口、三个页签、示例公司绑定及 QQ／个人微信单聊／群聊消息归属。

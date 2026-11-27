@@ -65,6 +65,7 @@
 
 | 产品 | 地区 | 动作 | 载体 | 执行模式 | 必需 scope | 状态限制 | 接口版本 | 文档版本 | 默认实验性 |
 |---|---|---|---|---|---|---|---|---|---|
+| bilibili | CN | `message.text.send` | bridge | bridge | message.text.send |  | bridge-v1 | design-cell-v1 | 是 |
 | douyin | CN | `message.image.send` | bridge | bridge | message.image.send |  | bridge-v1 | design-cell-v1 | 是 |
 | douyin | CN | `message.text.send` | bridge | bridge | message.text.send |  | bridge-v1 | design-cell-v1 | 是 |
 | douyin_shop | CN | `aftersale.write` | api_adapter | api_adapter | aftersale.write | platform_preflight_required | api-v1 | design-cell-v1 | 是 |
@@ -72,8 +73,15 @@
 | douyin_shop | CN | `message.text.send` | bridge | bridge | message.text.send |  | bridge-v1 | design-cell-v1 | 是 |
 | douyin_shop | CN | `order.address.change` | api_adapter | api_adapter | order.address.change | platform_preflight_required | api-v1 | design-cell-v1 | 是 |
 | douyin_shop | CN | `refund.write` | api_adapter | api_adapter | refund.write | platform_preflight_required | api-v1 | design-cell-v1 | 是 |
+| jd | CN | `message.text.send` | bridge | bridge | message.text.send |  | bridge-v1 | design-cell-v1 | 是 |
 | jd_pop | CN | `aftersale.write` | official_ui | official_ui |  | approved_scope_required, native_action_available | m01-workflow-v1 | m01-7.3.5 | 否 |
+| kuaishou | CN | `message.text.send` | bridge | bridge | message.text.send |  | bridge-v1 | design-cell-v1 | 是 |
+| personal_wx | CN | `message.text.send` | bridge | bridge | message.text.send |  | bridge-v1 | design-cell-v1 | 是 |
+| tiktok | CN | `message.text.send` | bridge | bridge | message.text.send |  | bridge-v1 | design-cell-v1 | 是 |
 | vipshop | CN | `refund.observe` | platform_managed | platform_managed |  | native_case_required | m01-workflow-v1 | m01-7.3.5 | 否 |
+| weibo | CN | `message.text.send` | bridge | bridge | message.text.send |  | bridge-v1 | design-cell-v1 | 是 |
+| xianyu | CN | `message.text.send` | bridge | bridge | message.text.send |  | bridge-v1 | design-cell-v1 | 是 |
+| xiaohongshu | CN | `message.text.send` | bridge | bridge | message.text.send |  | bridge-v1 | design-cell-v1 | 是 |
 
 ## EC-01 提交边界与生产阻塞
 

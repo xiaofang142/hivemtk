@@ -50,7 +50,7 @@ describe('system/Config.vue 租户代码展示', () => {
     tenantApi.getInfo.mockResolvedValue({
       tenant_id: 18,
       tenant_code: 'tz3rmdj',
-      name: '四川同咨科技有限公司',
+      name: '示例科技有限公司',
       status: 1
     })
 
@@ -59,7 +59,7 @@ describe('system/Config.vue 租户代码展示', () => {
 
     expect(text).toContain('租户代码')
     expect(text).toContain('tz3rmdj')
-    expect(text).toContain('四川同咨科技有限公司')
+    expect(text).toContain('示例科技有限公司')
   })
 
   it('私域独立部署形态：整块隐藏', async () => {

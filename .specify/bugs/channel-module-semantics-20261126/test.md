@@ -8,14 +8,14 @@
 
 ## Summary
 
-限定回归证明：导航按原授权收敛为一个渠道入口；同一账号按消息识别单聊与群聊；SageX 历史绑定保留 QQ／个人微信来源。四川同咨关联数据已在线只读核实，但新代码尚未发布，不能把现有生产页面当作修改后的实机验收。全量测试和审计仍有失败，未以修改其他在途工作或审计基线的方式规避。
+限定回归证明：导航按原授权收敛为一个渠道入口；同一账号按消息识别单聊与群聊；SageX 历史绑定保留 QQ／个人微信来源。示例公司关联数据已在线只读核实，但新代码尚未发布，不能把现有生产页面当作修改后的实机验收。全量测试和审计仍有失败，未以修改其他在途工作或审计基线的方式规避。
 
 ## Checks Performed
 
 | Check | Command / Action | Result | Notes |
 | --- | --- | --- | --- |
-| 生产数据基线 | ego-browser 使用已有登录态打开 `/channels/manage`，读取快照；只读核对渠道、账号及消息接口 | pass | 11 条渠道记录，含四川同咨／`sagex-t18`、QQ／`qq`；四川同咨客服账号仍关联原记录。没有重置识别码。 |
-| 修改后实机验收 | 一个导航入口、授权页签、四川同咨绑定及消息归属 | not-run | 未发布；现有页面仍为旧代码。较早的空列表现象未在后续快照持续复现，不宣称解决了该独立问题。 |
+| 生产数据基线 | ego-browser 使用已有登录态打开 `/channels/manage`，读取快照；只读核对渠道、账号及消息接口 | pass | 11 条渠道记录，含示例公司／`sagex-t18`、QQ／`qq`；示例公司客服账号仍关联原记录。没有重置识别码。 |
+| 修改后实机验收 | 一个导航入口、授权页签、示例公司绑定及消息归属 | not-run | 未发布；现有页面仍为旧代码。较早的空列表现象未在后续快照持续复现，不宣称解决了该独立问题。 |
 | 本地 UI 逐项验收 | 隔离树 Vite 预览加载实际渠道 SFC，使用内存示例 API；逐项检查导航、页签、编辑、备注保存、权限投影及识别码页 | pass | 临时快照 `channels-ui-{channels,qq-edit,binding-edit,accounts,account-edit,account-saved,permission-tabs,identify-codes}.txt`。预览明确不连接生产；备注保存仅改内存 fixture，未执行识别码重置。 |
 | 限定后端回归 | `go test ./internal/model ./internal/service ./internal/bridge/... -run 'Test(Channel|BindBridgeTenant|ResolveBridgeTenant|BridgeTenantForRequest|SystemMenu|Module)' -count=1` | pass | `internal/model`、`internal/service`、`internal/bridge` 均 `ok`；使用独立 Go 缓存及本地测试数据库，日志见 `channels-focused-go-final.log`。 |
 | 限定前端回归 | `npm run test -- tests/unit/badCase_render.test.js tests/unit/browser_editor_dependency.test.js tests/unit/clue_list_filter_push.test.js tests/unit/channels_module.test.js tests/unit/menu_navigation.test.js --maxWorkers=1` | pass | 5 文件、45 用例通过；包含本轮渠道导航与此前全量回归暴露的 3 个超时文件，日志见 `channels-final-web-targeted.log`。 |

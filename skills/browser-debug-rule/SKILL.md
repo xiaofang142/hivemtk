@@ -37,6 +37,7 @@ ego-browser skill
 - ❌ 禁止用 `--isolated`、`--user-data-dir=/tmp/...`、Playwright 默认全新 profile 来做需要登录态的调试
 - ❌ 禁止在未获用户明确同意时执行：退出登录、清除 cookie/站点数据、清除 ego lite/Chrome profile 数据（注意：部分清除操作会波及整个浏览器 profile，清缓存前必读 ego-browser skill 的 `references/clearing-state.md`）
 - ❌ 禁止擅自改动 ego lite 安装/skill 链接、CDP 端口、profile 路径、MCP 配置；如需变更先说明理由并征得同意
+- ❌ **TaskSpace 空间限制（防内存膨胀）**：进行 ego-browser 操作时，**只允许使用两个固定名称的 TaskSpace**：本地环境/本地 URL 用 `hivemtk-local`，线上/生产 URL 用 `hivemtk-online`。禁止为新目标/新任务/恢复卡住页面创建其他名称的 TaskSpace；禁止无限开空间。复用已有空间按名称或已记录 numeric id 恢复；不存在时只创建上述两个之一。
 
 ## ego-browser 健康检查（失败时的诊断顺序）
 

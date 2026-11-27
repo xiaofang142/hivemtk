@@ -10,7 +10,7 @@
 
 ## 2026-11-26 · 独立渠道模块
 
-顶级导航只展示一个「渠道」入口。既有 `/channels/manage`、`/channels/accounts`、`/channels/identify-codes` 分别显示平台、账号、识别码页签；仅显示已授权入口，保留原 URL、角色能力和旧 Bridge token 深链。三个页面共同说明渠道与单聊／群聊的关系，SageX 历史接入绑定独立呈现，保留四川同咨的现有业务关联。具体本轮证据见 [缺陷记录](../.specify/bugs/channel-module-semantics-20261126/assessment.md)。
+顶级导航只展示一个「渠道」入口。既有 `/channels/manage`、`/channels/accounts`、`/channels/identify-codes` 分别显示平台、账号、识别码页签；仅显示已授权入口，保留原 URL、角色能力和旧 Bridge token 深链。三个页面共同说明渠道与单聊／群聊的关系，SageX 历史接入绑定独立呈现，保留示例公司的现有业务关联。具体本轮证据见 [缺陷记录](../.specify/bugs/channel-module-semantics-20261126/assessment.md)。
 
 ## 2026-11-20 · 菜单、页面职责与路由专项审计
 

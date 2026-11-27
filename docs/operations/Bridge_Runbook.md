@@ -649,7 +649,7 @@ scripts/check-storage-consistency.sh --repo .
 
 ## 7A. 故障七A：Bridge 重复消息（入站错归 → 重复应答）
 
-> 首报：2026-10-23，商户「四川同咨科技」（tenant_id=18, code=tz3rmdj，抖音+小红书双渠道）
+> 首报：2026-10-23，商户「示例科技」（tenant_id=18, code=tz3rmdj，抖音+小红书双渠道）
 
 ### 现象
 

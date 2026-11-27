@@ -57,6 +57,16 @@ bash scripts/bootstrap-agent-env.sh    # 配置 git 钩子 + 安装 skills 到�
 - 每完成一个元素/一页必须留下真实证据：快照文本、接口状态码、toast 文案、截图路径之一；
   **无证据不得声称"已测/已修"**。
 
+### 规则 -1b：ego-browser 空间限制（防内存膨胀，最高优先级）
+
+- 进行 ego-browser 操作浏览器时，**只允许使用两个固定名称的 TaskSpace**：
+  - 本地环境 / 本地 URL：`hivemtk-local`
+  - 线上 / 生产 URL：`hivemtk-online`
+- **禁止无限开空间**：不得为新目标、新任务、恢复卡住/超时/异常页面而创建其他名称的 TaskSpace；
+  不得 `taskSpace("任意新名")`。
+- 复用已有空间按名称或已记录的 numeric id 恢复；不存在时只创建上述两个之一。
+- 本轮结束按 ego-browser 规程 `finish()` 收口页面；空间名称固定，不得改名/新增。
+
 ### 规则 0：Git 协作模式（优先级最高）
 
 - 仓库整体完成才**一次性** `git commit` + push 到**双远端**（`gitee-upstream` + `upstream`），
@@ -167,6 +177,7 @@ cd user-web && npx eslint src --max-warnings 80   # 全量 warning 基线 63、�
   `nodejs` 不接受脚本文件路径参数，必须 heredoc 或 `-e`。
 - 不得要求用户重新登录；不得新建独立 profile / 清 cookie；不得擅自改 ego lite/CDP 配置。
 - 不得在未获同意时执行：退出登录、清除站点数据、删除文件、发送消息、购买、关闭未保存窗口。
+- 不得创建除 `hivemtk-local` / `hivemtk-online` 之外的 ego-browser TaskSpace；不得无限开空间。
 
 ## 6. 去哪查（深度文档索引）
 

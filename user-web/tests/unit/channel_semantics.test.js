@@ -24,7 +24,7 @@ beforeEach(() => {
   i18n.global.locale.value = 'zh'
   vi.clearAllMocks()
   channelAccountApi.listChannels.mockResolvedValue({ list: [{ id: 2, name: 'QQ', code: 'qq', type: 'dm', remark: '渠道备注', enabled: true }] })
-  channelAccountApi.listAccounts.mockResolvedValue({ list: [{ id: 1, channel_id: 2, name: '四川同咨客服账号', type: 'group', status: 1, self_identify_name: '四川同咨微信' }] })
+  channelAccountApi.listAccounts.mockResolvedValue({ list: [{ id: 1, channel_id: 2, name: '示例公司客服账号', type: 'group', status: 1, self_identify_name: '示例公司微信' }] })
   channelAccountApi.getAccount.mockResolvedValue({ remark: '账号备注', owner_user_ids: [], data_scope: '{}' })
   channelAccountApi.listLeadMiningAgents.mockResolvedValue([])
   channelCatalogApi.catalog.mockResolvedValue({
@@ -32,7 +32,7 @@ beforeEach(() => {
     accounts: []
   })
   channelCatalogApi.setTenantEnabled.mockResolvedValue({})
-  channelCatalogApi.managedAccounts.mockResolvedValue({ list: [{ id: 1, channel_id: 2, name: '四川同咨客服账号', type: 'group', status: 1, self_identify_name: '四川同咨微信' }] })
+  channelCatalogApi.managedAccounts.mockResolvedValue({ list: [{ id: 1, channel_id: 2, name: '示例公司客服账号', type: 'group', status: 1, self_identify_name: '示例公司微信' }] })
 })
 
 const mountPage = (Component) => mount(Component, { global: { plugins: [createPinia(), ElementPlus, i18n] } })
@@ -65,15 +65,15 @@ describe('渠道与会话类型分离', () => {
     } finally { wrapper.unmount() }
   })
 
-  it('四川同咨的历史 SageX 绑定可见，接入服务不混入平台列表', async () => {
+  it('示例公司的历史 SageX 绑定可见，接入服务不混入平台列表', async () => {
     channelAccountApi.listChannels.mockResolvedValue({ list: [
-      { id: 1, name: '四川同咨', code: 'sagex-t18', enabled: true },
+      { id: 1, name: '示例公司', code: 'sagex-t18', enabled: true },
       { id: 2, name: 'QQ', code: 'qq', enabled: true }
     ] })
     const wrapper = mountPage(ChannelManage)
     try {
       await settle(wrapper)
-      expect(wrapper.get('[data-testid="legacy-service-bindings"]').text()).toContain('四川同咨')
+      expect(wrapper.get('[data-testid="legacy-service-bindings"]').text()).toContain('示例公司')
       expect(wrapper.get('[data-testid="legacy-service-bindings"]').text()).toContain('SageX')
       expect(wrapper.get('.el-table').text()).toContain('QQ')
       expect(wrapper.get('.el-table').text()).not.toContain('sagex-t18')
@@ -84,7 +84,7 @@ describe('渠道与会话类型分离', () => {
     const wrapper = mountPage(AccountManage)
     try {
       await settle(wrapper)
-      expect(wrapper.text()).toContain('四川同咨客服账号')
+      expect(wrapper.text()).toContain('示例公司客服账号')
       expect(wrapper.findAll('th').map(cell => cell.text())).not.toContain('类型')
       await clickButton(wrapper, '编辑')
       expect(wrapper.find('.el-dialog').text()).not.toContain('会话类型')
@@ -99,11 +99,11 @@ describe('渠道与会话类型分离', () => {
     try {
       await settle(wrapper)
       expect(wrapper.findAll('th').map(cell => cell.text())).toContain('发送者标记')
-      expect(wrapper.text()).toContain('四川同咨微信')
+      expect(wrapper.text()).toContain('示例公司微信')
       await clickButton(wrapper, '编辑')
       expect(wrapper.find('.el-dialog').text()).toContain('自他判断名称（上报发送者标记）')
       const markInput = wrapper.findAll('.el-dialog input').find(
-        input => input.attributes('placeholder') === '请输入上报消息里的发送者名称，如「四川同咨微信」'
+        input => input.attributes('placeholder') === '请输入上报消息里的发送者名称，如「示例公司微信」'
       )
       expect(markInput).toBeTruthy()
       await markInput.setValue('')

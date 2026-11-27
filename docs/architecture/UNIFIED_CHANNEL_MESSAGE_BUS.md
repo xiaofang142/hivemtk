@@ -501,13 +501,13 @@ cd ../user-web/bridge && npx vitest run
 | S1 | 渠道账号建档与识别码 | ✅（热链已收敛） | `channel_accounts.identify_code` 为权威；`channel_identify_code.go` ValidCodes 已删除渠道级码候选；`tenant_binding.go` 删除 channel-level fallback | `channel_identify.go` 的旧 `CreateOrRotate`/`rotate` 仍保留但已无生产调用，非热链 |
 | S2 | 入站鉴权与租户绑定 | ✅ | `BridgeIngressGuard`；`bindCallbackTenant`；多租户 `BRIDGE_INGEST_AUTH=off` 硬禁 503；canonical/旧路由同 guard | 平台 webhook 回调为外部协议，经适配层归一（边界，非缺陷） |
 | S3 | 线路协议归一 | ✅（我方可控线路） | `channelbus` 单源；唯一 `/api/channelbus/*`；`HandleGateway`/SageX upload 只认 canonical | 旧 `/api/bridge/*` 路由与 `1.0` 兼容已删除；平台回调/embed WS 仍独立 |
-| S4 | 门禁与去重 | ⚠️ | `inbox_ingress` 幂等/自回声拦截重复；`IsDuplicateReason` 只认结论前缀 | `webhook_dedup.go:233-249` Redis 异常 fail-open，未改 |
-| S5 | session 画像与历史 | ⚠️ ❌ | `SessionIDForInbound` 映射固化；`chat_history_redis` 7d TTL 定义 | `AppendHistory` 零生产调用（缓存空读）；`AssetBundleLoader` 零装配，列为 P1 |
+| S4 | 门禁与去重 | ✅ | `inbox_ingress` 幂等/自回声拦截重复；`IsDuplicateReason` 只认结论前缀 | Redis 异常时回落进程级内存去重（`webhook_dedup.go:isDuplicate`），不再直接放行；持久化层 `message_hub` 唯一索引仍为最终权威。metrics `bridge_ingest_extra_dropped_total` 与 `IngestExtraDroppedKeys` 同源双写 |
+| S5 | session 画像与历史 | ⚠️（读写两侧均已接线，RAG 检索可选） | `SessionIDForInbound` 映射固化；`chat_history_redis` 7d TTL 定义；`AppendHistory`/`FetchHistory` 实现就绪 | **写侧**：`CoreDataFlowOrchestrator` 可选 `chatHistory` 端口，`submitDelivery` 在 AI 回复成功落库后 `AppendHistory`；`InitInferenceOrchestrator` 装配 `ChatHistoryRedisAdapter(10)`。**读侧**：`setupAssetBundleRoutes` 装配 `AssetBundleLoader`（weave=`AssetBundleWeavePortAdapter(assetBundleSvc)` + history=`ChatHistoryRedisAdapter(10)`，search=nil 可选），注入编排器 `SetAssetLoader`，使 FetchHistory 进入资产上下文织布。RAG 检索端口因 `KnowledgeBaseService` 无匹配 `Search(ctx,query,topK)` 签名暂未接线（search=nil，织布时 RAGDocs 为空），列为后续增强。 |
 | S6 | AI 触发与入库 | ✅ | `triggerAIForEvent`、`WithChannelOwnedAITrigger` 防双触；message_hub/conversation 落库 | 无 |
-| S7 | 出站路由与下发 | ✅ | outbox claim/推送；bridge HTTP/WS/SSE；SageX/平台 sender 适配层 | embed 出站仍直写 `session_messages`，未走 outbox claim/ack |
+| S7 | 出站路由与下发 | ✅（设计边界） | outbox claim/推送；bridge HTTP/WS/SSE；SageX/平台 sender 适配层；embed 直投访客 WS | embed 为内部渠道，采用「直接投递渠道」模式（落 session_messages + WS 实时推送 + delivered），不经过 outbox claim/ack 是有意设计（无客户端认领方）；如需 claim/ack 语义，应在后续特性中把 embed 接入 outbox 并补客户端 ack，当前不改以避免破坏访客实时性 |
 | S8 | 发送状态与 ack 闭环 | ⚠️→已接线 | 服务端 `fence` + `claimed_at` 栅栏；客户端 `constants.js`/`http-ingest.js`/`downlink.js` 已回传三终态与栅栏值 | 待 bridge vitest 复跑确认；`unknown` 终态需对账入口 |
 | S9 | 统一收件箱与查询 API | ✅ | `inbox_conversations` + message_hub 三态；统一 API | 无 |
-| S10 | 失败回收与重投 | ✅（本轮接线） | `cmd/api/outbound_reclaim_wiring.go` 以 `ChannelAccount.identify_code` 取租户、每 2 分钟 `RunOnce`；`main.go` 不再报 disabled | `IngestExtraDroppedKeys` 仍未导出 metrics（P2） |
+| S10 | 失败回收与重投 | ✅（本轮接线） | `cmd/api/outbound_reclaim_wiring.go` 以 `ChannelAccount.identify_code` 取租户、每 2 分钟 `RunOnce`；`main.go` 不再报 disabled | `IngestExtraDroppedKeys` 已双写到 `metrics.GetBridge().IngestExtraDropped`（P2 闭合） |
 | S11 | 旧路径兼容破坏面 | 🔴→已清理（源码层） | 旧路由、旧 schema、渠道级旧码热链均删；scripts/e2e/注释已改 canonical；SageX 仓客户端同步 canonical | bridge dist/已装扩展未重建重发（发布链 B/C）；管理面 `/api/bridge/token` 等非总线路径按职责保留 |
 
 ### 13.1 生命周期结论

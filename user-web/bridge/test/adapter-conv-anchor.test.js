@@ -53,19 +53,19 @@ describe('会话锚点校验（错归防线）', () => {
   beforeEach(() => { inbound = []; });
 
   it('sender_name 与锚点昵称错配 ⇒ 增量拒收（跨会话残留不上行）', () => {
-    const state = { convId: 'conv-说缘', peerName: '说缘' };
+    const state = { convId: 'conv-示例会话', peerName: '示例会话' };
     const { adapter, arrive } = makeFixture(state);
     current = adapter;
     adapter.start({ onMessage: (m) => inbound.push(m) });
     adapter._refreshConvAnchor();
 
-    // 锚点昵称=说缘；气泡抓到的 sender_name=做点吃的 ⇒ 错配，拒收
+    // 锚点昵称=示例会话；气泡抓到的 sender_name=做点吃的 ⇒ 错配，拒收
     arrive('你是不是弄错了', SENDER.CUSTOMER, '做点吃的也不是很难啊');
     adapter._scanIncremental();
     expect(inbound).toHaveLength(0);
 
     // sender_name 与锚点一致 ⇒ 正常上行
-    arrive('我弄错了', SENDER.CUSTOMER, '说缘');
+    arrive('我弄错了', SENDER.CUSTOMER, '示例会话');
     adapter._scanIncremental();
     expect(inbound).toHaveLength(1);
     expect(inbound[0].content).toBe('我弄错了');

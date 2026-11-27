@@ -7,6 +7,7 @@ import (
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/channelbus"
+	"hivemtk-user/internal/pkg/metrics"
 )
 
 // 协议版本：
@@ -193,10 +194,12 @@ func applyIngestExtra(ev *model.MessageEvent, extra map[string]any) {
 	for k, v := range extra {
 		if !allowIngestExtraKey(k) {
 			IngestExtraDroppedKeys.Add(1)
+			metrics.GetBridge().IngestExtraDropped.WithLabel().Inc()
 			continue
 		}
 		if _, exists := ev.Extra[k]; exists {
 			IngestExtraDroppedKeys.Add(1)
+			metrics.GetBridge().IngestExtraDropped.WithLabel().Inc()
 			continue
 		}
 		ev.Extra[k] = v

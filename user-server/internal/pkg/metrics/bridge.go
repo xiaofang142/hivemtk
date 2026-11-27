@@ -24,6 +24,9 @@ type BridgeMetrics struct {
 	// 数值与 channelgw.FrameAckUnknownStatusCount 同源（ws.go 接线处双写）——
 	// 原子计数留在 channelgw 是因为打点在帧处理热路径，metrics 包不反向依赖 channelgw。
 	FrameAckUnknownStatus *CounterVec
+	// IngestExtraDroppedKeys CH-37b：线路侧 Extra 因未通过白名单（或试图覆盖固定键）
+	// 而被丢弃的累计计数。数值与 channelgw.IngestExtraDroppedKeys 同源（applyIngestExtra 双写）。
+	IngestExtraDropped *CounterVec
 }
 
 var (
@@ -112,6 +115,11 @@ func GetBridge() *BridgeMetrics {
 				"bridge_frame_ack_unknown_status_total",
 				"Total WS ack frames with invalid Status (neither delivered/failed/unknown nor empty)",
 				[]string{"channel"},
+			),
+			IngestExtraDropped: NewCounter(
+				"bridge_ingest_extra_dropped_total",
+				"Total inbound Extra keys dropped by the ingest whitelist (fixed-key override attempt or non-whitelisted key)",
+				[]string{},
 			),
 		}
 	})

@@ -276,22 +276,25 @@ func VerifyURL(token, aesKey, msgSignature, timestamp, nonce, echostr string) (s
 		return "", errors.New("invalid EncodingAESKey")
 	}
 
-	plain, err := DecryptWeComMessage(aesKey, echostr)
-	if err != nil {
-		return "", fmt.Errorf("decrypt echostr: %w", err)
-	}
-	// DecryptWeComMessage 已按官方布局剥掉 random(16)+msg_len(4) 头，
-	// 这里拿到的就是 echostr 明文，不能再剥一次偏移。
-	plainStr := strings.TrimRight(string(plain), "\x00")
-
-	parts := []string{token, timestamp, nonce, plainStr}
+	// 官方「回调配置 / 3.1 支持Http Get请求验证URL有效性」明确：
+	// 签名用**请求里收到的 echostr 原值（密文）**参与 sha1(sort(token,timestamp,nonce,echostr))，
+	// 先验签、再解密；解密出的明文只作为 GET 响应体返回。
+	// 曾经此处误用解密后的明文参与签名，导致企业微信后台保存回调必然
+	// 「openapi回调地址请求不通过」——真机验证过的回归，勿再改回。
+	parts := []string{token, timestamp, nonce, echostr}
 	sortStrings(parts)
 	h := sha1Hex([]byte(strings.Join(parts, "")))
 	if subtle.ConstantTimeCompare([]byte(h), []byte(msgSignature)) != 1 {
 		return "", errors.New("signature mismatch")
 	}
 
-	return plainStr, nil
+	plain, err := DecryptWeComMessage(aesKey, echostr)
+	if err != nil {
+		return "", fmt.Errorf("decrypt echostr: %w", err)
+	}
+	// DecryptWeComMessage 已按官方布局剥掉 random(16)+msg_len(4)+receiveid 尾，
+	// 这里拿到的就是 echostr 明文，不能再剥一次偏移。
+	return strings.TrimRight(string(plain), "\x00"), nil
 }
 
 func (s *WebhookService) dispatchWeCom(ctx context.Context, accountID string, p *ParsedPayload, raw []byte, headers map[string]string) (*model.MessageHub, error) {

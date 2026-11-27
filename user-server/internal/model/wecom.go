@@ -35,7 +35,7 @@ type WeComAccount struct {
 	CallbackToken  string     `gorm:"type:varchar(100)" json:"callback_token"`
 	EncodingAESKey string     `gorm:"type:varchar(200)" json:"encoding_aes_key"`
 	WebhookEnabled bool       `gorm:"default:false" json:"webhook_enabled"`
-	WebhookPath    string     `gorm:"type:varchar(200)" json:"webhook_path"`
+	WebhookPath    string     `gorm:"type:varchar(512)" json:"webhook_path"`
 	AIAgentEnabled bool       `gorm:"default:false" json:"ai_agent_enabled"`
 	CreatedAt      time.Time  `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt      time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
@@ -124,7 +124,9 @@ type WeComMessage struct {
 
 	ID        uint       `gorm:"primaryKey;autoIncrement" json:"id"`
 	AccountID uint       `gorm:"index" json:"account_id"`
-	MsgID     string     `gorm:"type:varchar(100);unique" json:"msg_id"`
+	// 企微 message/send 返回的 msgid 实测 128 字符，原 varchar(100) 会截断报错
+	// （SQLSTATE 22001），导致发送记录静默落库失败。见 migrations/104。
+	MsgID     string     `gorm:"type:varchar(255);unique" json:"msg_id"`
 	MsgType   string     `gorm:"type:varchar(20)" json:"msg_type"`
 	ToUser    string     `gorm:"type:text" json:"to_user"`
 	ToParty   string     `gorm:"type:text" json:"to_party"`

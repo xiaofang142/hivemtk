@@ -131,7 +131,7 @@ export class BaseAdapter {
     //   ① 新鲜度：当前 getConversationId() ≠ 锚点 cid ⇒ 抓取全部丢弃
     //     （URL/虚拟列表未切完的中间态，消息不知道属于谁）；
     //   ② sender 绑定：1v1 私信里 parsed.sender_name 与锚点 peerName 不一致 ⇒
-    //     判跨会话残留拒收（线上实证 tz3rmdj：说缘 的消息被归到 做点吃的 的会话）。
+    //     判跨会话残留拒收（线上实证 tz3rmdj：示例会话 的消息被归到 做点吃的 的会话）。
     this._convAnchor = { cid: null, peerName: '', ts: 0 };      
     this._patrolStats = { rounds: 0, visited: 0, withNew: 0, captured: 0, failures: 0, lastRoundAt: 0, lastDurationMs: 0, lastScheduleMode: 'sequential', lastUnreadCount: 0 };
     // 批25：换会话互斥（下发优先，巡检让路）——见 beginOutbound 处的论证。

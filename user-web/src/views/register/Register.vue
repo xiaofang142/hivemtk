@@ -108,7 +108,7 @@
           >
             <el-input
               v-model="form.tenant_code"
-              placeholder="加入已有商户时填写（如：tz3rmdj）；留空表示新商户开户"
+              placeholder="加入已有商户时填写租户码；留空表示新商户开户"
             />
           </el-form-item>
         </el-form>
