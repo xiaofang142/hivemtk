@@ -275,7 +275,7 @@ func (e *ToolExecutor) Execute(ctx context.Context, req ExecuteRequest) ExecuteR
 		if !result.Success || err != nil {
 			status = "abnormal"
 		}
-		ev := tracing.ToolTraceEvent{
+		ev := redactToolTraceEvent(tracing.ToolTraceEvent{
 			Kind:             model.SpanKindToolCall,
 			TraceID:          traceIDFromContext(execCtx),
 			ToolName:         req.ToolName,
@@ -288,7 +288,7 @@ func (e *ToolExecutor) Execute(ctx context.Context, req ExecuteRequest) ExecuteR
 			CompletedAt:      &completed,
 			DurationMeasured: true,
 			Status:           status,
-		}
+		})
 		if tc := GetToolContext(execCtx); tc != nil {
 			ev.AgentID = tc.AgentID
 			ev.SessionID = tc.SessionID
@@ -557,7 +557,7 @@ func (e *ToolExecutor) DispatchByLLMToolCall(ctx context.Context, toolCalls []LL
 		}
 	}
 	if ToolTraceSink != nil {
-		ev := tracing.ToolTraceEvent{
+		ev := redactToolTraceEvent(tracing.ToolTraceEvent{
 			Kind:             model.SpanKindAgentTurn,
 			TraceID:          traceIDFromContext(dispatchCtx),
 			AgentID:          agentID,
@@ -569,7 +569,7 @@ func (e *ToolExecutor) DispatchByLLMToolCall(ctx context.Context, toolCalls []LL
 			DurationMeasured: true,
 			Status:           turnStatus,
 			Error:            turnErr,
-		}
+		})
 		if turnStatus == tracing.StatusAbnormal && turnErr == "" {
 			for _, r := range results {
 				if !r.Success {

@@ -2,8 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"hash/fnv"
 	"log/slog"
 	"math/rand"
@@ -11,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	agentcontext "hivemtk-user/internal/aiagent/context"
 	"hivemtk-user/internal/aiagent/llm"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
@@ -165,6 +164,8 @@ type HandleRequest struct {
 	CustomerID     string `json:"customer_id"`
 	ConversationID string `json:"conversation_id"`
 	TraceID        string `json:"trace_id"`
+	// ContextView 为本轮不可变上下文快照；nil 时保持旧的当轮文本行为。
+	ContextView *agentcontext.AgentConversationContext `json:"context_view,omitempty"`
 }
 
 // HandleResponse 异议处理响应
@@ -192,7 +193,7 @@ func (s *ObjectionHandlerService) Handle(ctx context.Context, req HandleRequest)
 	var llmCategory ObjectionCategory
 	source := "rule"
 	if s.dispatcher != nil && confidence == confidenceSingleHit {
-		if cat2, conf2, genuine, ok := s.classifyByLLM(ctx, req.Text); ok {
+		if cat2, conf2, genuine, ok := s.classifyByLLMWithContext(ctx, req.Text, req.ContextView); ok {
 			isGenuine = &genuine
 			llmCategory = cat2
 			if genuine {
@@ -515,52 +516,5 @@ func (s *ObjectionHandlerService) categoryName(cat ObjectionCategory) string {
 }
 
 func (s *ObjectionHandlerService) classifyByLLM(ctx context.Context, text string) (ObjectionCategory, float64, bool, bool) {
-	catList := make([]string, 0, len(objectionRules))
-	for _, r := range objectionRules {
-		catList = append(catList, fmt.Sprintf("%s: %s", r.Category, r.Name))
-	}
-	prompt := fmt.Sprintf(`你是销售异议分类专家。判断客户消息是否为真实异议（而非拒绝/敷衍伪装），并归类。
-
-【客户消息】: %s
-
-【异议类别】:
-%s
-other: 无法归类
-
-【输出要求】(严格 JSON):
-{"category": "类别之一", "confidence": 0.0-1.0, "is_genuine": true/false}
-is_genuine=false 表示"太贵了买不起"实为委婉拒绝等伪装场景。`, text, strings.Join(catList, "\n"))
-
-	result, err := s.dispatcher.Dispatch(ctx, llm.DispatchRequest{
-		Scenario:    llm.ScenarioIntentRecognize,
-		Prompt:      prompt,
-		JSONMode:    true,
-		MaxTokens:   200,
-		Temperature: 0,
-	})
-	if err != nil {
-		return "", 0, false, false
-	}
-	var parsed struct {
-		Category   string  `json:"category"`
-		Confidence float64 `json:"confidence"`
-		IsGenuine  bool    `json:"is_genuine"`
-	}
-	if err := json.Unmarshal([]byte(extractJSONFromStr(result.Content)), &parsed); err != nil {
-		return "", 0, false, false
-	}
-	valid := false
-	for _, r := range objectionRules {
-		if ObjectionCategory(parsed.Category) == r.Category {
-			valid = true
-			break
-		}
-	}
-	if parsed.Category == "other" {
-		valid = true
-	}
-	if !valid || parsed.Confidence <= 0 || parsed.Confidence > 1 {
-		return "", 0, false, false
-	}
-	return ObjectionCategory(parsed.Category), parsed.Confidence, parsed.IsGenuine, true
+	return s.classifyByLLMWithContext(ctx, text, nil)
 }

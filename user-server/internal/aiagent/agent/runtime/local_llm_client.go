@@ -63,6 +63,11 @@ func NewLocalLLMClient(cfg LocalLLMConfig) *LocalLLMClient {
 //   - model: 模型名；空字符串时使用客户端默认模型
 //   - temperature: 温度（0.0-1.0）；<0 时使用 0.7
 func (c *LocalLLMClient) Chat(ctx context.Context, messages []model.AssetBundleMessage, model string, temperature float64) (string, error) {
+	return c.ChatWithContext(ctx, messages, model, temperature, RuntimeLLMCallContext{})
+}
+
+// ChatWithContext 在不改变 OpenAI 兼容 body 的前提下，用 header 绑定执行场景与会话标识。
+func (c *LocalLLMClient) ChatWithContext(ctx context.Context, messages []model.AssetBundleMessage, model string, temperature float64, callCtx RuntimeLLMCallContext) (string, error) {
 	if c == nil {
 		return "", errors.New("local llm client is nil")
 	}
@@ -102,6 +107,15 @@ func (c *LocalLLMClient) Chat(ctx context.Context, messages []model.AssetBundleM
 		return "", fmt.Errorf("new request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if callCtx.ExecutionScenarioID != "" {
+		req.Header.Set("X-LLM-Execution-Scenario", callCtx.ExecutionScenarioID)
+	}
+	if callCtx.SessionRef != "" {
+		req.Header.Set("X-LLM-Session-Ref", callCtx.SessionRef)
+	}
+	if callCtx.IdempotencyKey != "" {
+		req.Header.Set("X-LLM-Idempotency-Key", callCtx.IdempotencyKey)
+	}
 	if c.apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	}

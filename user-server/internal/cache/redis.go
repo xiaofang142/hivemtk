@@ -97,6 +97,24 @@ func (r *RedisCache) ReleaseLock(ctx context.Context, key, token string) (bool, 
 }
 
 // LPush 向列表头部推入
+// RefreshLock 仅在 token 仍匹配时原子延长锁 TTL。
+func (r *RedisCache) RefreshLock(ctx context.Context, key, token string, ttl time.Duration) (bool, error) {
+	if ttl <= 0 {
+		return false, errors.New("锁续期 TTL 必须大于 0")
+	}
+	key = r.scopeKey(ctx, key)
+	script := redis.NewScript(`if redis.call('get', KEYS[1]) == ARGV[1] then
+  return redis.call('pexpire', KEYS[1], ARGV[2])
+else
+  return 0
+end`)
+	n, err := script.Run(ctx, r.client, []string{key}, token, ttl.Milliseconds()).Int64()
+	if err != nil {
+		return false, err
+	}
+	return n == 1, nil
+}
+
 func (r *RedisCache) LPush(ctx context.Context, key string, value any, expiration time.Duration) error {
 	key = r.scopeKey(ctx, key)
 	if err := r.client.LPush(ctx, key, value).Err(); err != nil {

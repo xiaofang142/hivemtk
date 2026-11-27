@@ -27,16 +27,16 @@ const (
 
 // CustomerImportRow 客户导入的一行（字段与 CSV 列顺序一致）。
 type CustomerImportRow struct {
-	Name            string
-	Phone           string
-	Email           string
-	Industry        string
-	SourceAccountID string
-	SourceChannel   string
-	OwnerUserID     uint
-	Tags               string
-	CompanyID          string // 公司主键（受控字段，需与公司范围校验）
-	BusinessType       string // 业务类型（CRM-19 字典受控字段）
+	Name                string
+	Phone               string
+	Email               string
+	Industry            string
+	SourceAccountID     string
+	SourceChannel       string
+	OwnerUserID         uint
+	Tags                string
+	CompanyID           string // 公司主键（受控字段，需与公司范围校验）
+	BusinessType        string // 业务类型（CRM-19 字典受控字段）
 	RequirementCategory string // 客户需求分类（CRM-19 字典受控字段）
 }
 

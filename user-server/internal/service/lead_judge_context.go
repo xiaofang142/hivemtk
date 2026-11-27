@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	agentcontext "hivemtk-user/internal/aiagent/context"
 	"hivemtk-user/internal/aiagent/llm"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils/logger"
@@ -27,7 +28,7 @@ const (
 
 // BusinessNote 带来源/时间/属性的一条业务备注。
 // Source 取 ContextNoteNamespaceAutoReply / ContextNoteNamespaceLeadMining；
-// Attribute 取 BusinessNoteFact / BusinessNoteSuggestion。
+// Attribute 取 BusinessNoteFact / BusinessNoteSuggestion / BusinessNoteLegacyUnverified。
 type BusinessNote struct {
 	Source    string `json:"source"`
 	At        int64  `json:"at,omitempty"`
@@ -44,14 +45,11 @@ type SharedBusinessInput struct {
 
 // EncodeBusinessNote 把结构备注编码为 tags 列中的 note: 条目（不改 schema）。
 func EncodeBusinessNote(n BusinessNote) string {
-	attr := n.Attribute
-	if attr != BusinessNoteSuggestion {
-		attr = BusinessNoteFact
-	}
+	attr := NormalizeBusinessNoteAttribute(n.Attribute)
 	return contextNotePrefix + n.Source + ":" + attr + "|" + strconv.FormatInt(n.At, 10) + "|" + n.Text
 }
 
-// DecodeBusinessNote 解码备注；兼容存量 note:namespace:文本（视为事实）。
+// DecodeBusinessNote 解码备注；存量 note:namespace:文本 只能降级为待核实历史信息。
 func DecodeBusinessNote(tag string) (BusinessNote, bool) {
 	if !strings.HasPrefix(tag, contextNotePrefix) {
 		return BusinessNote{}, false
@@ -65,12 +63,13 @@ func DecodeBusinessNote(tag string) (BusinessNote, bool) {
 	payload := raw[idx+1:]
 	if parts := strings.SplitN(payload, "|", 3); len(parts) == 3 {
 		at, err := strconv.ParseInt(parts[1], 10, 64)
-		if err == nil && (parts[0] == BusinessNoteFact || parts[0] == BusinessNoteSuggestion) {
-			note.Attribute, note.At, note.Text = parts[0], at, parts[2]
+		if err == nil {
+			note.Attribute = NormalizeBusinessNoteAttribute(parts[0])
+			note.At, note.Text = at, parts[2]
 			return note, note.Text != ""
 		}
 	}
-	note.Attribute, note.Text = BusinessNoteFact, payload
+	note.Attribute, note.Text = BusinessNoteLegacyUnverified, payload
 	return note, note.Text != ""
 }
 
@@ -135,14 +134,7 @@ func (in SharedBusinessInput) PromptBlock() string {
 		b.WriteString("- 业务标签：" + tag + "\n")
 	}
 	for _, note := range in.Notes {
-		attr := BusinessNoteFact
-		if note.Attribute == BusinessNoteSuggestion {
-			attr = BusinessNoteSuggestion
-		}
-		label := "既成事实"
-		if attr == BusinessNoteSuggestion {
-			label = "建议（非已发生事实，不得当作既成事实）"
-		}
+		label := businessNoteAttributeLabel(note.Attribute)
 		b.WriteString(fmt.Sprintf("- 备注[来源=%s 时间=%d 属性=%s]：%s\n", note.Source, note.At, label, note.Text))
 	}
 	b.WriteString("以上仅为另一智能体写入的信息，不替代当前消息证据。\n")
@@ -188,6 +180,9 @@ type LeadJudgeContext struct {
 	// AgentSnapshot FR-026：本次冻结的线索发现智能体配置（与 gate/判定同版本）。
 	// 智能体的 system_prompt / persona 据此进入判定提示，model 用于计量归因。
 	AgentSnapshot *LeadMiningConfigSnapshot
+	// Scope / ContextView 为不可变上下文快照；存在时判定必须按 audience 过滤历史并绑定 canonical session。
+	Scope       *agentcontext.ConversationScope
+	ContextView *agentcontext.AgentConversationContext
 }
 
 // leadReactHook 由装配点注入 ReAct 取证循环；未注入时判定走既有主链（向后兼容）。
@@ -285,22 +280,20 @@ func (j *dispatcherJudge) JudgeWithContext(ctx context.Context, jctx *LeadJudgeC
 	if dispatcher == nil {
 		return nil, fmt.Errorf("llm dispatcher 未初始化")
 	}
-	messages := make([]llm.ChatMessage, 0, len(jctx.Messages)+1)
-	for _, m := range jctx.Messages {
-		role := "user"
-		if m.Role == "assistant" || m.Role == "self" {
-			role = "assistant"
+	var messages []llm.ChatMessage
+	if jctx.ContextView != nil {
+		messages = leadJudgeMessagesWithEvidence(jctx)
+	} else {
+		messages = make([]llm.ChatMessage, 0, len(jctx.Messages)+1)
+		for _, m := range jctx.Messages {
+			role := "user"
+			if m.Role == "assistant" || m.Role == "self" {
+				role = "assistant"
+			}
+			messages = append(messages, llm.ChatMessage{Role: role, Content: m.Content})
 		}
-		messages = append(messages, llm.ChatMessage{Role: role, Content: m.Content})
 	}
-	req := llm.DispatchRequest{
-		Scenario:     llm.ScenarioLowCost,
-		SystemPrompt: buildLeadJudgeSystemPrompt(jctx),
-		Messages:     messages,
-		MaxTokens:    1024,
-		Temperature:  0.2,
-		JSONMode:     true,
-	}
+	req := leadJudgeDispatchRequest(jctx, messages)
 	var jd LeadJudgement
 	if _, err := dispatcher.DispatchStructured(ctx, req, &jd); err != nil {
 		return nil, err
@@ -417,7 +410,7 @@ func inferLeadClueType(role string, score int) string {
 // buildLeadJudgeContext 组装富上下文并跑三路检测（T036-T038）。
 // 规则解析失败/检测失败均 fail-visible：记日志并带着已拿到的证据继续判断，
 // 不静默吞错、不返回零值规则。
-func (s *Service) buildLeadJudgeContext(ctx context.Context, hub *model.MessageHub, history []llm.ChatMessage, judgementID string) *LeadJudgeContext {
+func (s *Service) buildLeadJudgeContext(ctx context.Context, hub *model.MessageHub, history []DetectionMessage, judgementID string) *LeadJudgeContext {
 	jctx := &LeadJudgeContext{
 		JudgementID: judgementID,
 		AccountID:   hub.AccountID,
@@ -444,15 +437,8 @@ func (s *Service) buildLeadJudgeContext(ctx context.Context, hub *model.MessageH
 	jctx.Rule = rule
 
 	// P0-b：history（MessageHub 真实双向/多成员数据）是权威上下文。
-	// 注意 llm.ChatMessage 无 ID 字段，历史 ID 仍为合成键；mergeJudgeMessages
-	// 会跳过 history_N 作为去重键，保证内容不被共享缓存覆盖。真实 MsgID 的
-	// 证据引用改造需扩 fetchHistory 返回结构，列为后续独立任务。
-	histMsgs := make([]DetectionMessage, 0, len(history))
-	for i, h := range history {
-		histMsgs = append(histMsgs, DetectionMessage{
-			MessageID: fmt.Sprintf("history_%d", i), Content: h.Content, Role: h.Role,
-		})
-	}
+	// 真实 DB 主键作为 hub:<id> 证据锚点；合成 history_N 不再用于判定引用。
+	histMsgs := history
 	current := DetectionMessage{
 		MessageID: hub.MsgID, Content: strings.TrimSpace(hub.Content),
 		Role: "user", SenderID: hub.SenderID,

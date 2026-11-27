@@ -845,6 +845,9 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		if bridgeIngressSvc != nil && webhookSvc != nil {
 			bridgeIngressSvc.SetAITrigger(webhookSvc)
 			webhookSvc.SetIngressSvc(bridgeIngressSvc)
+			webhookSvc.SetConversationDispositionService(service.NewConversationDispositionService(
+				repository.NewConversationDispositionRepositoryWithDB(gormDB),
+			))
 			logger.Infof("[Bridge] bridge AITrigger 已注入（抖音/小红书/TikTok 网页私信 AI 链路已连通）")
 		}
 		if bridgeIngressSvc != nil {

@@ -101,6 +101,9 @@ type WebhookService struct {
 	ingressSvc      *InboxIngressService
 	ingressPipeline IngressPipeline
 
+	// dispositionSvc 投递出口更新逐消息处置台账；未注入时保持存量行为。
+	dispositionSvc *ConversationDispositionService
+
 	// leadDiscoverySvc 线索发掘接线出口（P0-c）：渠道 handler 落 hub 成功后统一经此
 	// 触发主 Service.Enqueue，取代各渠道直接调 MineUnifiedLead 的双轨发掘。
 	// 由 router 装配点注入已构造的实例；单测可注入带 spy 的替身，nil 时安全跳过。
@@ -129,6 +132,10 @@ type WebhookService struct {
 	// 桥接族共用 bridgeOutboxSender 实例（按渠道键各存一份，无状态）。
 	sendersMu sync.Mutex
 	senders   map[WebhookChannel]channelSender
+
+	// outboundLifecycleStore 是 canonical 出站生命周期端口；nil 时由 messageHubRepo 兜底。
+	// 测试可注入失败仓储，证明持久化失败时 sender 不会被调用。
+	outboundLifecycleStore OutboundLifecycleStore
 
 	// dispatchChannelFn FA-CHANNEL-03：可注入的分发函数（测试用）。nil 时用真实
 	// dispatchToChannel。生产恒 nil；注入假分发可在隔离库里验证"分发失败保持可恢复、
@@ -260,6 +267,13 @@ func NewWebhookService() *WebhookService {
 func (s *WebhookService) SetIngressSvc(ingress *InboxIngressService) {
 	if ingress != nil {
 		s.ingressSvc = ingress
+	}
+}
+
+// SetConversationDispositionService 注入逐消息处置台账；nil 视为不注入。
+func (s *WebhookService) SetConversationDispositionService(svc *ConversationDispositionService) {
+	if s != nil && svc != nil {
+		s.dispositionSvc = svc
 	}
 }
 

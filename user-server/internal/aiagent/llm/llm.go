@@ -50,6 +50,12 @@ type LLMConfig struct {
 	AgentID  string
 	UserID   string
 	TraceID  string
+
+	// ExecutionScenarioID 隔离执行链；DispatchScenario 仅路由/计费。
+	ExecutionScenarioID   string
+	LLMSessionRef         string
+	RequestIdempotencyKey string
+	PromptPrefixHash      string
 }
 
 // ToolDefinition OpenAI 兼容的工具定义
@@ -193,9 +199,17 @@ type chatResponse struct {
 		FinishReason string `json:"finish_reason"`
 	} `json:"choices"`
 	Usage struct {
-		PromptTokens     int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
-		TotalTokens      int `json:"total_tokens"`
+		PromptTokens        int `json:"prompt_tokens"`
+		CompletionTokens    int `json:"completion_tokens"`
+		TotalTokens         int `json:"total_tokens"`
+		CachedInputTokens   int `json:"cached_tokens"`
+		CacheCreationTokens int `json:"cache_creation_input_tokens"`
+		PromptTokensDetails struct {
+			CachedTokens int `json:"cached_tokens"`
+		} `json:"prompt_tokens_details"`
+		InputTokensDetails struct {
+			CachedTokens int `json:"cached_tokens"`
+		} `json:"input_tokens_details"`
 	} `json:"usage"`
 	Error *struct {
 		Message string `json:"message"`
@@ -213,10 +227,12 @@ type chatResponse struct {
 //   - FinishReason：stop / length / tool_calls / content_filter
 //   - Usage：token 用量统计
 type GenerateResult struct {
-	Content      string
-	ToolCalls    []ToolCall
-	FinishReason string
-	Usage        TokenUsage
+	Content              string
+	ToolCalls            []ToolCall
+	FinishReason         string
+	Usage                TokenUsage
+	ProviderRequestID    string
+	ProviderContinuation string
 }
 
 // Generate 生成文本回复（向后兼容）。
@@ -371,14 +387,19 @@ func (s *LLMService) GenerateWithTools(ctx context.Context, config *LLMConfig, p
 				config.Model, len(runes), string(head))
 		}
 	}
+	cachedInput := resp.Usage.CachedInputTokens + resp.Usage.PromptTokensDetails.CachedTokens + resp.Usage.InputTokensDetails.CachedTokens
 	result := &GenerateResult{
 		Content:      content,
 		FinishReason: choice.FinishReason,
 		Usage: TokenUsage{
-			PromptTokens:     resp.Usage.PromptTokens,
-			CompletionTokens: resp.Usage.CompletionTokens,
-			TotalTokens:      resp.Usage.TotalTokens,
+			PromptTokens:        resp.Usage.PromptTokens,
+			CompletionTokens:    resp.Usage.CompletionTokens,
+			TotalTokens:         resp.Usage.TotalTokens,
+			CachedInputTokens:   cachedInput,
+			CacheCreationTokens: resp.Usage.CacheCreationTokens,
 		},
+		ProviderRequestID:    resp.ID,
+		ProviderContinuation: resp.ID,
 	}
 	if len(choice.Message.ToolCalls) > 0 {
 		result.ToolCalls = make([]ToolCall, 0, len(choice.Message.ToolCalls))

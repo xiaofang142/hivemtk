@@ -28,7 +28,8 @@ func (d *LeadKeywordDetector) Detect(in DetectionInput) DetectionHit {
 	evidence := make([]string, 0)
 	seen := make(map[string]bool)
 	for _, msg := range in.Messages {
-		lower := strings.ToLower(msg.Content)
+		content := leadDetectionResolvedContent(in, msg)
+		lower := strings.ToLower(content)
 		for _, kw := range keywords {
 			idx := strings.Index(lower, strings.ToLower(kw))
 			if idx < 0 {
@@ -37,7 +38,7 @@ func (d *LeadKeywordDetector) Detect(in DetectionInput) DetectionHit {
 			matched = append(matched, map[string]any{
 				"keyword":    kw,
 				"message_id": msg.MessageID,
-				"snippet":    leadSnippet(msg.Content, idx, len(kw)),
+				"snippet":    leadSnippet(content, idx, len(kw)),
 			})
 			if !seen[msg.MessageID] {
 				seen[msg.MessageID] = true

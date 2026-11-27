@@ -3,14 +3,17 @@ package repository
 import (
 	"context"
 	"errors"
+	"time"
 
 	"hivemtk-user/internal/model"
 	_db "hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/tenant"
 
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
+
+// ErrConversationContextVersionConflict 共享上下文 CAS 冲突；调用方必须重读最新版本后重试。
+var ErrConversationContextVersionConflict = errors.New("共享对话上下文版本冲突")
 
 // ConversationContextRepository 两智能体共享对话上下文仓储（FR-020/021）。
 type ConversationContextRepository interface {
@@ -61,7 +64,7 @@ func (r *conversationContextRepo) Get(ctx context.Context, channelAccountID uint
 	return &m, nil
 }
 
-// Upsert 按 (tenant_id, channel_account_id, external_conversation_id) 唯一键原子写。
+// Upsert 以 version 做 compare-and-swap；首建唯一冲突同样转成版本冲突，迫使调用方重读。
 func (r *conversationContextRepo) Upsert(ctx context.Context, m *model.ConversationContext) error {
 	if m == nil {
 		return errors.New("对话上下文为空")
@@ -71,12 +74,45 @@ func (r *conversationContextRepo) Upsert(ctx context.Context, m *model.Conversat
 		return err
 	}
 	m.TenantID = tid
-	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns: []clause.Column{
-			{Name: "tenant_id"}, {Name: "channel_account_id"}, {Name: "external_conversation_id"},
-		},
-		DoUpdates: clause.AssignmentColumns([]string{"member_roles", "messages", "tags", "summary", "updated_at"}),
-	}).Create(m).Error
+	if m.Version <= 0 {
+		m.Version = 1
+	}
+	if m.SummaryVersion <= 0 {
+		m.SummaryVersion = 1
+	}
+	if m.ID == 0 {
+		if err := r.db.WithContext(ctx).Create(m).Error; err != nil {
+			if isDuplicateKeyErr(err) {
+				return ErrConversationContextVersionConflict
+			}
+			return err
+		}
+		return nil
+	}
+
+	expectedVersion := m.Version
+	result := r.db.WithContext(ctx).
+		Model(&model.ConversationContext{}).
+		Where("tenant_id = ? AND id = ? AND version = ?", tid, m.ID, expectedVersion).
+		Updates(map[string]any{
+			"member_roles":       m.MemberRoles,
+			"messages":           m.Messages,
+			"tags":               m.Tags,
+			"summary":            m.Summary,
+			"source_cursor":      m.SourceCursor,
+			"source_cursor_hash": m.SourceCursorHash,
+			"summary_version":    m.SummaryVersion,
+			"version":            expectedVersion + 1,
+			"updated_at":         time.Now(),
+		})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrConversationContextVersionConflict
+	}
+	m.Version = expectedVersion + 1
+	return nil
 }
 
 func (r *conversationContextRepo) List(ctx context.Context, channelAccountID uint, limit int) ([]model.ConversationContext, error) {

@@ -98,6 +98,8 @@ func IsKnownEventType(t string) bool {
 type MessageEvent struct {
 	EventID   string `json:"event_id"`
 	SessionID string `json:"session_id"`
+	// BusLLMSessionID 是消息总线提供的 LLM 续接键；仅用于 LLM 会话关联，不替代 SessionID。
+	BusLLMSessionID string `json:"llm_session_id,omitempty"`
 	// EventType 事件类型（specs/024 D2）；空串在 NormalizeEvent 归一为 message.received。
 	EventType  string `json:"event_type,omitempty"`
 	Channel    string `json:"channel"`

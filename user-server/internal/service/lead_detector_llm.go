@@ -39,9 +39,11 @@ func (d *LeadLLMDetector) Detect(ctx context.Context, in DetectionInput) Detecti
 	detectCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
+	allowedIDs := make(map[string]struct{}, len(in.Messages))
 	allIDs := make(model.JSONStrings, 0, len(in.Messages))
 	for _, m := range in.Messages {
 		if m.MessageID != "" {
+			allowedIDs[m.MessageID] = struct{}{}
 			allIDs = append(allIDs, m.MessageID)
 		}
 	}
@@ -61,22 +63,15 @@ func (d *LeadLLMDetector) Detect(ctx context.Context, in DetectionInput) Detecti
 		return hit
 	}
 
-	messages := make([]llm.ChatMessage, 0, len(in.Messages))
-	for _, m := range in.Messages {
-		role := "user"
-		if m.Role == "assistant" || m.Role == "self" {
-			role = "assistant"
-		}
-		messages = append(messages, llm.ChatMessage{Role: role, Content: m.Content})
+	messages := BuildLeadDetectionMessages(in)
+	if len(messages) == 0 {
+		hit.Complete = false
+		hit.Degraded = true
+		hit.Reason = "当前上下文没有可证明可见的消息，LLM 检测 fail-closed"
+		hit.EvidenceMessageIDs = allIDs
+		return hit
 	}
-	req := llm.DispatchRequest{
-		Scenario:     llm.ScenarioLowCost,
-		SystemPrompt: buildLeadLLMDetectPrompt(in.Rule),
-		Messages:     messages,
-		MaxTokens:    512,
-		Temperature:  0.2,
-		JSONMode:     true,
-	}
+	req := leadDetectionDispatchRequest(in, buildLeadLLMDetectPrompt(in.Rule), messages)
 	var result leadLLMDetectResult
 	if _, err := dispatcher.DispatchStructured(detectCtx, req, &result); err != nil {
 		hit.Complete = false
@@ -89,7 +84,7 @@ func (d *LeadLLMDetector) Detect(ctx context.Context, in DetectionInput) Detecti
 		return hit
 	}
 
-	ids := model.JSONStrings(result.EvidenceMessageIDs)
+	ids := model.JSONStrings(validateDetectionEvidenceIDs(result.EvidenceMessageIDs, allowedIDs))
 	if len(ids) == 0 {
 		ids = allIDs
 	}
@@ -116,6 +111,7 @@ func buildLeadLLMDetectPrompt(rule *model.LeadMiningRule) string {
 		}
 	}
 	b.WriteString("输出严格 JSON：{\"is_lead\":bool,\"score\":0-100整数,\"role\":\"demand|supply|resource|broker|unknown\",\"reasons\":[理由],\"evidence_message_ids\":[命中的消息ID]}\n")
+	b.WriteString("evidence_message_ids 只能使用输入消息上 [msg id=...] 中出现的真实 ID；禁止编造 ID。\n")
 	b.WriteString("只输出 JSON，不要额外解释。")
 	return b.String()
 }

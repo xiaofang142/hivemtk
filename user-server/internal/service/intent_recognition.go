@@ -641,57 +641,7 @@ func (s *IntentRecognizer) PreviewIntent(ctx context.Context, text string) (*dto
 }
 
 func (s *IntentRecognizer) Recognize(ctx context.Context, sessionID, customerID, text string) (*dto.RecognizeResult, error) {
-	if text == "" {
-		return &dto.RecognizeResult{IntentType: IntentUnknown, Confidence: 0, Method: "rule"}, nil
-	}
-
-	if !loadIntentEnabledFor(ctx) {
-		return &dto.RecognizeResult{
-			IntentType:      IntentUnknown,
-			IntentName:      "未知",
-			Confidence:      0.3,
-			ConfidenceLevel: "low",
-			Sentiment:       "neutral",
-			Method:          "disabled",
-		}, nil
-	}
-
-	var result *dto.RecognizeResult
-
-	if r := s.recognizeByRule(ctx, text); r != nil {
-		s.saveRecord(ctx, sessionID, customerID, text, r, "", 0, 0)
-		result = r
-	} else if r := s.recognizeByEmbedding(ctx, text); r != nil {
-
-		s.saveRecord(ctx, sessionID, customerID, text, r, "", 0, 0)
-		result = r
-	} else if s.dispatcher != nil {
-		if r, err := s.recognizeByLLM(ctx, text); err == nil && r != nil {
-			s.saveRecord(ctx, sessionID, customerID, text, r, r.LLMModel, r.CostTokens, r.LatencyMs)
-			result = r
-		}
-	}
-
-	if result == nil {
-		result = &dto.RecognizeResult{
-			IntentType:      IntentUnknown,
-			IntentName:      "未知",
-			Confidence:      0.3,
-			ConfidenceLevel: "low",
-			Sentiment:       "neutral",
-			Method:          "rule",
-		}
-	}
-
-	RecordIntentWeakLabel(result)
-
-	if customerID != "" {
-		s.triggerSOPByIntent(ctx, customerID, sessionID, result.IntentType, result.Confidence)
-	}
-
-	s.fillTopKExamplesDynamic(ctx, text, result)
-
-	return result, nil
+	return s.RecognizeWithContext(ctx, sessionID, customerID, text, nil)
 }
 
 func (s *IntentRecognizer) triggerSOPByIntent(ctx context.Context, customerID, sessionID, intentType string, confidence float64) {

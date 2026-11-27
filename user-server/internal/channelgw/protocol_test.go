@@ -115,7 +115,7 @@ func TestHistoryToEvent(t *testing.T) {
 	if ev == nil {
 		t.Fatal("HistoryToEvent 返回 nil")
 	}
-	if ev.Channel != "douyin" || ev.ConversationID != "conv-1" || ev.SessionID != "douyin:acc-1:conv-1" {
+	if ev.Channel != "douyin" || ev.ConversationID != "conv-1" || ev.SessionID != "douyin:acc-1:g-1" {
 		t.Errorf("会话元数据应取自 parent: %+v", ev)
 	}
 	if ev.EventID != "h-9" || ev.Content != "出站轮次" || ev.Extra["sender_type"] != "self" {
@@ -271,8 +271,8 @@ func TestBridgeSessionKey_SenderIDOverName(t *testing.T) {
 		t.Fatalf("应优先用 sender_id, got %q", ev.SessionID)
 	}
 	onlyName := (&IngestMessage{Channel: "douyin", AccountID: "acc-1", SenderName: "张三"}).ToEvent("http")
-	if onlyName.SessionID != "douyin:acc-1:张三" {
-		t.Fatalf("无 sender_id 时应退回 sender_name, got %q", onlyName.SessionID)
+	if onlyName.SessionID != "" {
+		t.Fatalf("无稳定 sender_id 时不得使用昵称派生会话键, got %q", onlyName.SessionID)
 	}
 }
 
@@ -280,12 +280,34 @@ func TestBridgeSessionKey_SenderIDOverName(t *testing.T) {
 // 同一个群的多个发言人必须留在同一个会话里。
 func TestBridgeSessionKey_GroupUsesGroupID(t *testing.T) {
 	a := (&IngestMessage{Channel: "xiaohongshu", AccountID: "acc-1", IsGroup: true, GroupID: "group-1", SenderID: "u1"}).ToEvent("http").SessionID
-	b := (&IngestMessage{Channel: "xiaohongshu", AccountID: "acc-1", IsGroup: true, GroupID: "group-1", SenderID: "u2"}).ToEvent("http").SessionID
-	if a != b {
-		t.Fatalf("同群不同发言人被拆开: %q vs %q", a, b)
+	b := (&IngestMessage{Channel: "xiaohongshu", AccountID: "acc-1", IsGroup: true, GroupID: "group-1", ConversationID: "thread-2", SenderID: "u2"}).ToEvent("http").SessionID
+	c := (&IngestMessage{Channel: "xiaohongshu", AccountID: "acc-1", IsGroup: true, GroupID: "group-1", ConversationID: "thread-3", SenderID: "u3"}).ToEvent("http").SessionID
+	if a != b || a != c {
+		t.Fatalf("同群不同线程或发言人被拆开: %q vs %q vs %q", a, b, c)
 	}
 	if a != "xiaohongshu:acc-1:group-1" {
 		t.Fatalf("群会话键应取 group_id, got %q", a)
+	}
+}
+
+func TestIngestMessage_BusLLMSessionIDPropagates(t *testing.T) {
+	m := &IngestMessage{
+		Channel: "douyin", AccountID: "acc-1", ConversationID: "conv-1",
+		SenderID: "uid-1", BusLLMSessionID: "bus-llm-session-1", Timestamp: 1700000000000,
+	}
+	ev := m.ToEvent("http")
+	if ev.BusLLMSessionID != "bus-llm-session-1" {
+		t.Fatalf("ToEvent 未透传 BusLLMSessionID: %q", ev.BusLLMSessionID)
+	}
+	if ev.Extra["llm_session_id"] != "bus-llm-session-1" {
+		t.Fatalf("Extra 未透传 llm_session_id: %+v", ev.Extra)
+	}
+	full := m.ToEventFull("http")
+	if full.BusLLMSessionID != "bus-llm-session-1" {
+		t.Fatalf("ToEventFull 未透传 BusLLMSessionID: %q", full.BusLLMSessionID)
+	}
+	if full.Timestamp.UnixMilli() != m.Timestamp {
+		t.Fatalf("原始时间戳丢失: got %d want %d", full.Timestamp.UnixMilli(), m.Timestamp)
 	}
 }
 

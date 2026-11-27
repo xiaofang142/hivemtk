@@ -250,22 +250,7 @@ func (s *WebhookService) triggerSmartOrchestrator(ctx context.Context, channel W
 	routeCtx = logger.WithModule(routeCtx, "webhook")
 	agentCtx, _ := s.loadAgentForChannel(routeCtx, channel, accountID, p.ChatID)
 
-	in := &IncomingContext{
-		Platform:  model.Platform(channel),
-		AccountID: accountID,
-		SenderID:  p.Sender,
-		Content:   p.Content,
-		MessageID: p.EventID,
-	}
-	if hubMsg != nil {
-		in.OneID = hubMsg.SenderID
-		in.SenderName = hubMsg.SenderName
-		in.MediaURL = hubMsg.MediaURL
-
-		in.IsGroup = hubMsg.IsGroup
-		in.GroupID = hubMsg.GroupID
-		in.GroupName = groupNameFromHub(hubMsg)
-	}
+	in := newIncomingContext(channel, accountID, p, hubMsg)
 
 	if p.Extra != nil {
 		if v, ok := p.Extra["sender_name"]; ok {
@@ -287,6 +272,9 @@ func (s *WebhookService) triggerSmartOrchestrator(ctx context.Context, channel W
 		in.Content = AppendMediaContextToContent(in.Content, hubMsg.MsgType, in.MediaURL)
 	}
 
+	if OutboundCorrelationFromContext(ctx) == "" {
+		ctx = OutboundCorrelationToContext(ctx, newOutboundCorrelation(channel, accountID, convIDOrEmpty(hubMsg), p.EventID))
+	}
 	go s.runAIGeneration(ctx, channel, accountID, p, hubMsg, in, agentCtx)
 }
 
@@ -385,44 +373,108 @@ func (s *WebhookService) TriggerInboundAI(ctx context.Context, channel, accountI
 	if meta.SenderName != "" {
 		p.Extra = map[string]any{"sender_name": meta.SenderName}
 	}
-	hubMsg := &model.MessageHub{
-		MsgID:          eventID,
-		Platform:       channel,
-		AccountID:      accountID,
-		ConversationID: conversationID,
-		SenderID:       customerID,
-		SenderName:     meta.SenderName,
-		Content:        content,
-		Direction:      "inbound",
-		IsGroup:        meta.IsGroup,
-		GroupID:        meta.GroupID,
-		IsRead:         true,
-		SentAt:         time.Now(),
-		Extra:          map[string]any{"sender_name": meta.SenderName},
-	}
+	hubMsg := newInboundHubMessage(channel, accountID, conversationID, customerID, content, eventID, meta)
+	s.triggerSmartOrchestrator(ctx, WebhookChannel(channel), accountID, p, hubMsg)
+}
 
+// newInboundHubMessage 构造入站 hub 行时只采用服务端/消息总线的权威元数据；
+// 缺少权威时间才允许兜底为处理时刻，禁止用 time.Now() 覆盖原始 sent_at。
+func newInboundHubMessage(channel, accountID, conversationID, customerID, content, eventID string, meta *TriggerInboundMeta) *model.MessageHub {
+	if meta == nil {
+		meta = &TriggerInboundMeta{}
+	}
+	convID := meta.ConversationID
+	if convID == "" {
+		convID = conversationID
+	}
+	msgID := meta.MessageID
+	if msgID == "" {
+		msgID = eventID
+	}
+	direction := meta.Direction
+	if direction == "" {
+		direction = "inbound"
+	}
+	extra := model.JSONMap{"sender_name": meta.SenderName}
+	if meta.BusLLMSessionID != "" {
+		extra["llm_session_id"] = meta.BusLLMSessionID
+	}
+	if meta.CorrelationID != "" {
+		extra["correlation_id"] = meta.CorrelationID
+	}
 	if meta.SessionWebhook != "" {
-		hubMsg.Extra["session_webhook"] = meta.SessionWebhook
+		extra["session_webhook"] = meta.SessionWebhook
 		if meta.SessionWebhookExpiredAt > 0 {
-			hubMsg.Extra["session_webhook_expired_at"] = meta.SessionWebhookExpiredAt
+			extra["session_webhook_expired_at"] = meta.SessionWebhookExpiredAt
 		}
 	}
 	if meta.ChannelMsgID != "" {
-		hubMsg.Extra["channel_msg_id"] = meta.ChannelMsgID
+		extra["channel_msg_id"] = meta.ChannelMsgID
 	}
 	if meta.IsGroup {
-		if hubMsg.Extra == nil {
-			hubMsg.Extra = model.JSONMap{}
-		}
-		hubMsg.Extra["is_group"] = true
+		extra["is_group"] = true
 		if meta.GroupID != "" {
-			hubMsg.Extra["group_id"] = meta.GroupID
+			extra["group_id"] = meta.GroupID
 		}
 		if meta.GroupName != "" {
-			hubMsg.Extra["group_name"] = meta.GroupName
+			extra["group_name"] = meta.GroupName
 		}
 	}
-	s.triggerSmartOrchestrator(ctx, WebhookChannel(channel), accountID, p, hubMsg)
+	return &model.MessageHub{
+		MsgID:          msgID,
+		Platform:       channel,
+		AccountID:      accountID,
+		ConversationID: convID,
+		SenderID:       customerID,
+		SenderName:     meta.SenderName,
+		Content:        content,
+		Direction:      direction,
+		IsGroup:        meta.IsGroup,
+		GroupID:        meta.GroupID,
+		PlatformMsgID:  meta.PlatformMsgID,
+		IsRead:         true,
+		SentAt:         meta.EffectiveSentAt(time.Now()),
+		Extra:          extra,
+	}
+}
+
+// newIncomingContext 把权威 hub 入站行映射为编排器上下文；
+// 非白名单 Extra 键不能改写来源、时间或总线会话键。
+func newIncomingContext(channel WebhookChannel, accountID string, p *ParsedPayload, hubMsg *model.MessageHub) *IncomingContext {
+	if p == nil {
+		p = &ParsedPayload{}
+	}
+	in := &IncomingContext{
+		Platform:  model.Platform(channel),
+		AccountID: accountID,
+		SenderID:  p.Sender,
+		Content:   p.Content,
+		MessageID: p.EventID,
+		Direction: "inbound",
+	}
+	if hubMsg == nil {
+		return in
+	}
+	in.OneID = hubMsg.SenderID
+	in.SenderName = hubMsg.SenderName
+	in.MediaURL = hubMsg.MediaURL
+	in.MessageID = hubMsg.MsgID
+	in.ConversationID = hubMsg.ConversationID
+	in.Direction = hubMsg.Direction
+	in.OriginalSentAt = hubMsg.SentAt
+	in.PlatformMsgID = hubMsg.PlatformMsgID
+	in.IsGroup = hubMsg.IsGroup
+	in.GroupID = hubMsg.GroupID
+	in.GroupName = groupNameFromHub(hubMsg)
+	if hubMsg.Extra != nil {
+		if v, ok := hubMsg.Extra["llm_session_id"].(string); ok {
+			in.BusLLMSessionID = v
+		}
+		if v, ok := hubMsg.Extra["correlation_id"].(string); ok {
+			in.CorrelationID = v
+		}
+	}
+	return in
 }
 
 func (s *WebhookService) runAIGeneration(ctx context.Context, channel WebhookChannel, accountID string, p *ParsedPayload, hubMsg *model.MessageHub, in *IncomingContext, agentCtx *AgentContext) {

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 
+	agentcontext "hivemtk-user/internal/aiagent/context"
 	"hivemtk-user/internal/aiagent/llm"
 	"hivemtk-user/internal/config"
 	"hivemtk-user/internal/dto"
@@ -36,6 +37,43 @@ func (a *humanizeLLMAdapter) ChatSend(ctx context.Context, prompt string) (strin
 		return "", "", err
 	}
 	return result.Content, result.Model, nil
+}
+
+// ChatSendWithContext 使用独立执行场景与总线续接键调用模型。
+// 评估与重生各自隔离状态行，避免与其他 objection 场景串链。
+func (a *humanizeLLMAdapter) ChatSendWithContext(ctx context.Context, prompt string, call humanizesvc.LLMCallContext) (string, string, error) {
+	if a.dispatcher == nil {
+		return "", "", nil
+	}
+	result, err := a.dispatcher.Dispatch(ctx, humanizeContextAwareDispatchRequest(prompt, call))
+	if err != nil {
+		return "", "", err
+	}
+	return result.Content, result.Model, nil
+}
+
+func humanizeLLMCallContext(execution agentcontext.ExecutionScenarioID, step string, view *agentcontext.AgentConversationContext) humanizesvc.LLMCallContext {
+	return humanizesvc.LLMCallContext{
+		ExecutionScenarioID: execution,
+		Step:                step,
+		ContextView:         view,
+	}
+}
+
+func humanizeContextAwareDispatchRequest(prompt string, call humanizesvc.LLMCallContext) llm.DispatchRequest {
+	route, err := llm.ResolveDispatchScenario(call.ExecutionScenarioID)
+	if err != nil {
+		route = llm.ScenarioObjection
+	}
+	sessionRef, idem := intentDispatchCallContext(call.ContextView, string(call.ExecutionScenarioID), call.Step)
+	return llm.DispatchRequest{
+		Scenario:              route,
+		Prompt:                prompt,
+		MaxTokens:             256,
+		ExecutionScenarioID:   string(call.ExecutionScenarioID),
+		LLMSessionRef:         sessionRef,
+		RequestIdempotencyKey: idem,
+	}
 }
 
 // HumanizeEvaluatorSwitch 拟人度评估器开关（私域本地 LLM 部署下应禁用）
@@ -124,11 +162,8 @@ func (a *humanizeRegenerateAdapter) Regenerate(ctx context.Context, input *dto.H
 		return "", nil
 	}
 	prompt := buildHumanizeRegeneratePrompt(input, last)
-	result, err := a.dispatcher.Dispatch(ctx, llm.DispatchRequest{
-		Scenario:  llm.ScenarioObjection,
-		Prompt:    prompt,
-		MaxTokens: 256,
-	})
+	callCtx := humanizeLLMCallContext(agentcontext.ExecutionScenarioHumanizeRewrite, "regenerate", input.ContextView)
+	result, err := a.dispatcher.Dispatch(ctx, humanizeContextAwareDispatchRequest(prompt, callCtx))
 	if err != nil {
 		return "", err
 	}
@@ -138,6 +173,8 @@ func (a *humanizeRegenerateAdapter) Regenerate(ctx context.Context, input *dto.H
 func buildHumanizeRegeneratePrompt(input *dto.HumanizeEvalInput, last *dto.HumanizeEvalResult) string {
 	var sb strings.Builder
 	sb.WriteString("请基于以下反馈重新生成回复，让它更像真人说话、更自然。\n\n")
+	sb.WriteString(humanizesvc.BuildHumanizeContextBlock(input.ContextView))
+	sb.WriteString("\n")
 	sb.WriteString("【客户消息】")
 	sb.WriteString(input.CustomerMessage)
 	sb.WriteString("\n\n")

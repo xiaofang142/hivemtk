@@ -33,7 +33,7 @@ func (d *Dispatcher) registerLocalProvider(llmCfg config.InferenceLLMConfig) {
 	if llmCfg.BaseURL == "" {
 		panic("inference.llm.base_url 必须由 config 层提供（config.yaml 或 DefaultInferenceConfig），dispatcher 不再兜底")
 	}
-	d.providers["default"] = &ProviderConfig{
+	provider := &ProviderConfig{
 		Name:         "default",
 		APIKey:       llmCfg.APIKey,
 		BaseURL:      llmCfg.BaseURL,
@@ -48,6 +48,8 @@ func (d *Dispatcher) registerLocalProvider(llmCfg config.InferenceLLMConfig) {
 
 		NoFC: resolveNoFC(llmCfg),
 	}
+	applyProviderCapabilities(provider, llmCfg.Capabilities, provider.APIType)
+	d.providers[provider.Name] = provider
 }
 
 func resolveNoFC(llmCfg config.InferenceLLMConfig) bool {
@@ -58,6 +60,50 @@ func resolveNoFC(llmCfg config.InferenceLLMConfig) bool {
 
 	base := strings.ToLower(llmCfg.BaseURL)
 	return base == "" || strings.Contains(base, "127.0.0.1") || strings.Contains(base, "localhost") || strings.Contains(base, "mtk-llm")
+}
+
+func applyProviderCapabilities(
+	provider *ProviderConfig,
+	caps config.InferenceProviderCapabilities,
+	apiType string,
+) {
+	provider.ContextWindow = caps.ContextWindow
+	provider.MaxInputTokens = caps.MaxInputTokens
+	provider.ProtocolInputLimit = caps.ProtocolInputLimit
+	provider.MaxOutputTokens = caps.MaxOutputTokens
+	provider.ReasoningReserveTokens = caps.ReasoningReserveTokens
+	provider.OutputSemantics = caps.OutputSemantics
+	provider.CacheMode = caps.CacheMode
+	if provider.CacheMode == "" {
+		provider.CacheMode = "none"
+	}
+	provider.CacheMinTokens = caps.CacheMinTokens
+	provider.CacheTTLSeconds = caps.CacheTTLSeconds
+	provider.SessionMode = caps.SessionMode
+	if provider.SessionMode == "" {
+		provider.SessionMode = "none"
+	}
+	provider.NativeSessionAllowed = caps.NativeSessionAllowed
+	provider.StoreMode = caps.StoreMode
+	if provider.StoreMode == "" {
+		provider.StoreMode = "stateless"
+	}
+	provider.AllowedRegions = append([]string{}, caps.AllowedRegions...)
+	provider.SupportsIdempotencyKey = caps.SupportsIdempotencyKey
+	provider.MaxRequestBytes = caps.MaxRequestBytes
+	provider.RequestTimeoutSeconds = caps.RequestTimeoutSeconds
+	provider.RouteMode = caps.RouteMode
+	if provider.RouteMode == "" {
+		provider.RouteMode = "direct"
+	}
+	provider.ReliabilityTier = caps.ReliabilityTier
+	if provider.ReliabilityTier == "" {
+		provider.ReliabilityTier = "unknown"
+	}
+	provider.Protocol = caps.Protocol
+	if provider.Protocol == "" {
+		provider.Protocol = apiType
+	}
 }
 
 func defaultCloudProviderFactories() []ProviderConfig {
@@ -85,7 +131,7 @@ func (d *Dispatcher) registerCloudProvidersFromConfig(llmCfg config.InferenceLLM
 	src := llmCfg.CloudProviders
 	for _, p := range src {
 		enabled := p.Enabled && p.APIKey != ""
-		d.providers[p.Name] = &ProviderConfig{
+		provider := &ProviderConfig{
 			Name:         p.Name,
 			APIKey:       p.APIKey,
 			BaseURL:      p.BaseURL,
@@ -98,6 +144,8 @@ func (d *Dispatcher) registerCloudProvidersFromConfig(llmCfg config.InferenceLLM
 			MaxRPM:       60,
 			Enabled:      enabled,
 		}
+		applyProviderCapabilities(provider, p.Capabilities, provider.APIType)
+		d.providers[provider.Name] = provider
 	}
 }
 

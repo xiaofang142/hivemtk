@@ -9,16 +9,28 @@ import (
 type DelayedOutboundReply struct {
 	TenantID uint `gorm:"not null;default:1;index" json:"tenant_id"`
 
-	ID             uint       `gorm:"primaryKey;autoIncrement" json:"id"`
-	Platform       string     `gorm:"type:varchar(30);index" json:"platform"`
-	AccountID      string     `gorm:"type:varchar(64)" json:"account_id"`
-	ConversationID string     `gorm:"type:varchar(128);index" json:"conversation_id"`
-	SenderID       string     `gorm:"type:varchar(128)" json:"sender_id"`
-	Content        string     `gorm:"type:text" json:"content"`
-	Cards          JSONMap    `gorm:"type:jsonb" json:"cards"`
-	SendAt         time.Time  `gorm:"index" json:"send_at"`
-	Status         string     `gorm:"type:varchar(20);default:'pending';index" json:"status"`
-	SentAt         *time.Time `json:"sent_at"`
+	ID             uint   `gorm:"primaryKey;autoIncrement" json:"id"`
+	Platform       string `gorm:"type:varchar(30);index" json:"platform"`
+	AccountID      string `gorm:"type:varchar(64)" json:"account_id"`
+	ConversationID string `gorm:"type:varchar(128);index" json:"conversation_id"`
+	SenderID       string `gorm:"type:varchar(128)" json:"sender_id"`
+	// CorrelationID 是逻辑回复的不可变身份；quiet-hours/retry/replay 始终复用。
+	CorrelationID string `gorm:"type:varchar(100);index" json:"correlation_id"`
+	// Origin 明确 AI/human，避免延迟重放把人工回复硬编码成 AI。
+	Origin     string `gorm:"type:varchar(20)" json:"origin"`
+	SessionID  string `gorm:"type:varchar(120);index" json:"session_id"`
+	IsGroup    bool   `gorm:"default:false" json:"is_group"`
+	GroupID    string `gorm:"type:varchar(100)" json:"group_id"`
+	Visibility string `gorm:"type:varchar(32);default:'unknown'" json:"visibility"`
+	// AudienceJSON/VisibilityEvidence/HubExtra 保存原 scope 与 Extra，重放不得降级。
+	AudienceJSON       JSONStrings `gorm:"type:jsonb" json:"audience_json"`
+	VisibilityEvidence JSONMap     `gorm:"type:jsonb" json:"visibility_evidence"`
+	HubExtra           JSONMap     `gorm:"type:jsonb" json:"hub_extra"`
+	Content            string      `gorm:"type:text" json:"content"`
+	Cards              JSONMap     `gorm:"type:jsonb" json:"cards"`
+	SendAt             time.Time   `gorm:"index" json:"send_at"`
+	Status             string      `gorm:"type:varchar(20);default:'pending';index" json:"status"`
+	SentAt             *time.Time  `json:"sent_at"`
 
 	// Kind 区分两条互补的延迟语义：
 	//   - quiet_hours（含改动前的历史空值行）：命中免打扰时段，窗口开放时首发

@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
-	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/pkg/utils"
+	"hivemtk-user/internal/repository"
 )
 
 // T05 语义契约错误：线索通知配置属于系统配置，收件人只能是本系统员工

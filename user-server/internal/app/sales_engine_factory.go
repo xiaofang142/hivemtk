@@ -151,6 +151,19 @@ func BuildSmartOrchestrator(engine *service.SalesEngine, kbRepo *repository.Know
 	o.SetSuggestionRepo(repository.NewAISuggestionRepositoryWithDB(gormDB))
 	o.SetIdentityService(service.NewCustomerIdentityService())
 
+	// 统一上下文：MessageHub 为权威历史源，SessionMessage 补未落 hub 的出站。
+	// 装配后每轮入站在编排器入口构建一次不可变 ContextView，意图/情感/销售/
+	// 群聊硬门共享同一份视图，不再各自拼装有限窗口。
+	o.SetContextBuilder(service.NewConversationContextBuilder(
+		service.NewUnifiedMessageReader(
+			repository.NewMessageHubRepositoryWithDB(gormDB),
+			repository.NewSessionMessageRepositoryWithDB(gormDB),
+		),
+	))
+	o.SetConversationDispositionService(service.NewConversationDispositionService(
+		repository.NewConversationDispositionRepositoryWithDB(gormDB),
+	))
+
 	o.SetConfidenceAggregator(engine.ConfidenceAggregator())
 
 	if gormDB != nil {

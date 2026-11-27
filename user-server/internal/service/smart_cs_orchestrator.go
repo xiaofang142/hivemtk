@@ -11,6 +11,7 @@ import (
 	"time"
 
 	agent_runtime "hivemtk-user/internal/aiagent/agent/runtime"
+	agentcontext "hivemtk-user/internal/aiagent/context"
 	"hivemtk-user/internal/aiagent/llm"
 	ragcache "hivemtk-user/internal/aiagent/rag/cache"
 	"hivemtk-user/internal/dto"
@@ -37,6 +38,13 @@ type SmartCSOrchestrator struct {
 	messageRepo    *repository.SessionMessageRepository
 	agentRepo      *repository.AgentStatusRepository
 	kbRepo         *repository.KnowledgeBaseRepository
+
+	// contextBuilder 装配后，每轮入站在编排器入口生成一次不可变上下文快照；
+	// nil 时保持原有有限历史路径（单测/未启用新链路的部署）。
+	contextBuilder *ConversationContextBuilder
+
+	// dispositionSvc 装配后逐条入站消息登记处置台账，供迟到消息与回复水位判定。
+	dispositionSvc *ConversationDispositionService
 
 	csAgentSvc  *CustomerServiceAgentService
 	identitySvc *CustomerIdentityService
@@ -96,6 +104,20 @@ func DefaultOrchestratorConfig() *OrchestratorConfig {
 func (o *SmartCSOrchestrator) SetSuggestionRepo(repo *repository.AISuggestionRepository) {
 	if repo != nil {
 		o.suggestionRepo = repo
+	}
+}
+
+// SetContextBuilder 注入统一上下文构建器；未注入时回复链保持原有有限历史路径。
+func (o *SmartCSOrchestrator) SetContextBuilder(builder *ConversationContextBuilder) {
+	if o != nil {
+		o.contextBuilder = builder
+	}
+}
+
+// SetConversationDispositionService 注入逐消息处置台账服务；未注入时不改变存量行为。
+func (o *SmartCSOrchestrator) SetConversationDispositionService(svc *ConversationDispositionService) {
+	if o != nil {
+		o.dispositionSvc = svc
 	}
 }
 
@@ -231,6 +253,21 @@ type IncomingContext struct {
 	IsGroup    bool
 	GroupID    string
 	GroupName  string
+
+	// 消息总线权威元数据：由 webhook/inbox 入站时写入，不能由消息正文或
+	// 渠道 Extra 中的非白名单键覆盖，供回复链全场景使用。
+	ConversationID  string
+	BusSessionID    string
+	BusLLMSessionID string
+	Direction       string
+	OriginalSentAt  time.Time
+	PlatformMsgID   string
+	CorrelationID   string
+
+	// ContextView 是本轮入站的不可变上下文快照；构建失败时保持 nil，
+	// 下游必须能安全降级到原有的有限历史路径。
+	ContextView *agentcontext.AgentConversationContext
+
 	// NoFastpath 禁用 FAQ fastpath 直答（2026-11-14 生产实证）：同会话已投递过相同
 	// 标准答案时编排器置位重跑，走完整 LLM 结合对话历史生成针对追问的新回答。
 	NoFastpath bool
@@ -239,6 +276,35 @@ type IncomingContext struct {
 	// 非空时 findOrCreateSession 直接复用，不再按 OneID/UserID 猜，避免同一条消息被
 	// 编排器二次保存进别的活跃会话（chat 双发 bug 的根因）。
 	SessionID string
+}
+
+// salesRequestFromIncomingContext 把入站权威元数据原样映射到 SalesRequest；
+// 情绪提示、NoFastpath、Config 等编排器产物由调用方在返回后继续填充。
+func salesRequestFromIncomingContext(sessionID, customerID string, in *IncomingContext) *dto.SalesRequest {
+	if in == nil {
+		in = &IncomingContext{}
+	}
+	return &dto.SalesRequest{
+		SessionID:       sessionID,
+		CustomerID:      customerID,
+		OneID:           in.OneID,
+		UserMessage:     in.Content,
+		Platform:        string(in.Platform),
+		ConversationID:  in.ConversationID,
+		MessageID:       in.MessageID,
+		SenderID:        in.SenderID,
+		SenderName:      in.SenderName,
+		BusSessionID:    in.BusSessionID,
+		BusLLMSessionID: in.BusLLMSessionID,
+		Direction:       in.Direction,
+		OriginalSentAt:  in.OriginalSentAt,
+		PlatformMsgID:   in.PlatformMsgID,
+		CorrelationID:   in.CorrelationID,
+		IsGroup:         in.IsGroup,
+		GroupID:         in.GroupID,
+		GroupName:       in.GroupName,
+		ContextView:     in.ContextView,
+	}
 }
 
 // HandleResult 处理结果
@@ -271,6 +337,10 @@ type HandleResult struct {
 	// 缓存命中/转人工/降级链路径恒为空。出站侧据此写 extra.intent，
 	// 不必再拆 result.SalesResponse 的嵌套 nil 链（MD-05 契约收窄）。
 	IntentType string `json:"intent_type,omitempty"`
+	// GroupReplyBlocked 表示群回复在发送前被 audience/隐私硬门拦截：
+	// 不保存 AI 出站、不发送、不记入 AI 应答量。Reasons 只含机器可读原因。
+	GroupReplyBlocked bool     `json:"group_reply_blocked,omitempty"`
+	GroupReplyReasons []string `json:"group_reply_reasons,omitempty"`
 }
 
 // HandleIncoming 处理入站消息（智能体主入口，默认配置）
@@ -318,10 +388,33 @@ func (o *SmartCSOrchestrator) HandleIncomingWithAgent(ctx context.Context, in *I
 	}
 	result.SessionID = session.SessionID
 
+	// 统一上下文快照在编排器入口构建一次；下游意图/情感/销售/群聊硬门共享同一份
+	// 不可变视图，避免各自拼装导致的范围漂移。构建失败时只记日志并保留 nil，
+	// 由各消费方降级到原有有限历史路径；群聊硬门会因缺证明而 fail-closed。
+	view, viewErr := buildIncomingContextView(ctx, in, session.SessionID, o.contextBuilder, time.Now())
+	if viewErr != nil {
+		logger.Ctx(ctx).Warn().Err(viewErr).
+			Str("session_id", session.SessionID).
+			Msg("[Orchestrator] 统一上下文快照构建失败，降级到有限历史路径")
+	} else {
+		in.ContextView = view
+	}
+
 	o.ensureCustomerForSession(ctx, in.Platform, in.SenderID, in.SenderName)
 
 	if err := o.saveInboundMessage(ctx, session, in); err != nil {
 		return nil, fmt.Errorf("save inbound message failed: %w", err)
+	}
+
+	if o.dispositionSvc != nil {
+		blind := incomingDispositionBlind(in, in.ContextView)
+		if blind == "" {
+			logger.Ctx(ctx).Warn().Str("message_id", in.MessageID).
+				Msg("[Orchestrator] 无法派生逐消息处置 scope，跳过台账登记")
+		} else if _, dErr := ensureIncomingDisposition(ctx, o.dispositionSvc, in, blind); dErr != nil {
+			logger.Ctx(ctx).Warn().Err(dErr).Str("message_id", in.MessageID).
+				Msg("[Orchestrator] 逐消息处置登记失败，不影响本轮回复")
+		}
 	}
 
 	if err := o.sessionRepo.UpdateLastMessage(ctx, session.ID, in.Content, "user"); err != nil {
@@ -357,7 +450,7 @@ func (o *SmartCSOrchestrator) HandleIncomingWithAgent(ctx context.Context, in *I
 
 	emotionHint := ""
 	if o.isUrgentOrComplaint(ctx, in.Content) {
-		emoStrat := StrategyForEmotion(ClassifyEmotion(in.Content))
+		emoStrat := StrategyForEmotion(ClassifyEmotionWithContext(in.Content, in.ContextView))
 		if emoStrat.TransferToHuman {
 			result.HandlerType = model.HandlerTypeHuman
 			result.Transferred = true
@@ -368,7 +461,7 @@ func (o *SmartCSOrchestrator) HandleIncomingWithAgent(ctx context.Context, in *I
 		emotionHint = emoStrat.ReplyHint
 	}
 
-	if MatchTransferKeywords(in.Content) || MatchExplicitKeywords(in.Content) {
+	if MatchTransferKeywordsWithContext(in.Content, in.ContextView) || MatchExplicitKeywords(in.Content) {
 		result.HandlerType = model.HandlerTypeHuman
 		result.Transferred = true
 		result.TransferReason = "客户显式要求转人工"
@@ -423,15 +516,9 @@ func (o *SmartCSOrchestrator) HandleIncomingWithAgent(ctx context.Context, in *I
 		}
 	}
 
-	salesReq := &SalesRequest{
-		SessionID:   session.SessionID,
-		CustomerID:  session.UserID,
-		OneID:       in.OneID,
-		UserMessage: in.Content,
-		Platform:    string(in.Platform),
-		EmotionHint: emotionHint,
-		NoFastpath:  noFastpath,
-	}
+	salesReq := salesRequestFromIncomingContext(session.SessionID, session.UserID, in)
+	salesReq.EmotionHint = emotionHint
+	salesReq.NoFastpath = noFastpath
 	salesResp, err := o.engine.HandleWithAgent(ctx, salesReq, finalAgentCtx)
 	if err != nil || salesResp == nil {
 
@@ -522,6 +609,25 @@ func (o *SmartCSOrchestrator) HandleIncomingWithAgent(ctx context.Context, in *I
 		utils.WarnErrKV("smartcs.transferToHuman.lowConfidence", o.transferToHuman(ctx, session, result.TransferReason, result), "session_id", session.SessionID, "confidence", strconv.FormatFloat(result.Confidence, 'f', 4, 64), "threshold", strconv.FormatFloat(threshold, 'f', 4, 64))
 		sla.Record(sla.SLOInboundHandled, true)
 		sla.Record(sla.SLOAIAutoReplyCoverage, false)
+		return result, nil
+	}
+
+	// 群聊输出硬门：没有 audience 已验证快照，或回复触碰其他成员私有事实/PII
+	// 时，整轮静默放弃。必须在保存 AI 出站与建议计数之前，避免留下"已回复"轨迹。
+	if groupDecision := CheckGroupReplyGate(in.IsGroup, in.ContextView, in.SenderID, salesResp.Reply); !groupDecision.Allowed {
+		result.HandlerType = model.HandlerTypeAI
+		result.AIReplied = false
+		result.Reply = ""
+		result.GroupReplyBlocked = true
+		result.GroupReplyReasons = groupDecision.Reasons
+		result.TransferReason = "群回复未通过 audience/隐私硬门"
+		sla.Record(sla.SLOInboundHandled, true)
+		sla.Record(sla.SLOAIAutoReplyCoverage, false)
+		logger.Ctx(ctx).Warn().
+			Str("session_id", session.SessionID).
+			Str("group_id", in.GroupID).
+			Strs("reasons", groupDecision.Reasons).
+			Msg("[Orchestrator] 群回复被输出硬门拦截，不保存不入站不外发")
 		return result, nil
 	}
 
@@ -865,12 +971,13 @@ func (o *SmartCSOrchestrator) saveOutboundMessage(ctx context.Context, session *
 		return nil
 	}
 	msg := &model.SessionMessage{
-		SessionID:   session.SessionID,
-		Content:     content,
-		ContentType: model.MessageTypeText,
-		SenderType:  senderType,
-		SenderID:    "ai_assistant",
-		SenderName:  "AI 助手",
+		SessionID:     session.SessionID,
+		CorrelationID: OutboundCorrelationFromContext(ctx),
+		Content:       content,
+		ContentType:   model.MessageTypeText,
+		SenderType:    senderType,
+		SenderID:      "ai_assistant",
+		SenderName:    "AI 助手",
 	}
 	return o.messageRepo.Create(ctx, msg)
 }

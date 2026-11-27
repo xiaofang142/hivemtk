@@ -22,10 +22,10 @@ func TestBusinessNoteEncodingRoundTrip(t *testing.T) {
 	if got.Source != note.Source || got.At != note.At || got.Attribute != note.Attribute || got.Text != note.Text {
 		t.Fatalf("备注属性丢失: got=%+v want=%+v", got, note)
 	}
-	// 存量裸备注必须兼容为事实属性。
+	// 存量裸备注没有来源时间/确认状态，只能作为待核实历史信息。
 	legacy, ok := DecodeBusinessNote("note:lead_mining:线索已介入")
-	if !ok || legacy.Attribute != BusinessNoteFact || legacy.Text != "线索已介入" {
-		t.Fatalf("存量备注兼容失败: got=%+v ok=%t", legacy, ok)
+	if !ok || legacy.Attribute != BusinessNoteLegacyUnverified || legacy.Text != "线索已介入" {
+		t.Fatalf("存量备注必须降级为待核实信息: got=%+v ok=%t", legacy, ok)
 	}
 	// 对方刚写的信息必须进入提示，且建议标注为建议。
 	input := SharedBusinessInput{Notes: []BusinessNote{

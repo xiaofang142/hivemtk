@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	agentcontext "hivemtk-user/internal/aiagent/context"
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
 )
@@ -65,9 +66,21 @@ func (s *LLMScorerImpl) Evaluate(ctx context.Context, input *dto.HumanizeEvalInp
 	start := time.Now()
 	results := make([]*dto.HumanizeEvalResult, 0, s.selfConsistencyN)
 	lastErr := error(nil)
+	callCtx := LLMCallContext{
+		ExecutionScenarioID: agentcontext.ExecutionScenarioHumanizeEval,
+		Step:                "evaluate",
+		ContextView:         input.ContextView,
+	}
+	contextDispatcher, hasContextDispatcher := s.dispatcher.(LLMContextDispatcher)
 	for i := 0; i < s.selfConsistencyN; i++ {
 		prompt := buildHumanizeLLMPrompt(input, s.baseline)
-		content, model, err := s.dispatcher.ChatSend(ctx, prompt)
+		var content, model string
+		var err error
+		if hasContextDispatcher {
+			content, model, err = contextDispatcher.ChatSendWithContext(ctx, prompt, callCtx)
+		} else {
+			content, model, err = s.dispatcher.ChatSend(ctx, prompt)
+		}
 		if err != nil {
 			lastErr = err
 			continue
@@ -102,6 +115,8 @@ func buildHumanizeLLMPrompt(input *dto.HumanizeEvalInput, baseline *model.Champi
 	var sb strings.Builder
 	sb.WriteString("你是一位资深销售对话质检员，正在评估 AI 销冠回复的拟人度。\n")
 	sb.WriteString("请先输出评估步骤（Chain-of-Thought），再按 5 维度打分。\n\n")
+	sb.WriteString(BuildHumanizeContextBlock(input.ContextView))
+	sb.WriteString("\n")
 	sb.WriteString(fmt.Sprintf("【客户消息】%s\n", input.CustomerMessage))
 	sb.WriteString(fmt.Sprintf("【AI 回复】%s\n", input.AIReply))
 	if input.Persona != "" {

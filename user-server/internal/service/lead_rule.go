@@ -108,16 +108,16 @@ func (s *LeadRuleService) Delete(ctx context.Context, id int64) error {
 // LeadMiningConfigSnapshot 一次分析冻结的有效配置。
 // gate/三路/ReAct/判定/持久化必须共同消费同一个 Version，避免配置切换时混用版本。
 type LeadMiningConfigSnapshot struct {
-	Version         string
-	Enabled         bool
-	RuleScope       string
-	RuleID          int64
-	RuleDescription string
-	Keywords        []string
-	SemanticWords   []string
-	Requirement     string
-	MinIntentScore  int
-	Model           string
+	Version          string
+	Enabled          bool
+	RuleScope        string
+	RuleID           int64
+	RuleDescription  string
+	Keywords         []string
+	SemanticWords    []string
+	Requirement      string
+	MinIntentScore   int
+	Model            string
 	LeadAgentID      uint
 	LeadAgentMode    string
 	LeadAgentPersona string

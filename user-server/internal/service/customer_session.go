@@ -191,16 +191,17 @@ func (s *CustomerSessionService) GetSessionByID(ctx context.Context, id uint) (*
 
 // SendMessageRequest 发送消息请求
 type SendMessageRequest struct {
-	SessionID    string            `json:"session_id"`
-	Content      string            `json:"content" binding:"required"`
-	ContentType  model.MessageType `json:"content_type"`
-	MediaURL     string            `json:"media_url"`
-	SenderType   string            `json:"sender_type"`
-	SenderID     string            `json:"sender_id"`
-	SenderName   string            `json:"sender_name"`
-	SenderAvatar string            `json:"sender_avatar"`
-	AIConfidence float64           `json:"ai_confidence"`
-	AISource     string            `json:"ai_source"`
+	SessionID     string            `json:"session_id"`
+	CorrelationID string            `json:"correlation_id"`
+	Content       string            `json:"content" binding:"required"`
+	ContentType   model.MessageType `json:"content_type"`
+	MediaURL      string            `json:"media_url"`
+	SenderType    string            `json:"sender_type"`
+	SenderID      string            `json:"sender_id"`
+	SenderName    string            `json:"sender_name"`
+	SenderAvatar  string            `json:"sender_avatar"`
+	AIConfidence  float64           `json:"ai_confidence"`
+	AISource      string            `json:"ai_source"`
 }
 
 // UnmarshalJSON 自定义反序列化，兼容 sender_id 为数字或字符串
@@ -242,16 +243,17 @@ func (s *CustomerSessionService) SendMessage(ctx context.Context, req *SendMessa
 	}
 
 	message := &model.SessionMessage{
-		SessionID:    req.SessionID,
-		Content:      req.Content,
-		ContentType:  req.ContentType,
-		MediaURL:     req.MediaURL,
-		SenderType:   req.SenderType,
-		SenderID:     req.SenderID,
-		SenderName:   req.SenderName,
-		SenderAvatar: req.SenderAvatar,
-		AIConfidence: req.AIConfidence,
-		AISource:     req.AISource,
+		SessionID:     req.SessionID,
+		CorrelationID: firstNonEmpty(req.CorrelationID, OutboundCorrelationFromContext(ctx)),
+		Content:       req.Content,
+		ContentType:   req.ContentType,
+		MediaURL:      req.MediaURL,
+		SenderType:    req.SenderType,
+		SenderID:      req.SenderID,
+		SenderName:    req.SenderName,
+		SenderAvatar:  req.SenderAvatar,
+		AIConfidence:  req.AIConfidence,
+		AISource:      req.AISource,
 	}
 
 	if req.ContentType == "" {

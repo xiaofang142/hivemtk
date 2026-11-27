@@ -27,19 +27,24 @@ type MessageHub struct {
 	SenderName string `gorm:"type:varchar(200)" json:"sender_name"`
 	// SenderAvatar 发送者头像 URL（M-2 客户头像链路，2026-11-11）：桥端抓「对方」头像，
 	// 与 media_url 同款 varchar(500) 列宽（TruncateMediaURL 入库前收口）；抓不到为空串。
-	SenderAvatar   string     `gorm:"type:varchar(500)" json:"sender_avatar"`
-	ReceiverID     string     `gorm:"type:varchar(100)" json:"receiver_id"`
-	ReceiverName   string     `gorm:"type:varchar(200)" json:"receiver_name"`
-	Content        string     `gorm:"type:text" json:"content"`
-	MediaURL       string     `gorm:"type:varchar(500)" json:"media_url"`
-	ConversationID string     `gorm:"type:varchar(100);index;uniqueIndex:uni_message_hub_platform_msg_conv,priority:3" json:"conversation_id"`
-	IsGroup        bool       `gorm:"default:false" json:"is_group"`
-	GroupID        string     `gorm:"type:varchar(100)" json:"group_id"`
-	IsAIReply      bool       `gorm:"default:false" json:"is_ai_reply"`
-	AIAgent        string     `gorm:"type:varchar(50)" json:"ai_agent"`
-	TraceID        string     `gorm:"type:varchar(64);index:idx_hub_trace" json:"trace_id"`
-	DedupHash      string     `gorm:"type:varchar(64);index:idx_mh_dedup_hash" json:"dedup_hash"`
-	ClaimedAt      *time.Time `gorm:"index" json:"claimed_at"`
+	SenderAvatar   string `gorm:"type:varchar(500)" json:"sender_avatar"`
+	ReceiverID     string `gorm:"type:varchar(100)" json:"receiver_id"`
+	ReceiverName   string `gorm:"type:varchar(200)" json:"receiver_name"`
+	Content        string `gorm:"type:text" json:"content"`
+	MediaURL       string `gorm:"type:varchar(500)" json:"media_url"`
+	ConversationID string `gorm:"type:varchar(100);index;uniqueIndex:uni_message_hub_platform_msg_conv,priority:3" json:"conversation_id"`
+	IsGroup        bool   `gorm:"default:false" json:"is_group"`
+	GroupID        string `gorm:"type:varchar(100)" json:"group_id"`
+	// Visibility/AudienceJSON/VisibilityEvidence 是群聊上下文授权的输入证据。
+	// legacy 行默认 unknown；audience/evidence 为空时同样视为不可证明，读取方必须 fail-closed。
+	Visibility         string      `gorm:"type:varchar(32);not null;default:'unknown'" json:"visibility"`
+	AudienceJSON       JSONStrings `gorm:"type:jsonb" json:"audience_json,omitempty"`
+	VisibilityEvidence JSONMap     `gorm:"type:jsonb" json:"visibility_evidence,omitempty"`
+	IsAIReply          bool        `gorm:"default:false" json:"is_ai_reply"`
+	AIAgent            string      `gorm:"type:varchar(50)" json:"ai_agent"`
+	TraceID            string      `gorm:"type:varchar(64);index:idx_hub_trace" json:"trace_id"`
+	DedupHash          string      `gorm:"type:varchar(64);index:idx_mh_dedup_hash" json:"dedup_hash"`
+	ClaimedAt          *time.Time  `gorm:"index" json:"claimed_at"`
 	// PushAttempts/PushError（批20d-A3）只给出站行记账：服务端每把一行交给桥端一次计一次，
 	// 到 MaxOutboundPushAttempts 即落终态 failed，PushError 写明「为什么不再是 pending」。
 	// 计数留在行上而不是内存里：SW 回收/进程重启都要能接着算，否则预算每次重启都白送一轮。
@@ -79,6 +84,14 @@ type MessageHub struct {
 }
 
 func (MessageHub) TableName() string { return "message_hub" }
+
+// MessageHub 消息可见性：只有显式证据能证明 public/member/private，legacy 一律 unknown。
+const (
+	VisibilityPublic  = "public"
+	VisibilityMember  = "member"
+	VisibilityPrivate = "private"
+	VisibilityUnknown = "unknown"
+)
 
 // IntentRecord 销售意图识别记录
 type IntentRecord struct {

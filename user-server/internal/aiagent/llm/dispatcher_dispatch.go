@@ -45,6 +45,14 @@ type DispatchRequest struct {
 	// 自带 Key 路径不读这两个字段，所以对存量调用点零影响。
 	AgentID string `json:"agent_id,omitempty"`
 	UserID  string `json:"user_id,omitempty"`
+
+	// 会话与可重放上下文：执行场景隔离 native 状态，canonical key 只作续接/路由关联。
+	ExecutionScenarioID   string `json:"execution_scenario_id,omitempty"`
+	LLMSessionRef         string `json:"llm_session_ref,omitempty"`
+	RequestIdempotencyKey string `json:"request_idempotency_key,omitempty"`
+	PromptPrefixHash      string `json:"prompt_prefix_hash,omitempty"`
+	// StrictOutput 为结构化/证据类调用启用 finish_reason 与 JSON 完整性门禁。
+	StrictOutput bool `json:"strict_output,omitempty"`
 }
 
 type FanOutConfig struct {
@@ -75,9 +83,11 @@ type DispatchResult struct {
 }
 
 type TokenUsage struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
-	TotalTokens      int `json:"total_tokens"`
+	PromptTokens        int `json:"prompt_tokens"`
+	CompletionTokens    int `json:"completion_tokens"`
+	TotalTokens         int `json:"total_tokens"`
+	CachedInputTokens   int `json:"cached_input_tokens,omitempty"`
+	CacheCreationTokens int `json:"cache_creation_tokens,omitempty"`
 }
 
 func (d *Dispatcher) pickEnabledFallback(route *ScenarioRoute) string {
@@ -175,6 +185,12 @@ func (d *Dispatcher) callProvider(ctx context.Context, provider *ProviderConfig,
 		AgentID:      req.AgentID,
 		UserID:       req.UserID,
 	}
+	if err := applyDispatchCallContext(config, req); err != nil {
+		return nil, err
+	}
+	if err := applyProviderCapabilitiesToConfig(config, provider); err != nil {
+		return nil, err
+	}
 	if req.JSONMode {
 		config.ResponseFormat = "json_object"
 	}
@@ -219,6 +235,17 @@ func (d *Dispatcher) callProvider(ctx context.Context, provider *ProviderConfig,
 
 	result, err := d.llmService.GenerateWithTools(ctx, config, req.Prompt)
 	latency := int(time.Since(start).Milliseconds())
+	if err == nil && req.StrictOutput && result != nil {
+		validators := []OutputValidator{}
+		if req.JSONMode {
+			validators = append(validators, ValidateJSONOutput)
+		}
+		var checked GenerateResult
+		checked, err = CheckGenerateResult(*result, validators...)
+		if err == nil {
+			result = &checked
+		}
+	}
 
 	llmStatus := "ok"
 	llmErrMsg := ""
@@ -295,9 +322,11 @@ func (d *Dispatcher) callProvider(ctx context.Context, provider *ProviderConfig,
 	var usage TokenUsage
 	if result.Usage.TotalTokens > 0 {
 		usage = TokenUsage{
-			PromptTokens:     result.Usage.PromptTokens,
-			CompletionTokens: result.Usage.CompletionTokens,
-			TotalTokens:      result.Usage.TotalTokens,
+			PromptTokens:        result.Usage.PromptTokens,
+			CompletionTokens:    result.Usage.CompletionTokens,
+			TotalTokens:         result.Usage.TotalTokens,
+			CachedInputTokens:   result.Usage.CachedInputTokens,
+			CacheCreationTokens: result.Usage.CacheCreationTokens,
 		}
 	}
 	dispatchResult := &DispatchResult{

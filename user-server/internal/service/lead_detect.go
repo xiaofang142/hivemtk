@@ -6,6 +6,7 @@ import (
 	"runtime/debug"
 	"sync"
 
+	agentcontext "hivemtk-user/internal/aiagent/context"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
@@ -15,10 +16,13 @@ import (
 
 // DetectionMessage 参与检测的一条消息（来自 ConversationContext 的多轮 + 历史）。
 type DetectionMessage struct {
-	MessageID string `json:"message_id"`
-	Content   string `json:"content"`
-	Role      string `json:"role"`
-	SenderID  string `json:"sender_id"`
+	MessageID  string                  `json:"message_id"`
+	Content    string                  `json:"content"`
+	Role       string                  `json:"role"`
+	SenderID   string                  `json:"sender_id"`
+	SenderName string                  `json:"sender_name,omitempty"`
+	Visibility agentcontext.Visibility `json:"visibility,omitempty"`
+	SentAt     int64                   `json:"sent_at,omitempty"`
 }
 
 // DetectionHit 单路检测结果。三路各自独立，由 LeadDetectionService 并行收集。
@@ -36,6 +40,8 @@ type DetectionInput struct {
 	Rule        *model.LeadMiningRule
 	Messages    []DetectionMessage
 	JudgementID string
+	Scope       *agentcontext.ConversationScope
+	ContextView *agentcontext.AgentConversationContext
 }
 
 // LeadDetectionService 三路并行检测编排（FR-012）。

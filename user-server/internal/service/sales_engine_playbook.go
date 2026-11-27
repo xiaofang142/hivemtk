@@ -121,15 +121,7 @@ func (e *SalesEngine) generateCandidate(
 	// 导致 recallRAG 召回的知识库内容被丢弃（COH-01，见该函数注释与回归用例
 	// TestE2E_WebChat_VisitorAsk_AIReplyWithRAG）。
 	systemPrompt := e.plainDispatchSystemPrompt(ctx, req, targetLang, ragChunks)
-	result, err := e.dispatcher.Dispatch(ctx, llm.DispatchRequest{
-		Scenario:     scenario,
-		Prompt:       prompt,
-		SystemPrompt: systemPrompt,
-		MaxTokens:    req.Config.MaxTokens,
-		Temperature:  req.Config.Temperature,
-		CacheKey:     llm.CacheKeyWithSystem(scenario, systemPrompt, prompt),
-		CacheTTL:     3600,
-	})
+	result, err := e.dispatcher.Dispatch(ctx, salesGeneratePlainDispatchRequest(req, scenario, prompt, systemPrompt))
 	if err != nil {
 		return "", nil, nil, err
 	}

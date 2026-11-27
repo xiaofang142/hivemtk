@@ -39,11 +39,15 @@ type StageCheckpointStore interface {
 
 // checkpointState 一行 checkpoint 的载荷。
 type checkpointState struct {
-	Version     int                `json:"v"`
-	Fingerprint string             `json:"fingerprint"`
-	Done        bool               `json:"done,omitempty"`
-	Snapshot    *checkpointContext `json:"snapshot,omitempty"`
-	LastAttempt *InferenceDecision `json:"last_attempt,omitempty"`
+	Version              int                `json:"v"`
+	Fingerprint          string             `json:"fingerprint"`
+	ContextSchemaVersion string             `json:"context_schema_version,omitempty"`
+	SnapshotID           string             `json:"snapshot_id,omitempty"`
+	MessageWatermark     string             `json:"message_watermark,omitempty"`
+	SessionRef           string             `json:"session_ref,omitempty"`
+	Done                 bool               `json:"done,omitempty"`
+	Snapshot             *checkpointContext `json:"snapshot,omitempty"`
+	LastAttempt          *InferenceDecision `json:"last_attempt,omitempty"`
 }
 
 // checkpointContext 阶段累计产出的可序列化子集。
@@ -81,6 +85,7 @@ type cycleCheckpoint struct {
 	store        StageCheckpointStore
 	thread       string
 	fingerprint  string
+	identity     CheckpointContextIdentity
 	skip         map[string]bool
 	last         string          // 最后一个已落点的阶段名
 	lastSnapshot json.RawMessage // 冻结的成功产出，失败尝试不得写回恢复快照。
@@ -100,6 +105,7 @@ func newCycleCheckpoint(ctx context.Context, store StageCheckpointStore, payload
 		store:       store,
 		thread:      thread,
 		fingerprint: strings.TrimPrefix(thread, "thr_v3_"),
+		identity:    checkpointContextIdentity(payload),
 		skip:        map[string]bool{},
 	}
 	resumeStage, blob, err := store.LoadResume(ctx, cc.thread)
@@ -123,6 +129,12 @@ func newCycleCheckpoint(ctx context.Context, store StageCheckpointStore, payload
 	if st.Version != checkpointStateVersion || st.Fingerprint != cc.fingerprint {
 		logger.Ctx(ctx).Info().Str("thread", cc.thread).
 			Msg("[checkpoint] 快照版本/载荷指纹不匹配，本次整体重跑")
+		return cc
+	}
+	if err := ValidateCheckpointContext(st, cc.identity); err != nil {
+		logger.Ctx(ctx).Info().Str("thread", cc.thread).Err(err).
+			Msg("[checkpoint] 上下文快照/schema/水位陈旧，本次整体重跑")
+		checkpointDegraded(ic, "checkpoint_stale_context")
 		return cc
 	}
 	if st.Done {
@@ -184,10 +196,14 @@ func (cc *cycleCheckpoint) finish(ctx context.Context, ic *InferenceContext) {
 
 func (cc *cycleCheckpoint) save(ctx context.Context, stage string, ic *InferenceContext, done bool) bool {
 	blob, err := json.Marshal(checkpointState{
-		Version:     checkpointStateVersion,
-		Fingerprint: cc.fingerprint,
-		Done:        done,
-		Snapshot:    snapshotOf(ic),
+		Version:              checkpointStateVersion,
+		Fingerprint:          cc.fingerprint,
+		ContextSchemaVersion: cc.identity.ContextSchemaVersion,
+		SnapshotID:           cc.identity.SnapshotID,
+		MessageWatermark:     cc.identity.MessageWatermark,
+		SessionRef:           cc.identity.SessionRef,
+		Done:                 done,
+		Snapshot:             snapshotOf(ic),
 	})
 	if err != nil {
 		logger.Ctx(ctx).Warn().Err(err).Str("stage", stage).
@@ -215,7 +231,16 @@ func (cc *cycleCheckpoint) failed(ctx context.Context, ic *InferenceContext) {
 		checkpointDegraded(ic, "checkpoint_save_failed")
 		return
 	}
-	blob, err := json.Marshal(checkpointState{Version: checkpointStateVersion, Fingerprint: cc.fingerprint, Snapshot: &snap, LastAttempt: &ic.Decision})
+	blob, err := json.Marshal(checkpointState{
+		Version:              checkpointStateVersion,
+		Fingerprint:          cc.fingerprint,
+		ContextSchemaVersion: cc.identity.ContextSchemaVersion,
+		SnapshotID:           cc.identity.SnapshotID,
+		MessageWatermark:     cc.identity.MessageWatermark,
+		SessionRef:           cc.identity.SessionRef,
+		Snapshot:             &snap,
+		LastAttempt:          &ic.Decision,
+	})
 	if err != nil {
 		checkpointDegraded(ic, "checkpoint_save_failed")
 		return

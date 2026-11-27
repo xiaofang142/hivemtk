@@ -13,7 +13,7 @@ func TestSessionIDForInboundMapping(t *testing.T) {
 		{"conversation", &IngestMessage{Channel: "douyin", AccountID: "a1", ConversationID: "c1", SenderID: "u1"}, "douyin:a1:c1"},
 		{"group fallback", &IngestMessage{Channel: "wecom", AccountID: "a2", GroupID: "g1", SenderID: "u2", IsGroup: true}, "wecom:a2:g1"},
 		{"sender fallback", &IngestMessage{Channel: "xhs", AccountID: "a3", SenderID: "u3"}, "xhs:a3:u3"},
-		{"name fallback", &IngestMessage{Channel: "xhs", AccountID: "a3", SenderName: "小李"}, "xhs:a3:小李"},
+		{"name fallback rejected", &IngestMessage{Channel: "xhs", AccountID: "a3", SenderName: "小李"}, ""},
 		{"nil", nil, ""},
 	}
 	for _, tc := range cases {

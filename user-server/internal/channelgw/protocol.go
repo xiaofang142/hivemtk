@@ -72,28 +72,29 @@ type HistoryItem struct {
 //   - ContentHash 前端按与服务端 ContentHashMsgID 同源算法生成（mh: 前缀 FNV-1a），
 //     用作回环去重钩子2 的兜底依据
 type IngestMessage struct {
-	EventID        string         `json:"event_id,omitempty"`
-	Channel        string         `json:"channel,omitempty"`
-	AccountID      string         `json:"account_id,omitempty"`
-	AgentID        uint           `json:"agent_id,omitempty"`
-	AccountName    string         `json:"account_name,omitempty"`
-	ConversationID string         `json:"conversation_id"`
-	SenderID       string         `json:"sender_id"`
-	SenderName     string         `json:"sender_name,omitempty"`
-	SenderAvatar   string         `json:"sender_avatar,omitempty"`
-	ReceiverID     string         `json:"receiver_id,omitempty"`
-	SenderType     string         `json:"sender_type,omitempty"`
-	MsgType        string         `json:"msg_type"`
-	Content        string         `json:"content"`
-	MediaURL       string         `json:"media_url,omitempty"`
-	Timestamp      int64          `json:"timestamp"`
-	Direction      string         `json:"direction,omitempty"`
-	IsGroup        bool           `json:"is_group,omitempty"`
-	GroupID        string         `json:"group_id,omitempty"`
-	GroupName      string         `json:"group_name,omitempty"`
-	History        []*HistoryItem `json:"history,omitempty"`
-	Extra          map[string]any `json:"extra,omitempty"`
-	ContentHash    string         `json:"content_hash,omitempty"`
+	EventID         string         `json:"event_id,omitempty"`
+	Channel         string         `json:"channel,omitempty"`
+	AccountID       string         `json:"account_id,omitempty"`
+	AgentID         uint           `json:"agent_id,omitempty"`
+	AccountName     string         `json:"account_name,omitempty"`
+	ConversationID  string         `json:"conversation_id"`
+	BusLLMSessionID string         `json:"llm_session_id,omitempty"`
+	SenderID        string         `json:"sender_id"`
+	SenderName      string         `json:"sender_name,omitempty"`
+	SenderAvatar    string         `json:"sender_avatar,omitempty"`
+	ReceiverID      string         `json:"receiver_id,omitempty"`
+	SenderType      string         `json:"sender_type,omitempty"`
+	MsgType         string         `json:"msg_type"`
+	Content         string         `json:"content"`
+	MediaURL        string         `json:"media_url,omitempty"`
+	Timestamp       int64          `json:"timestamp"`
+	Direction       string         `json:"direction,omitempty"`
+	IsGroup         bool           `json:"is_group,omitempty"`
+	GroupID         string         `json:"group_id,omitempty"`
+	GroupName       string         `json:"group_name,omitempty"`
+	History         []*HistoryItem `json:"history,omitempty"`
+	Extra           map[string]any `json:"extra,omitempty"`
+	ContentHash     string         `json:"content_hash,omitempty"`
 }
 
 // IngestCtxKeys 电商上下文键约定（借鉴 ChatGPT-On-CS CTX_* 模型，2026-11 穷尽调研）。
@@ -150,15 +151,16 @@ var IngestExtraAllowKeys = map[string]struct{}{
 // 与 ToEvent/HistoryToEvent 的写入键位逐一对应（account_id/bridge/sender_type/transport/
 // content_hash/is_group/group_id/group_name，另 ToEventFull 追加 history）。
 var ingestExtraServerKeys = map[string]struct{}{
-	"account_id":   {},
-	"bridge":       {},
-	"sender_type":  {},
-	"transport":    {},
-	"content_hash": {},
-	"is_group":     {},
-	"group_id":     {},
-	"group_name":   {},
-	"history":      {},
+	"account_id":     {},
+	"bridge":         {},
+	"sender_type":    {},
+	"transport":      {},
+	"content_hash":   {},
+	"is_group":       {},
+	"group_id":       {},
+	"group_name":     {},
+	"history":        {},
+	"llm_session_id": {},
 }
 
 // IngestExtraDroppedKeys 因未通过白名单（或试图覆盖固定键）而被丢弃的线路侧 Extra 键
@@ -347,16 +349,18 @@ func (f *Frame) ProtocolVersion() int {
 
 // bridgeSessionKey 组装桥接会话键 channel:account_id:conversation_id。
 //
-// conversation_id 缺失时按发送者分桶：留空会把同一账号下所有买家的对话并成一个会话，
-// 于是 AI 上下文、人工接管锁、去重记录全部跨买家共享（张三问完价，李四接着被当成回复张三）。
-// 群聊帧取 group_id，避免把同一个群里的不同发言人拆成多个会话。
-func bridgeSessionKey(channel, accountID, conversationID, groupID, senderID, senderName string, isGroup bool) string {
-	conv := conversationID
-	if conv == "" {
+// 群聊始终以 group_id 为根，conversation/thread 只是群内子维度，不能拆散群上下文。
+// 私聊优先 conversation_id，缺失时只允许稳定 sender_id 分桶；sender_name 可重复/可改，
+// 绝不能作为身份。缺稳定身份时返回空键，由上层 fail-closed，避免跨用户共享上下文与锁。
+func bridgeSessionKey(channel, accountID, conversationID, groupID, senderID, _ string, isGroup bool) string {
+	var conv string
+	if isGroup {
 		conv = groupID
+	} else {
+		conv = firstNonEmpty(conversationID, senderID)
 	}
-	if conv == "" && !isGroup {
-		conv = firstNonEmpty(senderID, senderName)
+	if conv == "" {
+		return ""
 	}
 	return channel + ":" + accountID + ":" + conv
 }
@@ -365,8 +369,9 @@ func bridgeSessionKey(channel, accountID, conversationID, groupID, senderID, sen
 //
 // 映射约定（跨渠道唯一）：
 //
-//	session_id = channel : account_id : (conversation_id || group_id || sender_id)
-//	群聊优先 group_id，1v1 缺失 conversation_id 时回退 sender_id/sender_name。
+//	session_id = channel : account_id : (group_id || conversation_id || sender_id)
+//	群聊只以 group_id 为根；1v1 优先 conversation_id，缺失时只回退稳定 sender_id。
+//	缺少稳定身份时返回空串，由上层拒绝或转人工，不能退回 sender_name。
 //
 // 这与 AI 侧的 ScopedCheckpointThreadID（aiagent/agent/runtime，thr_v3_<sha256>）
 // 是**两个不同用途的键**：前者是渠道会话身份（可回读、可缓存、7 天 TTL），
@@ -396,21 +401,22 @@ func (m *IngestMessage) ToEvent(transport string) *model.MessageEvent {
 		ts = time.Now()
 	}
 	ev := &model.MessageEvent{
-		EventID:        m.EventID,
-		SessionID:      bridgeSessionKey(m.Channel, m.AccountID, m.ConversationID, m.GroupID, m.SenderID, m.SenderName, m.IsGroup),
-		Channel:        m.Channel,
-		SenderID:       m.SenderID,
-		SenderName:     m.SenderName,
-		SenderAvatar:   model.TruncateMediaURL(m.SenderAvatar),
-		SenderType:     m.SenderType,
-		ReceiverID:     m.ReceiverID,
-		MsgType:        m.MsgType,
-		Content:        m.Content,
-		MediaURL:       model.TruncateMediaURL(m.MediaURL),
-		ConversationID: m.ConversationID,
-		IsGroup:        m.IsGroup,
-		GroupID:        m.GroupID,
-		Timestamp:      ts,
+		EventID:         m.EventID,
+		SessionID:       bridgeSessionKey(m.Channel, m.AccountID, m.ConversationID, m.GroupID, m.SenderID, m.SenderName, m.IsGroup),
+		BusLLMSessionID: m.BusLLMSessionID,
+		Channel:         m.Channel,
+		SenderID:        m.SenderID,
+		SenderName:      m.SenderName,
+		SenderAvatar:    model.TruncateMediaURL(m.SenderAvatar),
+		SenderType:      m.SenderType,
+		ReceiverID:      m.ReceiverID,
+		MsgType:         m.MsgType,
+		Content:         m.Content,
+		MediaURL:        model.TruncateMediaURL(m.MediaURL),
+		ConversationID:  m.ConversationID,
+		IsGroup:         m.IsGroup,
+		GroupID:         m.GroupID,
+		Timestamp:       ts,
 		Extra: map[string]any{
 			"account_id":  m.AccountID,
 			"bridge":      true,
@@ -422,6 +428,9 @@ func (m *IngestMessage) ToEvent(transport string) *model.MessageEvent {
 	}
 	if m.ContentHash != "" {
 		ev.Extra["content_hash"] = m.ContentHash
+	}
+	if m.BusLLMSessionID != "" {
+		ev.Extra["llm_session_id"] = m.BusLLMSessionID
 	}
 	if m.IsGroup {
 		ev.Extra["is_group"] = true
@@ -481,20 +490,21 @@ func HistoryToEvent(parent *IngestMessage, it *HistoryItem) *model.MessageEvent 
 		ts = time.Now()
 	}
 	ev := &model.MessageEvent{
-		EventID:        it.EventID,
-		SessionID:      bridgeSessionKey(parent.Channel, parent.AccountID, parent.ConversationID, parent.GroupID, parent.SenderID, parent.SenderName, parent.IsGroup),
-		Channel:        parent.Channel,
-		SenderID:       it.SenderID,
-		SenderName:     it.SenderName,
-		SenderAvatar:   model.TruncateMediaURL(it.SenderAvatar),
-		ReceiverID:     firstNonEmpty(it.ReceiverID, parent.ReceiverID),
-		MsgType:        it.MsgType,
-		Content:        it.Content,
-		MediaURL:       model.TruncateMediaURL(it.MediaURL),
-		ConversationID: parent.ConversationID,
-		IsGroup:        it.IsGroup || parent.IsGroup,
-		GroupID:        firstNonEmpty(it.GroupID, parent.GroupID),
-		Timestamp:      ts,
+		EventID:         it.EventID,
+		SessionID:       bridgeSessionKey(parent.Channel, parent.AccountID, parent.ConversationID, parent.GroupID, parent.SenderID, parent.SenderName, parent.IsGroup),
+		BusLLMSessionID: parent.BusLLMSessionID,
+		Channel:         parent.Channel,
+		SenderID:        it.SenderID,
+		SenderName:      it.SenderName,
+		SenderAvatar:    model.TruncateMediaURL(it.SenderAvatar),
+		ReceiverID:      firstNonEmpty(it.ReceiverID, parent.ReceiverID),
+		MsgType:         it.MsgType,
+		Content:         it.Content,
+		MediaURL:        model.TruncateMediaURL(it.MediaURL),
+		ConversationID:  parent.ConversationID,
+		IsGroup:         it.IsGroup || parent.IsGroup,
+		GroupID:         firstNonEmpty(it.GroupID, parent.GroupID),
+		Timestamp:       ts,
 		Extra: map[string]any{
 			"account_id":  parent.AccountID,
 			"bridge":      true,
@@ -503,6 +513,9 @@ func HistoryToEvent(parent *IngestMessage, it *HistoryItem) *model.MessageEvent 
 	}
 	if ev.ReceiverID == "" && it.Direction == "outbound" {
 		ev.ReceiverID = parent.ConversationID
+	}
+	if parent.BusLLMSessionID != "" {
+		ev.Extra["llm_session_id"] = parent.BusLLMSessionID
 	}
 	if ev.IsGroup {
 		ev.Extra["is_group"] = true

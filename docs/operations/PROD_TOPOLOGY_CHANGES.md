@@ -4,6 +4,15 @@
 > 否则换机 / 重建部署时会静默丢失（2026-11-04 二次审核发现：`deploy/` 目录
 > 不入库，上传卷与 nginx 分流改完只存在于当前机器）。
 
+## 2026-11-27 · 智能体会话、长上下文与缓存（待实施/验证）
+
+- 会话与长上下文默认由 user-server 直连已配置 provider；`Source=platform` 且无本地 Key 时仍强制走显式代理。
+- 默认 `store=false`/无状态重放；native session 仅对显式白名单的 provider/model/protocol/region 开启，并受 TTL、删除与租户开关约束。
+- 消息总线 `LLMSessionID` 作为 canonical continuation key；不同 `ExecutionScenarioID` 使用独立状态行，原 `DispatchScenario` 仅负责路由/计费。
+- 供应商 prompt cache 与最终答案缓存严格分离；cached tokens 单独计量。平台代理缓存折扣默认不透传，在计价契约完成前不宣称代理路径缓存成本收益。
+- 平台代理不持久化响应正文或用户会话数据；无法由 provider 原生幂等保证的重试返回 `outcome_unknown`，由 user-server 加密 ledger 对账。
+- `AGENT_CONTEXT_STOP_LEGACY_HISTORY=false`（默认）：保留 `conversation_contexts.messages` 双写兼容旧消费者；MessageHub/UnifiedMessageReader 全量接管并验证后再置 `true` 停写原始历史。
+
 ## 2026-11-26 · T05 线索通知配置员工语义收口正式发布
 
 - **范围/裁决**：线索通知配置属于系统配置——命中线索后通过 `notify_user_ids` 通知本系统员工（系统用户 id）；`channel_account_id`/`channel` 仅为三级路由作用域键，`target` 为 TG/飞书机器人或群聊投递目标（accountID:chatID）。配置内无智能体字段，用户所称「智能体」为误称；客服智能体（`channel_accounts.auto_reply_agent_id`）/线索智能体（`lead_mining_agent_id` + `/api/manage/lead-mining-agents` 注册表）在另一套表/API/页面维护，与本配置无关，禁止绑定化。不拆字段、不迁移、不新增 `agent_id`；菜单归属、key/path（T02/T04 验收态）全部保留，唯一可写页仍 `/leads/notify-routes`。

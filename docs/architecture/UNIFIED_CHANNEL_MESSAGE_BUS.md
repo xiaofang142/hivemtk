@@ -379,6 +379,19 @@ cd ../user-web/bridge && npx vitest run
 
 ---
 
+## 9.5 智能体上下文扩展（2026-11-27）
+
+消息总线在归一入站之上新增**LLM 续接关联字段**，不改变既有线路协议：
+
+- `channelgw.IngestMessage.BusLLMSessionID` / `model.MessageEvent.BusLLMSessionID`：来自消息总线的 opaque `llm_session_id`，服务端校验后直接作为 canonical continuation key；缺失时由 user-server 按 scope 确定性派生一次并回传。该字段只用于 LLM 执行链续接，**不替代业务 `SessionID`**，也不写入线路 Extra 的用户可控键。
+- `bridgeSessionKey` 群聊以 `GroupID` 为根（conversation/thread 仅作子维度），单聊优先稳定 `ConversationID`，缺失时只回退稳定 `SenderID`；缺稳定身份时返回空键 fail-closed，**禁止用昵称派生身份**。
+- 入站权威元数据经 `TriggerInboundMeta` → `IncomingContext` → `SalesRequest` 贯通：`ConversationID`、`MessageID`、`Direction`、`OriginalSentAt`、`PlatformMsgID`、`CorrelationID`、`BusLLMSessionID`；`SentAt` 不再被 `time.Now()` 覆盖，原始时间戳优先。
+- `ContextView`（`AgentConversationContext`）由 `UnifiedMessageReader` 以 MessageHub 为权威、SessionMessage 补未落 hub 的出站装配；历史带真实 `hub:<id>`、`CorrelationID`、可见性与 Audience，群聊按成员入退群区间过滤，无法证明可见性时 fail-closed。
+- 同一 canonical key 下按 `ExecutionScenarioID` + provider/model/protocol/region 隔离 native continuation；路由/计费 `DispatchScenario` 不作 session 隔离维度。
+- session 会话记忆、prompt 前缀缓存、最终答案缓存严格分层；总线 key 只保证连续性与路由，不保证缓存命中，命中须看真实 cached tokens 与前缀版本。
+
+---
+
 ## 10. 文档索引与维护约定
 
 - 本文是统一渠道消息总线的**权威核验/整改文档**，路径 `docs/architecture/UNIFIED_CHANNEL_MESSAGE_BUS.md`，已登记在 `docs/INDEX.md`。

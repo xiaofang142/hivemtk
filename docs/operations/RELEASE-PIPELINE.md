@@ -337,3 +337,17 @@ rsync -a --delete embed-sdk/dist/ mtk-prod:/www/wwwroot/hivemtk/user-server/embe
 
 **换机注意**：两目录是宿主 nginx 直伺服（非容器卷），迁移=整目录 rsync；
 备份快照（.snapshot-*.tgz）按日期堆积，定期清理保留最近 5 份。
+
+---
+
+## 智能体会话/缓存灰度运行手册（2026-11-27）
+
+适用：消息总线 `llm_session_id`、长输入上下文、native session 白名单、平台代理 v2 契约。
+
+1. **数据路径默认**：会话/长上下文默认 `user-server` 直连（配置 `capabilities.route_mode=direct` 且 `Source=self`）；只有 `Source=platform`（商户无本地 Key）或部署显式开启代理时才走平台。`Source=platform` 不能被默认直连覆盖，否则无本地 Key 的租户全部失败。
+2. **供应商持久化默认**：`store=false`/无状态重放；native session 仅对白名单 `provider+model+protocol+region` 开启，并配置 TTL、删除策略与租户开关；白名单变化递增 generation 使旧 native response chain 失效。
+3. **执行链隔离**：同一总线 `llmsess_*` key 下按 `ExecutionScenarioID` + provider/model/protocol/region 独立状态行；`DispatchScenario`（如 low_cost）只做路由/计费，不能当 session 隔离维度。
+4. **群聊硬门**：真实群回复前必须有 audience 已验证的 `ContextView`，输出经隐私守卫；无证明的输入 fail-closed，不发送。输出守卫不能替代输入过滤。
+5. **缓存观测**：session reuse ≠ cache hit ≠ answer reuse。灰度必须同时看 canonical prefix hash/version、真实 `cached tokens`、冷热 TTFT p50/p95；fake provider 只验字段形状，不得宣称缓存收益。平台代理 `X-Llm-Cached-Tokens` 只计量，缓存折扣默认不透传。
+6. **验证脚本**：`scripts/verify-llm-real-provider.sh` 为 opt-in 真实供应商验证；缺 `REAL_LLM_*` 凭据时输出 `not-run` 并退出 0，**不得计为通过**。真实 DB 测试缺 `POSTGRES_TEST_PASSWORD` 同理。
+7. **回滚**：关闭 native session 白名单即回退无状态重放；关闭长上下文灰度即回退摘要/小窗口；平台代理 v2 头缺失时自动兼容 v1，但新会话语义不可用。

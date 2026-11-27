@@ -7,7 +7,6 @@ import (
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/repository"
-
 )
 
 // channelMasterDeleteCall 记录级联删除收到的租户/渠道实参，防止「删错渠道」回归。

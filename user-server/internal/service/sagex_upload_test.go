@@ -305,10 +305,10 @@ func TestSageXUpload_NonTextNotificationsRejected(t *testing.T) {
 				SchemaVersion: SageXSchemaVersion, BatchID: "b1", InstallationID: "i1",
 				Events: []SageXEventItem{{
 					EventID: "e1", EventType: "notification.posted", CapturedAt: "2026-11-23T10:00:00Z",
-					Source: SageXSource{Platform: "android", Package: "com.tencent.mobileqq"},
-					ParseStatus: tc.parseStatus,
+					Source:       SageXSource{Platform: "android", Package: "com.tencent.mobileqq"},
+					ParseStatus:  tc.parseStatus,
 					Conversation: SageXConversation{Type: "group", Title: "项目群"},
-					Message: SageXMessage{Sender: "张三", Text: tc.text},
+					Message:      SageXMessage{Sender: "张三", Text: tc.text},
 				}},
 			}, 10)
 			if err != nil {

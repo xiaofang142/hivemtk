@@ -2,9 +2,8 @@ package service
 
 import (
 	"context"
-
 	"encoding/json"
-
+	"errors"
 	"fmt"
 
 	"net/url"
@@ -244,28 +243,88 @@ func (s *WebhookService) enqueueDelayedOutbound(ctx context.Context, channel Web
 		logger.Ctx(ctx).Warn().Str("channel", string(channel)).Msg("[H-3] db 未初始化，quiet hours 延迟入队失败，按原路径直接发送")
 		return false
 	}
-	rec := &DelayedOutboundReply{
-		Platform:       string(channel),
-		AccountID:      accountID,
-		SenderID:       p.Sender,
-		Content:        content,
-		Cards:          delayedCardsPayload(cards),
-		ConversationID: convIDOrEmpty(hubMsg),
-		SendAt:         nextQuietHoursRelease(time.Now(), aiReplyQuietHoursEnd(ctx), cstZone),
-		Status:         model.DelayedStatusPending,
-		Kind:           model.DelayedKindQuietHours,
-	}
+	rec := newDelayedOutboundRecord(ctx, channel, accountID, p, content, hubMsg, cards, model.DelayedKindQuietHours)
+	rec.SendAt = nextQuietHoursRelease(time.Now(), aiReplyQuietHoursEnd(ctx), cstZone)
 	if err := s.delayedRepo.CreatePending(ctx, rec); err != nil {
 		logger.Ctx(ctx).Error().Err(err).Str("channel", string(channel)).Msg("[H-3] 延迟入队失败，按原路径直接发送")
 		return false
 	}
 	logger.Ctx(ctx).Info().
 		Str("channel", string(channel)).
+		Str("correlation_id", rec.CorrelationID).
 		Str("conv_id", rec.ConversationID).
 		Time("send_at", rec.SendAt).
 		Msg("[H-3] AI 回复命中 quiet hours(23:00-7:00)，进入延迟队列次日首发")
 	s.startDelayedOutboundDispatch()
 	return true
+}
+
+// newDelayedOutboundRecord 从 canonical 行派生延迟/重试记录，保留同一逻辑身份、
+// origin、群聊 scope、visibility 与原 Extra；legacy 入站夹具也能安全补齐。
+func newDelayedOutboundRecord(ctx context.Context, channel WebhookChannel, accountID string, p *ParsedPayload, content string, hubMsg *model.MessageHub, cards []model.RichCard, kind string) *DelayedOutboundReply {
+	correlationID := OutboundCorrelationFromContext(ctx)
+	origin := OutboundOriginFromContext(ctx)
+	senderID := ""
+	conversationID := ""
+	sessionID := outboundSessionIDFromContext(ctx)
+	extra := model.JSONMap{}
+	isGroup := false
+	groupID := ""
+	visibility := model.VisibilityUnknown
+	audience := model.JSONStrings{}
+	visibilityEvidence := model.JSONMap{}
+	if hubMsg != nil {
+		conversationID = hubMsg.ConversationID
+		senderID = hubMsg.SenderID
+		if hubMsg.Direction == "outbound" {
+			senderID = hubMsg.ReceiverID
+		}
+		isGroup, groupID = hubMsg.IsGroup, hubMsg.GroupID
+		if hubMsg.Visibility != "" {
+			visibility = hubMsg.Visibility
+		}
+		audience = append(audience, hubMsg.AudienceJSON...)
+		visibilityEvidence = cloneJSONMap(hubMsg.VisibilityEvidence)
+		extra = cloneJSONMap(hubMsg.Extra)
+		if correlationID == "" {
+			correlationID = hubCorrelationID(extra)
+		}
+		if value, ok := extra["origin"].(string); ok && OutboundCorrelationFromContext(ctx) != "" {
+			origin = OutboundOrigin(value)
+		}
+		if sessionID == "" {
+			sessionID, _ = extra["session_id"].(string)
+		}
+	}
+	if senderID == "" && p != nil {
+		senderID = p.Sender
+	}
+	if correlationID == "" {
+		correlationID = newOutboundCorrelation(channel, accountID, conversationID, payloadEventID(p))
+	}
+	if origin != OutboundOriginHuman {
+		origin = OutboundOriginAI
+	}
+	return &DelayedOutboundReply{
+		TenantID:           outboundTenantID(ctx, hubMsg),
+		Platform:           string(channel),
+		AccountID:          accountID,
+		SenderID:           senderID,
+		Content:            content,
+		Cards:              delayedCardsPayload(cards),
+		ConversationID:     conversationID,
+		CorrelationID:      correlationID,
+		Origin:             string(origin),
+		SessionID:          sessionID,
+		IsGroup:            isGroup,
+		GroupID:            groupID,
+		Visibility:         visibility,
+		AudienceJSON:       audience,
+		VisibilityEvidence: visibilityEvidence,
+		HubExtra:           extra,
+		Status:             model.DelayedStatusPending,
+		Kind:               kind,
+	}
 }
 
 // delayedCardsPayload 富卡片随延迟记录一起落库，重放时原样下发。
@@ -334,18 +393,9 @@ func (s *WebhookService) enqueueSendRetry(ctx context.Context, channel WebhookCh
 		return
 	}
 	now := time.Now()
-	rec := &DelayedOutboundReply{
-		Platform:       string(channel),
-		AccountID:      accountID,
-		SenderID:       p.Sender,
-		Content:        content,
-		Cards:          delayedCardsPayload(cards),
-		ConversationID: convIDOrEmpty(hubMsg),
-		SendAt:         nextSendRetryAt(now, 0, ce),
-		Status:         model.DelayedStatusPending,
-		Kind:           model.DelayedKindSendRetry,
-		LastError:      ce.Raw,
-	}
+	rec := newDelayedOutboundRecord(ctx, channel, accountID, p, content, hubMsg, cards, model.DelayedKindSendRetry)
+	rec.SendAt = nextSendRetryAt(now, 0, ce)
+	rec.LastError = ce.Raw
 	if err := s.delayedRepo.CreatePending(ctx, rec); err != nil {
 		logger.Ctx(ctx).Error().Err(err).Str("channel", string(channel)).
 			Msg("[H-3] 投递失败重试入队失败，本条回复仅保留失败轨迹")
@@ -353,6 +403,7 @@ func (s *WebhookService) enqueueSendRetry(ctx context.Context, channel WebhookCh
 	}
 	logger.Ctx(ctx).Warn().
 		Str("channel", string(channel)).
+		Str("correlation_id", rec.CorrelationID).
 		Str("conv_id", rec.ConversationID).
 		Uint("id", rec.ID).
 		Time("send_at", rec.SendAt).
@@ -550,10 +601,32 @@ func (s *WebhookService) replayDelayedOutbound(ctx context.Context, rec *Delayed
 		return
 	}
 
+	correlationID := rec.CorrelationID
+	if correlationID == "" {
+		correlationID = newOutboundCorrelation(channel, rec.AccountID, rec.ConversationID, fmt.Sprintf("delayed-%d", rec.ID))
+	}
+	ctx = OutboundCorrelationToContext(ctx, correlationID)
+	origin := OutboundOriginAI
+	if rec.Origin == string(OutboundOriginHuman) {
+		origin = OutboundOriginHuman
+	}
+	ctx = OutboundOriginToContext(ctx, origin)
+	ctx = OutboundSessionIDToContext(ctx, rec.SessionID)
 	hubMsg := &model.MessageHub{
-		ConversationID: rec.ConversationID,
-		SenderID:       rec.SenderID,
-		SentAt:         rec.CreatedAt,
+		TenantID:           rec.TenantID,
+		Platform:           rec.Platform,
+		AccountID:          rec.AccountID,
+		ConversationID:     rec.ConversationID,
+		SenderID:           rec.SenderID,
+		Direction:          "inbound",
+		MsgType:            "text",
+		IsGroup:            rec.IsGroup,
+		GroupID:            rec.GroupID,
+		Visibility:         rec.Visibility,
+		AudienceJSON:       append(model.JSONStrings{}, rec.AudienceJSON...),
+		VisibilityEvidence: cloneJSONMap(rec.VisibilityEvidence),
+		Extra:              cloneJSONMap(rec.HubExtra),
+		SentAt:             rec.CreatedAt,
 	}
 	p := &ParsedPayload{EventID: fmt.Sprintf("delayed-%d", rec.ID), Sender: rec.SenderID}
 
@@ -627,8 +700,34 @@ func (s *WebhookService) abandonReplay(ctx context.Context, rec *DelayedOutbound
 // 重放 worker 只能记一句"无渠道错误"，失败轨迹与类别就此丢失。
 // 调用方据 sendErr 决定是否进入持久化重试通道（只重试 Retryable 的那批）。
 func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChannel, accountID string, p *ParsedPayload, content string, hubMsg *model.MessageHub, cards []model.RichCard) (sent bool, sendErr error) {
-	tenantID, _ := tenant.FromContext(ctx)
+	ctxTenantID, _ := tenant.FromContext(ctx)
+	if hubMsg == nil && p != nil {
+		conversationID := strings.TrimSpace(p.ChatID)
+		if conversationID == "" {
+			conversationID = strings.TrimSpace(p.Sender)
+		}
+		if conversationID != "" {
+			hubMsg = &model.MessageHub{
+				TenantID:       ctxTenantID,
+				Platform:       string(channel),
+				AccountID:      accountID,
+				MsgID:          p.EventID,
+				Direction:      "inbound",
+				MsgType:        "text",
+				SenderID:       p.Sender,
+				Content:        p.Content,
+				ConversationID: conversationID,
+				SentAt:         time.Now(),
+			}
+		}
+	}
+	tenantID := ctxTenantID
 	if hubMsg != nil && hubMsg.TenantID != 0 {
+		if ctxTenantID != 0 && hubMsg.TenantID != ctxTenantID {
+			sendErr = preSendFailure(channel, CategoryBadRequest, "出站租户与入站消息租户不一致")
+			recordOutboundSendFailed(channel, sendErr)
+			return false, sendErr
+		}
 		tenantID = hubMsg.TenantID
 	}
 	resolvedAccountID, resolveErr := resolveOutboundAccount(ctx, tenantID, channel, accountID)
@@ -638,77 +737,26 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 		return false, sendErr
 	}
 	accountID = resolvedAccountID
+	correlationID := OutboundCorrelationFromContext(ctx)
+	if correlationID == "" {
+		correlationID = newOutboundCorrelation(channel, accountID, convIDOrEmpty(hubMsg), payloadEventID(p))
+	}
+	ctx = OutboundCorrelationToContext(ctx, correlationID)
+	if result := HandleResultFromContext(ctx); result != nil && result.SessionID != "" {
+		ctx = OutboundSessionIDToContext(ctx, result.SessionID)
+	}
 	if err := authorizeOutboundSubmission(ctx, channel, accountID, hubMsg); err != nil {
 		recordOutboundSendFailed(channel, err)
 		return false, err
 	}
 
-	if !isDelayedReplay(ctx) && loadAIReplyQuietHoursFn()(time.Now()) {
-		if s.enqueueDelayedOutbound(ctx, channel, accountID, p, content, hubMsg, cards) {
-			return false, nil
-		}
-	}
-
-	if !agent_runtime.ClaimReply(p.EventID) {
-		logger.Ctx(ctx).Info().Str("event_id", p.EventID).Msg("skip duplicate outbound (event already replied)")
-
-		return false, nil
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, utils.MediumTimeout)
-	defer func() {
-		if !sent {
-			agent_runtime.ReleaseReply(p.EventID)
-		}
-		cancel()
-	}()
-
-	// markSendFailed 统一失败口径：先记录真实错误供收尾判断是否入重试队列，
-	// 再走原有 outboundSendFailed（写终态失败轨迹 / 发布授权告警）。
-	markSendFailed := func(err error) {
-		sendErr = err
-		recordOutboundSendFailed(channel, err) // specs/024 T1205：失败打点旁路，不改口径
-		s.outboundSendFailed(ctx, channel, accountID, hubMsg, content, err)
-	}
-
-	// markSendFailedLogged 用于"这一支没有可归属的轨迹行"（渠道不在出站分支表里 ⇒
-	// 平台词表必然校验不过）：只把事实说清楚并留结构化日志，不尝试写库。
-	markSendFailedLogged := func(err error) {
-		sendErr = err
-		recordOutboundSendFailed(channel, err) // specs/024 T1205：失败打点旁路，不改口径
-		s.outboundSendFailed(ctx, channel, accountID, nil, content, err)
-	}
-
-	// 收尾（defer 保证各渠道的提前 return 分支同样覆盖）：
-	//  1. 可重试的投递失败 → 同步落一条 send_retry 到延迟出站队列，到期重投同一份内容；
-	//     必须先入队再放行 recheck，否则补触发看不到这条待投记录，会另生成一份回复。
-	//  2. 释放 AI 处理中标记；实时路径补一次「未回复」检查。
-	//     重放路径不做补触发：这条记录本身就是待投回复，重投结果由 replayDelayedOutbound 收口。
-	defer func() {
-		if sendErr != nil && !sent && !isDelayedReplay(ctx) {
-			s.enqueueSendRetry(ctx, channel, accountID, p, content, hubMsg, cards, sendErr)
-		}
-		if s.ingressSvc == nil || hubMsg == nil || hubMsg.ConversationID == "" {
-			return
-		}
-		s.ingressSvc.ReleaseAIProcessingFlag(ctx, hubMsg.ConversationID)
-		if isDelayedReplay(ctx) {
-			return
-		}
-		// SafeGo：出站消息链上的补触发 panic 不能击穿进程
-		utils.SafeGo(ctx, "outbound.recheck_unreplied", func(_ context.Context) {
-			s.ingressSvc.RecheckUnrepliedAndTrigger(context.WithoutCancel(ctx), hubMsg.ConversationID, "")
-		})
-	}()
-	// 出站渲染只做一次（specs/024 T402/T404）：格式转换 + 富卡降级 + 溢出计数在这里收口，
-	// 之后 sender 拿到的 content 已是目标格式，不得再次转义/清洗。
-	// 放在分派之前的原因（R5/CH-37b 刀3）：defer 里的 enqueueSendRetry 捕获同一个 content 变量，
-	// 清洗必须已生效，重试才会投递与首投一致的内容。
+	// 出站渲染只做一次：quiet-hours 与重试队列保存的也是最终 canonical 正文。
 	originalCardCount := len(cards)
 	rendered, renderErr := RenderForChannel(string(channel), model.MsgTypeText, content, cards)
 	if renderErr != nil {
-		markSendFailed(preSendFailure(channel, CategoryBadRequest, renderErr.Error()))
-		return
+		sendErr = preSendFailure(channel, CategoryBadRequest, renderErr.Error())
+		recordOutboundSendFailed(channel, sendErr)
+		return false, sendErr
 	}
 	content = rendered.Text
 	cards = rendered.Cards
@@ -726,8 +774,7 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 		fallback.Msg("outbound rich cards rendered as complete text")
 	}
 	if rendered.Overflow > 0 {
-		// 只上报不切分：切分归渠道自己（QQ 在 channelbot/qq 内按官方上限切）。
-		outboundTextOverflowTotal.WithLabel(string(channel)).Inc() // specs/024 T1205
+		outboundTextOverflowTotal.WithLabel(string(channel)).Inc()
 		logger.Ctx(ctx).Warn().
 			Str("module", "outbound").
 			Str("channel", string(channel)).
@@ -736,6 +783,62 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 			Msg("outbound_text_overflow")
 	}
 
+	if !agent_runtime.ClaimReply(p.EventID) {
+		logger.Ctx(ctx).Info().Str("event_id", p.EventID).Msg("skip duplicate outbound (event already replied)")
+
+		return false, nil
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, utils.MediumTimeout)
+	defer func() {
+		if !sent {
+			agent_runtime.ReleaseReply(p.EventID)
+		}
+		cancel()
+	}()
+
+	var canonical *model.MessageHub
+	canRetryPersist := false
+	// markSendFailed 统一记录真实错误；canonical 行的终态由 lifecycle 在 sender 返回后
+	// 结算一次，避免旧 outboundSendFailed 再另造一条 fail trace。
+	markSendFailed := func(err error) {
+		sendErr = err
+		recordOutboundSendFailed(channel, err)
+		if canonical == nil {
+			s.outboundSendFailed(ctx, channel, accountID, hubMsg, content, err)
+		}
+	}
+
+	// markSendFailedLogged 用于"这一支没有可归属的轨迹行"（渠道不在出站分支表里 ⇒
+	// 平台词表必然校验不过）：只把事实说清楚并留结构化日志，不尝试写库。
+	markSendFailedLogged := func(err error) {
+		sendErr = err
+		recordOutboundSendFailed(channel, err) // specs/024 T1205：失败打点旁路，不改口径
+		s.outboundSendFailed(ctx, channel, accountID, nil, content, err)
+	}
+
+	// 收尾（defer 保证各渠道的提前 return 分支同样覆盖）：
+	//  1. 可重试的投递失败 → 同步落一条 send_retry 到延迟出站队列，到期重投同一份内容；
+	//     必须先入队再放行 recheck，否则补触发看不到这条待投记录，会另生成一份回复。
+	//  2. 释放 AI 处理中标记；实时路径补一次「未回复」检查。
+	//     重放路径不做补触发：这条记录本身就是待投回复，重投结果由 replayDelayedOutbound 收口。
+	defer func() {
+		if canRetryPersist && sendErr != nil && !sent && !isDelayedReplay(ctx) {
+			s.enqueueSendRetry(ctx, channel, accountID, p, content, canonical, cards, sendErr)
+		}
+		if s.ingressSvc == nil || hubMsg == nil || hubMsg.ConversationID == "" {
+			return
+		}
+		s.ingressSvc.ReleaseAIProcessingFlag(ctx, hubMsg.ConversationID)
+		if isDelayedReplay(ctx) {
+			return
+		}
+		// SafeGo：出站消息链上的补触发 panic 不能击穿进程
+		utils.SafeGo(ctx, "outbound.recheck_unreplied", func(_ context.Context) {
+			s.ingressSvc.RecheckUnrepliedAndTrigger(context.WithoutCancel(ctx), hubMsg.ConversationID, "")
+		})
+	}()
+	// sender 只负责 transport；先确认渠道实现，再建立 canonical pending 行。
 	sender, ok := s.outboundSenderFor(channel)
 	if !ok {
 		logger.Ctx(ctx).Warn().Str("channel", string(channel)).Str("account_id", accountID).Msg("unsupported outbound channel, skipped")
@@ -743,13 +846,41 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 			fmt.Sprintf("出站不支持该渠道(%s)：webhookInboundCapable 与 sendOutbound 分支表已漂移", channel)))
 		return
 	}
+	lifecycle := newOutboundLifecycle(s.ensureOutboundLifecycleStore())
+	canonical, err := lifecycle.Begin(ctx, outboundLifecycleRequest{
+		Channel:   channel,
+		AccountID: accountID,
+		Payload:   p,
+		Content:   content,
+		Cards:     cards,
+		Source:    hubMsg,
+		Origin:    OutboundOriginFromContext(ctx),
+		SessionID: outboundSessionIDFromContext(ctx),
+	})
+	if err != nil {
+		markSendFailedLogged(fmt.Errorf("出站持久化失败，未发起网络投递: %w", err))
+		return
+	}
+	ctx = outboundCanonicalToContext(ctx, canonical)
+	canRetryPersist = true
+	if canonical.Status == OutboundStatusSent || canonical.Status == "delivered" {
+		return true, nil
+	}
+	if canonical.Status == OutboundStatusUnknown {
+		return false, preSendFailure(channel, CategoryUnknown, "同一逻辑回复已是 unknown，禁止自动重发")
+	}
+	if !isDelayedReplay(ctx) && loadAIReplyQuietHoursFn()(time.Now()) {
+		if s.enqueueDelayedOutbound(ctx, channel, accountID, p, content, canonical, cards) {
+			return false, nil
+		}
+	}
 	res := sender.Send(ctx, &OutboundRequest{
 		Channel:            channel,
 		AccountID:          accountID,
 		Payload:            p,
 		Content:            content,
 		Cards:              cards,
-		Hub:                hubMsg,
+		Hub:                canonical,
 		CardsFallbackCount: cardsFallbackCount,
 		Fail:               markSendFailed,
 		FailUntracked:      markSendFailedLogged,
@@ -758,13 +889,21 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 		sent = res.Sent
 	}
 	if !sent && sendErr == nil {
-		// R5 不变量（specs/024 T101 二次审核补）：sender 必须显式表态——
-		// 既没发成功也没调 Fail/FailUntracked 就返回，失败口径就会漏
-		//（重试不入队、审计不落行，调用方拿到「没发也没错」）。
-		// 兜成可重试的 unknown 失败：宁可多一次重试，也不能静默丢回复。
-		markSendFailedLogged(preSendFailure(channel, CategoryUnknown,
-			"sender reported neither success nor failure"))
+		if res != nil && res.Unknown {
+			sendErr = preSendFailure(channel, CategoryUnknown, "sender reported unknown delivery result")
+		} else {
+			// sender 既没报成功也没报失败：落 unknown，不能静默吞回复或盲重试。
+			sendErr = preSendFailure(channel, CategoryUnknown, "sender reported neither success nor failure")
+		}
 	}
+	settled, settleErr := lifecycle.Settle(ctx, canonical, res, sendErr)
+	if settleErr != nil {
+		canRetryPersist = false
+		sendErr = errors.Join(sendErr, settleErr)
+		return sent, sendErr
+	}
+	canonical = settled
+	canRetryPersist = canonical != nil && canonical.Status == OutboundStatusPending
 	return
 }
 

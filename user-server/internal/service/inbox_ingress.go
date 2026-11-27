@@ -85,47 +85,6 @@ type AITrigger interface {
 	TriggerInboundAI(ctx context.Context, channel, accountID, conversationID, customerID, content, eventID string, opts ...TriggerInboundOption)
 }
 
-type TriggerInboundOption func(*TriggerInboundMeta)
-
-type TriggerInboundMeta struct {
-	SenderName string
-	IsGroup    bool
-	GroupID    string
-	GroupName  string
-	// SessionWebhook 钉钉机器人临时回复通道（官方协议：回复即 POST 此 URL）。
-	// 由入站回调捕获，经 sendOutbound case ChannelDingTalk 消费；其他渠道为空。
-	SessionWebhook          string
-	SessionWebhookExpiredAt int64
-	// ChannelMsgID 渠道平台原始消息 ID（如 QQ 事件 id）。
-	// QQ 被动回复必须关联原消息 msg_id（5 分钟窗口 5 条额度），
-	// 经 sendOutbound case ChannelQQ 消费；其他渠道为空。
-	ChannelMsgID string
-}
-
-func WithSenderName(name string) TriggerInboundOption {
-	return func(m *TriggerInboundMeta) { m.SenderName = name }
-}
-
-func WithGroup(groupID, groupName string) TriggerInboundOption {
-	return func(m *TriggerInboundMeta) {
-		m.IsGroup = true
-		m.GroupID = groupID
-		m.GroupName = groupName
-	}
-}
-
-func WithSessionWebhook(url string, expiredAt int64) TriggerInboundOption {
-	return func(m *TriggerInboundMeta) {
-		m.SessionWebhook = url
-		m.SessionWebhookExpiredAt = expiredAt
-	}
-}
-
-// WithChannelMsgID 传递渠道平台原始消息 ID（QQ 被动回复依赖）
-func WithChannelMsgID(msgID string) TriggerInboundOption {
-	return func(m *TriggerInboundMeta) { m.ChannelMsgID = msgID }
-}
-
 type InboxIngressResult struct {
 	Accepted    bool   `json:"accepted"`
 	HumanLocked bool   `json:"human_locked"`
@@ -848,7 +807,7 @@ func (s *InboxIngressService) triggerAIForEvent(ctx context.Context, event *mode
 		if account, err := (&Service{}).historyScope(ctx, sharedHub); err == nil && account.accountID > 0 {
 			scope := ConversationContextScope{Platform: event.Channel, IsGroup: event.IsGroup, GroupID: event.GroupID}
 			if notes := s.autoReplySvc.ReferLeadNotes(ctx, account.accountID, event.ConversationID, scope); len(notes) > 0 {
-				logger.Infof("[auto-reply] 交叉引用线索发现备注 account=%d conv=%s notes=%v", account.accountID, event.ConversationID, notes)
+				logger.Infof("[auto-reply] 交叉引用线索发现备注 account=%d conv=%s notes=%v", account.accountID, event.ConversationID, redactSharedNotesForLog(notes))
 			}
 			if err := s.autoReplySvc.RecordNote(ctx, account.accountID, event.ConversationID, "自动回复链路已介入", scope); err != nil {
 				logger.Warnf("[auto-reply] 写交叉引用备注失败 account=%d conv=%s: %v", account.accountID, event.ConversationID, err)
@@ -865,13 +824,20 @@ func (s *InboxIngressService) triggerAIForEvent(ctx context.Context, event *mode
 			Msg("[Inbox] aiTrigger 未配置 — 桥接入站消息不会创建 customer_sessions / 不会生成 AI 回复。请检查 router.Setup() 中 bridgeIngressSvc.SetAITrigger(webhookSvc) 是否在 bridge WS 注册前调用。")
 		return
 	}
-	opts := make([]TriggerInboundOption, 0, 3)
+	opts := make([]TriggerInboundOption, 0, 9)
 	if event.SenderName != "" {
 		opts = append(opts, WithSenderName(event.SenderName))
 	}
 	if event.IsGroup {
 		opts = append(opts, WithGroup(event.GroupID, groupNameOf(event)))
 	}
+	opts = append(opts,
+		WithConversationID(event.ConversationID),
+		WithMessageID(event.EventID),
+		WithDirection("inbound"),
+		WithBusLLMSessionID(event.BusLLMSessionID),
+		WithOriginalSentAt(event.Timestamp),
+	)
 	if event.Extra != nil {
 		if v, ok := event.Extra["session_webhook"].(string); ok && v != "" {
 			var exp int64
@@ -885,6 +851,12 @@ func (s *InboxIngressService) triggerAIForEvent(ctx context.Context, event *mode
 		}
 		if v, ok := event.Extra["channel_msg_id"].(string); ok && v != "" {
 			opts = append(opts, WithChannelMsgID(v))
+		}
+		if v, ok := event.Extra["platform_msg_id"].(string); ok && v != "" {
+			opts = append(opts, WithPlatformMsgID(v))
+		}
+		if v, ok := event.Extra["correlation_id"].(string); ok && v != "" {
+			opts = append(opts, WithCorrelationID(v))
 		}
 	}
 	func() {

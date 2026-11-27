@@ -36,6 +36,8 @@ type PolishContext struct {
 	Platform     string
 	Stage        string
 	CustomerName string
+	// IsGroup 标记回复面向群聊多成员；群聊默认不注入随意语气词。
+	IsGroup bool
 }
 
 // NewHumanizePolisher 创建拟人润色器
@@ -311,7 +313,10 @@ func (p *HumanizePolisher) shouldAddParticle(ctx context.Context, pctx *PolishCo
 		IntentChurn:     true,
 		IntentAfterSale: true,
 	}
-	if pctx != nil && noParticleIntents[pctx.Intent] {
+	if pctx == nil {
+		return true
+	}
+	if noParticleIntents[pctx.Intent] || pctx.IsGroup {
 		return false
 	}
 	return true

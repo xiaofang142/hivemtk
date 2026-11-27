@@ -88,16 +88,20 @@ func p1DebounceKey(s *Service, hub *model.MessageHub, ctx context.Context) strin
 
 func p1TestService(judge LLMJudge, clueRepo repository.ClueRepository) *Service {
 	return &Service{
-		queue:           make(chan *model.MessageHub, 8),
-		pending:         make(chan *model.MessageHub, 8),
-		tail:            NewLeadTailWatermark(),
-		tailMaxWait:     time.Second,
-		judge:           judge,
-		historyFetcher:  func(context.Context, *model.MessageHub) []llm.ChatMessage { return []llm.ChatMessage{{Role: "user", Content: "历史消息"}} },
-		hitsProvider:    func(context.Context, DetectionInput) ([]model.LeadMiningHit, error) { return []model.LeadMiningHit{{ID: 9, Complete: true}}, nil },
-		custRepo:        newFakeCustRepo(),
-		clueRepo:        clueRepo,
-		cfgRepo:         &fakeCfgRepo{cfg: &model.LeadMiningConfig{Enabled: true, MinIntentScore: 50}},
+		queue:       make(chan *model.MessageHub, 8),
+		pending:     make(chan *model.MessageHub, 8),
+		tail:        NewLeadTailWatermark(),
+		tailMaxWait: time.Second,
+		judge:       judge,
+		historyFetcher: func(context.Context, *model.MessageHub) []llm.ChatMessage {
+			return []llm.ChatMessage{{Role: "user", Content: "历史消息"}}
+		},
+		hitsProvider: func(context.Context, DetectionInput) ([]model.LeadMiningHit, error) {
+			return []model.LeadMiningHit{{ID: 9, Complete: true}}, nil
+		},
+		custRepo: newFakeCustRepo(),
+		clueRepo: clueRepo,
+		cfgRepo:  &fakeCfgRepo{cfg: &model.LeadMiningConfig{Enabled: true, MinIntentScore: 50}},
 		// T01：规则是唯一真实入口，显式注入内存 account 规则，不依赖真实 dbstate。
 		ruleTargetFor: func(context.Context, *model.MessageHub) LeadRuleTarget {
 			return LeadRuleTarget{ChannelAccountID: 1, ChannelID: 1}
@@ -147,7 +151,9 @@ type p1FailingClueRepo struct {
 	updates   int
 }
 
-func (r *p1FailingClueRepo) Create(ctx context.Context, c *model.Clue) error { return r.inner.Create(ctx, c) }
+func (r *p1FailingClueRepo) Create(ctx context.Context, c *model.Clue) error {
+	return r.inner.Create(ctx, c)
+}
 func (r *p1FailingClueRepo) FindByTypeAndAccount(ctx context.Context, t int64, a string) (*model.Clue, error) {
 	return r.inner.FindByTypeAndAccount(ctx, t, a)
 }

@@ -239,6 +239,30 @@ type InferenceRerankConfig struct {
 // NoFC: 标记该 LLM 是否支持 OpenAI Function Calling；本地 Qwen2.5-3B-Instruct 不支持，
 // 启用 ReAct 适配器（thought/action 文本协议）走工具调用；用户在 config.yaml
 // 设置 inference.llm.no_fc=false 可显式关闭（如果模型已升级支持 FC）。
+// InferenceProviderCapabilities 描述单个 provider/model/protocol 的上下文、输出、缓存和会话能力。
+// 能力必须按实际部署的 region 配置；未知字段保持零值，由 dispatcher 采用保守默认。
+type InferenceProviderCapabilities struct {
+	ContextWindow          int      `yaml:"context_window" json:"context_window"`
+	MaxInputTokens         int      `yaml:"max_input_tokens" json:"max_input_tokens"`
+	ProtocolInputLimit     int      `yaml:"protocol_input_limit" json:"protocol_input_limit"`
+	MaxOutputTokens        int      `yaml:"max_output_tokens" json:"max_output_tokens"`
+	ReasoningReserveTokens int      `yaml:"reasoning_reserve_tokens" json:"reasoning_reserve_tokens"`
+	OutputSemantics        string   `yaml:"output_semantics" json:"output_semantics"`
+	CacheMode              string   `yaml:"cache_mode" json:"cache_mode"`
+	CacheMinTokens         int      `yaml:"cache_min_tokens" json:"cache_min_tokens"`
+	CacheTTLSeconds        int      `yaml:"cache_ttl_seconds" json:"cache_ttl_seconds"`
+	SessionMode            string   `yaml:"session_mode" json:"session_mode"`
+	NativeSessionAllowed   bool     `yaml:"native_session_allowed" json:"native_session_allowed"`
+	StoreMode              string   `yaml:"store_mode" json:"store_mode"`
+	AllowedRegions         []string `yaml:"allowed_regions" json:"allowed_regions"`
+	SupportsIdempotencyKey bool     `yaml:"supports_idempotency_key" json:"supports_idempotency_key"`
+	MaxRequestBytes        int64    `yaml:"max_request_bytes" json:"max_request_bytes"`
+	RequestTimeoutSeconds  int      `yaml:"request_timeout_seconds" json:"request_timeout_seconds"`
+	RouteMode              string   `yaml:"route_mode" json:"route_mode"`
+	ReliabilityTier        string   `yaml:"reliability_tier" json:"reliability_tier"`
+	Protocol               string   `yaml:"protocol" json:"protocol"`
+}
+
 type InferenceLLMConfig struct {
 	Mode            InferenceMode                  `yaml:"mode" json:"mode"`
 	BaseURL         string                         `yaml:"base_url" json:"base_url"`
@@ -251,18 +275,20 @@ type InferenceLLMConfig struct {
 	NoFC            *bool                          `yaml:"no_fc" json:"no_fc"`
 	PrimaryProvider string                         `yaml:"primary_provider" json:"primary_provider"`
 	CloudProviders  []InferenceCloudProviderConfig `yaml:"cloud_providers" json:"cloud_providers"`
+	Capabilities    InferenceProviderCapabilities  `yaml:"capabilities" json:"capabilities"`
 }
 
 // InferenceCloudProviderConfig 可选的云端 fallback 厂商（OpenAI 兼容）
 //
 // 仅当用户显式配置 api_key 并 enabled=true 时，dispatcher 才将其注册为可选 fallback。
 type InferenceCloudProviderConfig struct {
-	Name    string `yaml:"name"`
-	APIKey  string `yaml:"api_key"`
-	BaseURL string `yaml:"base_url"`
-	APIType string `yaml:"api_type"`
-	Model   string `yaml:"model"`
-	Enabled bool   `yaml:"enabled"`
+	Name         string                        `yaml:"name" json:"name"`
+	APIKey       string                        `yaml:"api_key" json:"api_key"`
+	BaseURL      string                        `yaml:"base_url" json:"base_url"`
+	APIType      string                        `yaml:"api_type" json:"api_type"`
+	Model        string                        `yaml:"model" json:"model"`
+	Enabled      bool                          `yaml:"enabled" json:"enabled"`
+	Capabilities InferenceProviderCapabilities `yaml:"capabilities" json:"capabilities"`
 }
 
 // PGVectorConfig pgvector 配置

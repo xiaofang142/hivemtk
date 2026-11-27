@@ -31,15 +31,29 @@ type OutboundRequest struct {
 }
 
 // OutboundResult 是 sender 的投递事实：Sent 表示至少有一跳成功（不等于客户已收到）。
+// Receipts 保留每个文本分块/卡片的平台回执；Partial/Unknown 不能被折叠成普通成功。
 type OutboundResult struct {
 	Sent          bool
 	PlatformMsgID string
+	Receipts      []OutboundArtifactReceipt
+	Partial       bool
+	Unknown       bool
 }
 
 // channelSender 一个渠道一个实现；Send 只能通过 req.Fail / req.FailUntracked 报告失败。
 type channelSender interface {
 	Channel() WebhookChannel
 	Send(ctx context.Context, req *OutboundRequest) *OutboundResult
+}
+
+func sentOutboundResult(artifactID, platformMsgID string) *OutboundResult {
+	return &OutboundResult{
+		Sent:          true,
+		PlatformMsgID: platformMsgID,
+		Receipts: []OutboundArtifactReceipt{
+			{ArtifactID: artifactID, PlatformMsgID: platformMsgID, Status: OutboundArtifactSent},
+		},
+	}
 }
 
 // OutboundSenderFactory 构造某渠道的 sender；svc 用于取 integration/repo（不引入新单例）。
