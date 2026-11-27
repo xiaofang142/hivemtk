@@ -58,6 +58,7 @@ import (
 	"hivemtk-user/internal/controller"
 	"hivemtk-user/internal/egolite"
 	"hivemtk-user/internal/middleware"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	hrepo "hivemtk-user/internal/repository"
@@ -220,9 +221,15 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 			_, _ = sessionSvc.WatchdogSweep(ctx)
 			if day := time.Now().UTC().YearDay(); day != lastRetentionDay {
 				lastRetentionDay = day
-				n, err := govSvc.SweepRetention(ctx)
+				// 租户扇出：留存清理的 UPDATE 要过隔离 callback，多租户模式裸 ctx
+				// 会被 fail-closed 拒掉；off 模式退化为单次默认租户，行为不变。
+				n, err := tenant.Fanout(ctx, nil, func(tenantCtx context.Context, _ uint) (int64, error) {
+					return govSvc.SweepRetention(tenantCtx)
+				})
 				if err != nil {
-					logger.Warnf("[egolite] 观测留存清理失败（窗口内 %d 行未动）: %v", n, err)
+					logger.Warnf("[egolite] 观测留存清理失败: %v", err)
+				} else if n > 0 {
+					logger.Infof("[egolite] 观测留存清理完成: %d 行", n)
 				}
 			}
 			cancel()

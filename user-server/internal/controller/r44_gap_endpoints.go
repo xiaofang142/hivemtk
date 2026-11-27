@@ -7,6 +7,7 @@ import (
 	"time"
 
 	ksvc "hivemtk-user/internal/aiagent/knowledge/service"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/reporting"
@@ -116,7 +117,12 @@ func NewRagEvalGapController() *RagEvalGapController {
 		return out, nil
 	})
 	// 上次进程的评测 goroutine 已随进程结束，残留的 running 行原地标失败，避免列表永远显示「进行中」。
-	if n, err := svc.ReconcileInterrupted(context.Background()); err != nil {
+	// 多租户模式 fail-closed：逐租户绑定上下文清理各租户遗留的 running 行；
+	// off 模式 Fanout 退化为单次默认租户，行为与旧版等价。
+	n, err := tenant.Fanout(context.Background(), nil, func(tenantCtx context.Context, _ uint) (int64, error) {
+		return svc.ReconcileInterrupted(tenantCtx)
+	})
+	if err != nil {
 		logger.Errorf("[rag-eval] 清理中断评测失败: %v", err)
 	} else if n > 0 {
 		logger.Infof("[rag-eval] 已把 %d 条中断的评测标记为失败", n)

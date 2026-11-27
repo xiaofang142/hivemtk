@@ -38,7 +38,9 @@ func RetentionSweep(ctx context.Context, db *gorm.DB, keepDays int) (int64, erro
 	for {
 		res := db.WithContext(ctx).Model(&model.EgoliteRound{}).
 			Where("observation IS NOT NULL AND created_at < ?", cutoff).
-			Where("id IN (?)", db.Model(&model.EgoliteRound{}).
+			// 子查询必须同样带 ctx：裸 db.Model 的子查询没有租户绑定，
+			// 多租户模式下被隔离 callback 拒绝后 SQL 为空，外层退化成 id IN () 语法错误。
+			Where("id IN (?)", db.WithContext(ctx).Model(&model.EgoliteRound{}).
 				Select("id").
 				Where("observation IS NOT NULL AND created_at < ?", cutoff).
 				Order("id ASC").Limit(batchSize)).

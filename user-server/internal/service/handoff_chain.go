@@ -196,8 +196,14 @@ func (s *HandoffChainService) applyRule(ctx context.Context, rule HandoffRule, s
 		ReasonDetail: rule.Description,
 		IntentType:   rule.TargetRole,
 	}
-	if err := s.repo.CreateHandoffDecisionRecord(ctx, &record); err != nil {
+	created, err := s.repo.CreateHandoffDecisionRecord(ctx, &record)
+	if err != nil {
 		return fmt.Errorf("写转派决策记录: %w", err)
+	}
+	if !created {
+		// 该规则已对此会话决策过（DecisionID 为确定性业务键），cron 每轮重复命中
+		// 是正常路径：跳过 escalate 副作用，不重复升级、不重复写记录。
+		return nil
 	}
 
 	if rule.Action == "escalate" {
