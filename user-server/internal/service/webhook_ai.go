@@ -494,6 +494,18 @@ func newIncomingContext(channel WebhookChannel, accountID string, p *ParsedPaylo
 
 func (s *WebhookService) runAIGeneration(ctx context.Context, channel WebhookChannel, accountID string, p *ParsedPayload, hubMsg *model.MessageHub, in *IncomingContext, agentCtx *AgentContext) {
 
+	var result *HandleResult
+	var err error
+	dispositionClosed := false
+	defer func() {
+		reason := aiGenerationFallbackDispositionReason(dispositionClosed, err, result)
+		if reason != "" && in != nil && s.dispositionSvc != nil {
+			_ = markIncomingDisposition(context.WithoutCancel(ctx), s.dispositionSvc, in, DispositionTransition{
+				Status: model.ConversationDispositionSkipped, Reason: reason,
+			})
+		}
+	}()
+
 	defer func() {
 		if r := recover(); r != nil {
 			logger.Ctx(ctx).Error().
@@ -567,8 +579,6 @@ func (s *WebhookService) runAIGeneration(ctx context.Context, channel WebhookCha
 
 	ctx = tracing.InitRecalledChunks(ctx)
 
-	var result *HandleResult
-	var err error
 	aiSpan := tracing.Start(ctx, tracing.NodeAIDispatch).
 		Input(map[string]any{
 			"channel":     string(channel),
@@ -641,6 +651,7 @@ func (s *WebhookService) runAIGeneration(ctx context.Context, channel WebhookCha
 			Msg("orchestrator handle failed after retries")
 		return
 	}
+	dispositionClosed = true
 	s.deliverAIResult(ctx, webhookReplyRequest{
 		channel: channel, accountID: accountID, payload: p, hub: hubMsg,
 		incoming: in, agent: agentCtx,

@@ -62,6 +62,7 @@ func (s *InboxIngressService) persistMessageWithLeadEligibility(ctx context.Cont
 		event.IsAIReply = false
 	}
 
+	visibility := hubIngressVisibilityFromEvent(event)
 	hub := &model.MessageHub{
 		// 非文本消息的 msg_id 用带类型口径（002-multi-type-messages）：event_id 为空时
 		// 兜底生成的哈希并入 msg_type+media_url，否则同会话两张图（content 同为「[图片]」
@@ -74,21 +75,24 @@ func (s *InboxIngressService) persistMessageWithLeadEligibility(ctx context.Cont
 		// event.MsgType 是渠道官方名（WA 的 document/sticker…），原样写进去就是写一行
 		// 工作台「按类型筛选」（msg_type = ?）与 by_msg_type 统计永远筛不到的记录。
 		// 这里只归一不校验：校验会把整条消息丢掉。
-		MsgType:        InboundHubMsgType(event.MsgType),
-		SenderID:       event.SenderID,
-		SenderName:     event.SenderName,
-		SenderAvatar:   model.TruncateMediaURL(event.SenderAvatar),
-		ReceiverID:     event.ReceiverID,
-		Content:        event.Content,
-		MediaURL:       model.TruncateMediaURL(event.MediaURL),
-		ConversationID: event.ConversationID,
-		IsGroup:        event.IsGroup,
-		GroupID:        event.GroupID,
-		IsAIReply:      event.IsAIReply && !notice,
-		AIAgent:        event.AIAgent,
-		IsRead:         false,
-		SentAt:         sentAt,
-		Extra:          nil,
+		MsgType:            InboundHubMsgType(event.MsgType),
+		SenderID:           event.SenderID,
+		SenderName:         event.SenderName,
+		SenderAvatar:       model.TruncateMediaURL(event.SenderAvatar),
+		ReceiverID:         event.ReceiverID,
+		Content:            event.Content,
+		MediaURL:           model.TruncateMediaURL(event.MediaURL),
+		ConversationID:     event.ConversationID,
+		IsGroup:            event.IsGroup,
+		GroupID:            event.GroupID,
+		IsAIReply:          event.IsAIReply && !notice,
+		AIAgent:            event.AIAgent,
+		IsRead:             false,
+		SentAt:             sentAt,
+		Extra:              nil,
+		Visibility:         visibility.Visibility,
+		AudienceJSON:       append([]string{}, visibility.Audience...),
+		VisibilityEvidence: visibility.Evidence,
 	}
 
 	// dedup_hash 列与 interceptInbound 的 Redis 窗口键共用 MediaAwareDedupInput（F1 收口）：
@@ -115,6 +119,12 @@ func (s *InboxIngressService) persistMessageWithLeadEligibility(ctx context.Cont
 			extra[k] = v
 		}
 		hub.Extra = extra
+	}
+	if hub.Extra == nil {
+		hub.Extra = model.JSONMap{}
+	}
+	for k, v := range hubIngressAuthorityExtraFromEvent(event) {
+		hub.Extra[k] = v
 	}
 	if hub.Extra != nil {
 		delete(hub.Extra, "bridge_lead_eligible")

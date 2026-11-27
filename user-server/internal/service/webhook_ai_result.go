@@ -100,6 +100,9 @@ func (s *WebhookService) deliverAIResult(
 			} else {
 				recordDecision("handoff", tracing.StatusSkipped, false, nil)
 			}
+			_ = markIncomingDisposition(ctx, s.dispositionSvc, req.incoming, DispositionTransition{
+				Status: model.ConversationDispositionSkipped, Reason: "transferred_to_human",
+			})
 			return
 		}
 		if strings.EqualFold(strings.TrimSpace(result.Reply), "NO_REPLY") {
@@ -132,6 +135,9 @@ func (s *WebhookService) deliverAIResult(
 			logger.Ctx(ctx).Warn().Err(lockErr).Int("answer_attempt", attempt+1).
 				Str("session_id", result.SessionID).Str("event_id", req.payload.EventID).
 				Msg("发送前复核：会话已被人工接管或锁不可确认，AI 回复静默放弃（防抢答）")
+			_ = markIncomingDisposition(ctx, s.dispositionSvc, req.incoming, DispositionTransition{
+				Status: model.ConversationDispositionSkipped, Reason: outcome,
+			})
 			return
 		}
 		sent, sendErr := s.sendOutbound(outCtx, req.channel, req.accountID, req.payload, result.Reply, req.hub, result.Cards)
@@ -144,6 +150,11 @@ func (s *WebhookService) deliverAIResult(
 			outcome = "duplicate_reply"
 		}
 		recordDecision(outcome, status, sent, sendErr)
+		if !sent || sendErr != nil {
+			_ = markIncomingDisposition(ctx, s.dispositionSvc, req.incoming, DispositionTransition{
+				Status: model.ConversationDispositionSkipped, Reason: outcome,
+			})
+		}
 		if sent && sendErr == nil {
 			// sendOutbound 的 accepted 只代表已交给投递层；没有平台回执前不得标 replied，
 			// 因此这里只推进到 processing，真实送达回执到达后才由对账任务推进水位。
