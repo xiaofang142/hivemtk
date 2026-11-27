@@ -10,6 +10,7 @@
 - **修复**：两个 key 登记为 `platformScopedParams`，wiring writer 改为 `UpdatePlatformDefault`，并用 narrow interface + fake 做 TDD（写坐标/审计操作者/错误透传/写完读回），`check-config-param-readpoints.py` 通过。
 - **Embedding dimensions 支持**：全局覆盖新增可选 `dimensions` 字段，OpenAI 兼容 embeddings 请求体在原生长度上透传；0 表示不发送，1024 用于 Gemini 等默认高维模型；存储维度仍强制 1024（pgvector 兼容），非法值在管理端拒绝。TDD 覆盖请求体/读完回读/非 1024 存储夹取。
 - **Dispatcher 热更新与端点修正**：发现全局覆盖只作用于 `LLMService.GetDefaultConfig`，Dispatcher 仍按原 provider 表走平台代理，导致配置 Gemini 后真实流量继续 SenseNova 400 / DashScope 欠费。现在每次候选取 provider 的不可变副本，命中全局覆盖时改 self+direct 并覆盖 base_url/model/api_key；同时修正 OpenAI 兼容端点解析，`/v1beta/openai` 不再重复拼 `/v1`。TDD 覆盖真实 HTTP 请求路径/模型名与注册表不被污染。
+- **真实流量复核发现**：生产 `POST /api/intent/recognize` 触发 embedding 调用时落到 `.../v1beta/openai/v1/embeddings`（错误路径），重试后 60s 超时。根因是 `resolveEmbeddingEndpoint` 同样重复拼 `/v1`；已修正为带 `/v1` 或 `/v1beta/openai` 的 base 直接拼 `/embeddings`，并补端点表驱动测试。
 - **验证**：`GOTOOLCHAIN=local go build ./...`、`go vet ./...` 通过；app/service/llm 目标测试 GREEN；`git diff --check`、env coverage、layer-boundary、config readpoints 门全通过。
 - **配置口径**：本修复解决“写平台默认行”通道并放开 1024 维请求参数；换用哪个免费 provider / 是否切 embedding 仍由运营决定，测试密钥不入库、不写文档。
 

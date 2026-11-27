@@ -479,7 +479,7 @@ func resolveEmbeddingEndpoint(baseURL string, tei bool) string {
 		}
 		return base + "/embed"
 	}
-	if !strings.HasSuffix(base, "/v1") && !strings.HasSuffix(base, "/v1/") {
+	if !strings.HasSuffix(base, "/v1") && !strings.HasSuffix(base, "/v1beta/openai") {
 		base += "/v1"
 	}
 	return base + "/embeddings"

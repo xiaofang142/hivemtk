@@ -79,6 +79,25 @@ func TestEmbeddingRequestOmitsDimensionsWhenNotConfigured(t *testing.T) {
 	}
 }
 
+func TestResolveEmbeddingEndpointKeepsVersionedOpenAICompatibleBase(t *testing.T) {
+	tests := []struct {
+		name string
+		base string
+		want string
+	}{
+		{"plain", "https://api.example.com", "https://api.example.com/v1/embeddings"},
+		{"v1", "https://api.example.com/v1", "https://api.example.com/v1/embeddings"},
+		{"gemini", "https://generativelanguage.googleapis.com/v1beta/openai/", "https://generativelanguage.googleapis.com/v1beta/openai/embeddings"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := resolveEmbeddingEndpoint(tt.base, false); got != tt.want {
+				t.Fatalf("endpoint=%q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestEmbeddingOverrideRejectsNon1024RequestedDimensions(t *testing.T) {
 	resetEmbeddingDimensionOverrideSeams(t)
 	SetEmbeddingOverrideProvider(func(context.Context) string {
