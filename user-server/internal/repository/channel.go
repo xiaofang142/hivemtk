@@ -34,11 +34,12 @@ type ChannelRepository interface {
 
 // ChannelListOptions 渠道列表查询条件（Repository 层只做数据过滤，不含业务判断）。
 type ChannelListOptions struct {
-	TenantID uint
-	Keyword  string
-	Enabled  *bool
-	Limit    int
-	Offset   int
+	TenantID      uint
+	Keyword       string
+	Enabled       *bool
+	Limit         int
+	Offset        int
+	IncludeGlobal bool // 管理面同时读取 tenant_id=0 的全局模板与当前租户自定义行。
 }
 
 type channelRepo struct {
@@ -72,7 +73,9 @@ func (r *channelRepo) GetByID(ctx context.Context, tenantID, id uint) (*model.Ch
 		return nil, ErrChannelStoreUnavailable
 	}
 	var ch model.Channel
-	err := r.db.WithContext(ctx).First(&ch, "tenant_id = ? AND id = ?", tenantID, id).Error
+	// tenant_id 已显式限定；系统作用域仅避免租户 callback 再叠加条件，使调用方
+	// 能按 tenant_id=0 读取全局模板，不能读取其他业务租户的行。
+	err := r.db.WithContext(tenant.WithSystemScope(ctx)).First(&ch, "tenant_id = ? AND id = ?", tenantID, id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -130,7 +133,18 @@ func (r *channelRepo) List(ctx context.Context, opts ChannelListOptions) ([]mode
 	if !r.Available() {
 		return nil, ErrChannelStoreUnavailable
 	}
-	q := r.db.WithContext(ctx).Model(&model.Channel{}).Where("tenant_id = ?", opts.TenantID)
+	queryCtx := ctx
+	if opts.IncludeGlobal {
+		// 全局模板与当前租户自定义行的并集必须显式限定两个 tenant_id；
+		// 系统作用域只阻止 callback 再叠加当前租户条件，不放开其他租户。
+		queryCtx = tenant.WithSystemScope(ctx)
+	}
+	q := r.db.WithContext(queryCtx).Model(&model.Channel{})
+	if opts.IncludeGlobal {
+		q = q.Where("(tenant_id = ? OR tenant_id = ?)", opts.TenantID, ChannelGlobalTenantID)
+	} else {
+		q = q.Where("tenant_id = ?", opts.TenantID)
+	}
 	if opts.Keyword != "" {
 		q = q.Where("name ILIKE ? OR code ILIKE ?", "%"+opts.Keyword+"%", "%"+opts.Keyword+"%")
 	}

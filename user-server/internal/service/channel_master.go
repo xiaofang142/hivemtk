@@ -25,6 +25,7 @@ type channelMasterService struct {
 	repo             repository.ChannelRepository
 	identifyCodeRepo repository.ChannelIdentifyCodeRepository
 	accountRepo      repository.ChannelAccountRepository
+	presetRepo       repository.ChannelPresetStateRepository
 }
 
 // NewChannelMasterService 创建渠道主数据服务。
@@ -33,6 +34,7 @@ func NewChannelMasterService() ChannelMasterService {
 		repo:             repository.NewChannelRepository(),
 		identifyCodeRepo: repository.NewChannelIdentifyCodeRepository(),
 		accountRepo:      repository.NewChannelAccountRepository(),
+		presetRepo:       repository.NewChannelPresetStateRepository(),
 	}
 }
 
@@ -42,6 +44,7 @@ func NewChannelMasterServiceWithRepo(repo repository.ChannelRepository) ChannelM
 		repo:             repo,
 		identifyCodeRepo: repository.NewChannelIdentifyCodeRepository(),
 		accountRepo:      repository.NewChannelAccountRepository(),
+		presetRepo:       repository.NewChannelPresetStateRepository(),
 	}
 }
 
@@ -50,35 +53,80 @@ func NewChannelMasterServiceWithDeps(
 	repo repository.ChannelRepository,
 	identifyCodeRepo repository.ChannelIdentifyCodeRepository,
 	accountRepo repository.ChannelAccountRepository,
+	presetRepos ...repository.ChannelPresetStateRepository,
 ) ChannelMasterService {
-	return &channelMasterService{repo: repo, identifyCodeRepo: identifyCodeRepo, accountRepo: accountRepo}
+	presetRepo := repository.NewChannelPresetStateRepository()
+	if len(presetRepos) > 0 && presetRepos[0] != nil {
+		presetRepo = presetRepos[0]
+	}
+	return &channelMasterService{repo: repo, identifyCodeRepo: identifyCodeRepo, accountRepo: accountRepo, presetRepo: presetRepo}
 }
 
 func toChannelOption(ch *model.Channel) dto.ChannelOption {
 	return dto.ChannelOption{ID: ch.ID, Name: ch.Name, Code: ch.Code, Type: ch.Type, Enabled: ch.Enabled, Remark: ch.Remark}
 }
 
+// toTenantOption 将全局模板状态与当前租户开关合成管理面状态；自定义渠道仍只读租户行。
+func (s *channelMasterService) toTenantOption(ctx context.Context, tenantID uint, ch *model.Channel) (dto.ChannelOption, error) {
+	opt := toChannelOption(ch)
+	if ch.TenantID != repository.ChannelGlobalTenantID {
+		return opt, nil
+	}
+	if s.presetRepo == nil || !s.presetRepo.Available() {
+		return dto.ChannelOption{}, repository.ErrChannelStoreUnavailable
+	}
+	value, err := s.presetRepo.Get(ctx, tenantID, ch.Code)
+	if err != nil {
+		return dto.ChannelOption{}, err
+	}
+	tenantEnabled, parseErr := ParseEnabledValue(value)
+	if parseErr != nil {
+		tenantEnabled = false // 脏值按预设契约 fail-closed，不影响其他渠道管理。
+	}
+	opt.Enabled = ch.Enabled && tenantEnabled
+	return opt, nil
+}
+
 func (s *channelMasterService) List(ctx context.Context, tenantID uint, q dto.ChannelListQuery) ([]dto.ChannelOption, error) {
 	if tenantID == 0 {
 		return nil, ErrChannelAccountInvalid
 	}
+	// 全局预设和当前租户自定义行共同构成管理列表；版本、租户状态与分页在合成后过滤。
 	rows, err := s.repo.List(ctx, repository.ChannelListOptions{
-		TenantID: tenantID,
-		Keyword:  q.Keyword,
-		Enabled:  q.Enabled,
-		Limit:    q.Limit,
-		Offset:   q.Offset,
+		TenantID:      tenantID,
+		Keyword:       q.Keyword,
+		IncludeGlobal: true,
 	})
 	if err != nil {
 		return nil, err
 	}
-	out := make([]dto.ChannelOption, 0, len(rows))
+	filtered := make([]dto.ChannelOption, 0, len(rows))
 	for i := range rows {
 		if edition.IsDomesticChannel(rows[i].Code) && !edition.AllowsContext(ctx, edition.FeatureDomesticChannels) {
 			continue
 		}
-		out = append(out, toChannelOption(&rows[i]))
+		opt, err := s.toTenantOption(ctx, tenantID, &rows[i])
+		if err != nil {
+			return nil, err
+		}
+		if q.Enabled != nil && opt.Enabled != *q.Enabled {
+			continue
+		}
+		filtered = append(filtered, opt)
 	}
+	start := q.Offset
+	if start < 0 {
+		start = 0
+	}
+	if start > len(filtered) {
+		start = len(filtered)
+	}
+	end := len(filtered)
+	if q.Limit > 0 && start+q.Limit < end {
+		end = start + q.Limit
+	}
+	out := make([]dto.ChannelOption, end-start)
+	copy(out, filtered[start:end])
 	return out, nil
 }
 
@@ -91,9 +139,19 @@ func (s *channelMasterService) Get(ctx context.Context, tenantID, id uint) (*dto
 		return nil, err
 	}
 	if ch == nil {
+		// 管理面详情与租户开关还需读取全局预设；自定义行仍严格限定当前租户。
+		ch, err = s.repo.GetByID(ctx, repository.ChannelGlobalTenantID, id)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if ch == nil {
 		return nil, ErrChannelNotFound
 	}
-	opt := toChannelOption(ch)
+	opt, err := s.toTenantOption(ctx, tenantID, ch)
+	if err != nil {
+		return nil, err
+	}
 	return &opt, nil
 }
 

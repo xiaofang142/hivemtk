@@ -91,7 +91,7 @@ func (m *memChannelRepo) Create(_ context.Context, ch *model.Channel) error {
 func (m *memChannelRepo) List(_ context.Context, opts repository.ChannelListOptions) ([]model.Channel, error) {
 	var out []model.Channel
 	for _, row := range m.rows {
-		if row.TenantID != opts.TenantID {
+		if row.TenantID != opts.TenantID && !(opts.IncludeGlobal && row.TenantID == repository.ChannelGlobalTenantID) {
 			continue
 		}
 		if opts.Enabled != nil && row.Enabled != *opts.Enabled {

@@ -33,6 +33,22 @@ var PresetChannelCodes = []struct {
 	{"wecom", "企业微信", "group", true},
 	{"qq", "QQ", "dm", true},
 	{model.ChannelPersonalWX, "个人微信", "dm", true},
+	{"weixin", "微信公众号", "dm", true},
+	{"dingtalk", "钉钉", "group", true},
+	{"jd", "京东", "dm", true},
+	{"bilibili", "B站", "dm", true},
+	{"weibo", "微博", "dm", true},
+	{"pdd", "拼多多", "dm", true},
+	{"taobao", "淘宝/天猫", "dm", true},
+	{"douyin_shop", "抖店飞鸽", "dm", true},
+	{"kuaishou_shop", "快手小店", "dm", true},
+	{"shopee", "Shopee", "dm", false},
+	{"walmart_us", "Walmart", "dm", false},
+	{"sms", "短信", "dm", false},
+	{"email", "邮件", "dm", false},
+	{"card", "卡片", "dm", false},
+	{"web", "Web Widget", "dm", false},
+	{"web_embed", "网页", "dm", false},
 }
 
 // ErrChannelCodeDisabled 渠道码存在但被关闭（使用方据此 fail-closed 拒绝）。
