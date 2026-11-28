@@ -11,6 +11,7 @@ import (
 	"hivemtk-user/internal/pkg/tenant"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // ErrHandoffTenantContextMissing on 模式下拿不到租户归属时拒绝扫/写 customer_sessions。
@@ -141,12 +142,21 @@ func (r *HandoffChainRepository) ListUnresolvedSessionIDs(ctx context.Context, l
 	return ids, err
 }
 
-// CreateHandoffDecisionRecord 写转派决策记录
-func (r *HandoffChainRepository) CreateHandoffDecisionRecord(ctx context.Context, record *model.HandoffDecisionRecord) error {
+// CreateHandoffDecisionRecord 写转派决策记录（幂等）。
+// DecisionID = ruleID_sessionID 是确定性业务键：同一规则对同一会话的重复命中
+// 属于 cron 正常路径，ON CONFLICT DO NOTHING 跳过；created=false 交由调用方
+// 跳过 escalate 等副作用，避免每分钟重复写库撞唯一约束。
+func (r *HandoffChainRepository) CreateHandoffDecisionRecord(ctx context.Context, record *model.HandoffDecisionRecord) (created bool, err error) {
 	if r.db == nil {
-		return nil
+		return false, nil
 	}
-	return r.db.WithContext(ctx).Create(record).Error
+	res := r.db.WithContext(ctx).
+		Clauses(clause.OnConflict{DoNothing: true}).
+		Create(record)
+	if res.Error != nil {
+		return false, res.Error
+	}
+	return res.RowsAffected == 1, nil
 }
 
 // EscalateSession 会话升级：本租户内 status → escalated
