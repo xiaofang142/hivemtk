@@ -92,7 +92,7 @@ func leadJudgeDispatchRequest(jctx *LeadJudgeContext, messages []llm.ChatMessage
 		Scenario:              llm.ScenarioLowCost,
 		SystemPrompt:          buildLeadJudgeSystemPrompt(jctx),
 		Messages:              messages,
-		MaxTokens:             1024,
+		MaxTokens:             4096,
 		Temperature:           0.2,
 		JSONMode:              true,
 		ExecutionScenarioID:   string(agentcontext.ExecutionScenarioLeadJudge),

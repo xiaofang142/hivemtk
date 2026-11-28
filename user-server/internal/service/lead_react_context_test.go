@@ -44,6 +44,9 @@ func TestLeadReactDispatchRequestBindsScenarioAndSession(t *testing.T) {
 	if req.RequestIdempotencyKey == "" {
 		t.Fatal("必须带幂等键")
 	}
+	if req.MaxTokens < 4096 {
+		t.Fatalf("推理模型输出预算必须容纳思考+正式回复, got %d", req.MaxTokens)
+	}
 	if !strings.Contains(req.SystemPrompt, "客户已确认有贷款需求") || strings.Contains(req.SystemPrompt, "建议推荐高额度") {
 		t.Fatalf("上下文块只能包含 confirmed 事实: %q", req.SystemPrompt)
 	}

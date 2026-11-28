@@ -35,7 +35,7 @@ func leadReactDispatchRequest(task LeadReactTask, system string, messages []llm.
 		Scenario:              llm.ScenarioLowCost,
 		SystemPrompt:          system,
 		Messages:              messages,
-		MaxTokens:             512,
+		MaxTokens:             4096,
 		Temperature:           0.2,
 		ExecutionScenarioID:   string(agentcontext.ExecutionScenarioLeadReact),
 		LLMSessionRef:         sessionRef,

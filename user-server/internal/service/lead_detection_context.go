@@ -100,7 +100,7 @@ func leadDetectionDispatchRequest(in DetectionInput, system string, messages []l
 		Scenario:              llm.ScenarioLowCost,
 		SystemPrompt:          system,
 		Messages:              messages,
-		MaxTokens:             512,
+		MaxTokens:             4096,
 		Temperature:           0.2,
 		JSONMode:              true,
 		ExecutionScenarioID:   string(agentcontext.ExecutionScenarioLeadDetect),

@@ -100,6 +100,9 @@ func TestLeadDetectionDispatchRequestBindsScenarioAndSession(t *testing.T) {
 	if req.RequestIdempotencyKey == "" {
 		t.Fatal("必须带请求幂等键")
 	}
+	if req.MaxTokens < 4096 {
+		t.Fatalf("推理模型输出预算必须容纳思考+正式回复, got %d", req.MaxTokens)
+	}
 	if !strings.Contains(req.SystemPrompt, "群聊") {
 		t.Fatalf("群聊来源策略必须进入 prompt, got %q", req.SystemPrompt)
 	}

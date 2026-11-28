@@ -70,6 +70,9 @@ func TestLeadJudgeDispatchRequestBindsScenario(t *testing.T) {
 	if req.LLMSessionRef != "llmsess-canonical" || req.RequestIdempotencyKey == "" {
 		t.Fatalf("must bind canonical session/idempotency: %+v", req)
 	}
+	if req.MaxTokens < 4096 {
+		t.Fatalf("推理模型输出预算必须容纳思考+正式回复, got %d", req.MaxTokens)
+	}
 }
 
 func TestLeadJudgePromptDowngradesLegacySharedNotes(t *testing.T) {
